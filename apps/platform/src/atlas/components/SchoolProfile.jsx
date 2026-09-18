@@ -54,7 +54,7 @@ const RadarChart = ({ metrics, size = 380 }) => {
 
   return (
     <svg width="100%" viewBox={`0 0 ${fullSize} ${fullSize}`} style={{ display: 'block', maxWidth: fullSize }}>
-      {user?.school && school?.name && user.school.toLowerCase() === school.name.toLowerCase() ? (
+      {(user?.urn ? Number(school?.urn) === user.urn : (user?.school && school?.name && user.school.toLowerCase() === school.name.toLowerCase())) ? (
         <Link to="/members/lens" style={{ display: "block", background: "#F4EEFA", border: "1px solid rgba(106,12,160,.25)", borderLeft: "3px solid #C6A035", borderRadius: 10, padding: "10px 14px", margin: "0 0 12px", color: "#4B0875", fontWeight: 600, fontSize: "0.85rem", textDecoration: "none" }}>
           This is your school · open it in Lens →
         </Link>) : null}

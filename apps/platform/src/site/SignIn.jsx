@@ -11,8 +11,24 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [school, setSchool] = useState("");
+  const [urn, setUrn] = useState("");
+  const [urnHit, setUrnHit] = useState(null); // [name, la] | "miss" | null
   const [err, setErr] = useState(null);
   const [note, setNote] = useState(null);
+
+  async function checkUrn(v) {
+    setUrnHit(null);
+    if (!/^[0-9]{5,7}$/.test(v)) return;
+    try {
+      if (!window.__urnLookup) {
+        const r = await fetch("/data/urn-lookup.json");
+        window.__urnLookup = r.ok ? await r.json() : {};
+      }
+      const hit = window.__urnLookup[v];
+      setUrnHit(hit || "miss");
+      if (hit) setSchool(hit[0]);
+    } catch { setUrnHit(null); }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -22,7 +38,7 @@ export default function SignIn() {
       if (error) setErr(error.message);
       else nav("/members");
     } else {
-      const res = await signUp(email, pw, school.trim());
+      const res = await signUp(email, pw, school.trim(), urn.trim());
       if (res.error) setErr(res.error.message);
       else if (res.needsConfirm) setNote("Almost there: confirm the address from the email we have just sent, then sign in.");
       else nav("/members");
@@ -37,6 +53,8 @@ export default function SignIn() {
         color: mode === m ? "#fff" : "var(--muted)" }}>{label}</button>
   );
 
+  const matched = Array.isArray(urnHit);
+
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
       <form onSubmit={submit} style={{ width: 400, background: "#fff", border: "1px solid var(--hair)",
@@ -50,9 +68,29 @@ export default function SignIn() {
           {tab("in", "Sign in")}{tab("join", "Request membership")}
         </div>
         {mode === "join" && (
-          <div className="field"><label>SCHOOL NAME</label>
-            <input value={school} onChange={(e) => setSchool(e.target.value)} required
-              placeholder="As it appears on Get Information About Schools" /></div>
+          <>
+            <div className="field"><label>SCHOOL URN</label>
+              <input value={urn} inputMode="numeric" required
+                placeholder="The six-digit number on Get Information About Schools"
+                onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setUrn(v); checkUrn(v); }} />
+              {matched && (
+                <p style={{ fontSize: 12, color: "var(--purple-700)", margin: "6px 0 0" }}>
+                  {urnHit[0]}{urnHit[1] ? " · " + urnHit[1] : ""} — if that is your school, you are set.
+                </p>
+              )}
+              {urnHit === "miss" && (
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>
+                  Not in our national dataset (new and independent schools sometimes are not):
+                  enter your school name below and we will verify by hand.
+                </p>
+              )}
+            </div>
+            <div className="field"><label>SCHOOL NAME</label>
+              <input value={school} onChange={(e) => setSchool(e.target.value)} required
+                readOnly={matched}
+                style={matched ? { background: "var(--lilac)", color: "var(--ink)" } : undefined}
+                placeholder="As it appears on Get Information About Schools" /></div>
+          </>
         )}
         <div className="field"><label>SCHOOL EMAIL</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></div>

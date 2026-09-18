@@ -44,8 +44,9 @@ create policy "lens per-school folders" on storage.objects for all
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, school_name)
-  values (new.id, new.raw_user_meta_data->>'school_name')
+  insert into public.profiles (id, school_name, urn)
+  values (new.id, new.raw_user_meta_data->>'school_name',
+          nullif(new.raw_user_meta_data->>'urn','')::int)
   on conflict (id) do nothing;
   return new;
 end $$;

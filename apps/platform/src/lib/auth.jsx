@@ -23,13 +23,15 @@ export function AuthProvider({ children }) {
   async function enrich(su) {
     if (!su) return null;
     let school = su.user_metadata?.school_name || "";
+    let urn = su.user_metadata?.urn ? Number(su.user_metadata.urn) : null;
     try {
-      const { data: prof } = await supabase.from("profiles").select("school_name").eq("id", su.id).maybeSingle();
-      if (prof?.school_name) school = prof.school_name;
-      else if (school) await supabase.from("profiles").upsert({ id: su.id, school_name: school });
+      const { data: prof } = await supabase.from("profiles").select("school_name,urn").eq("id", su.id).maybeSingle();
+      if (prof) { school = prof.school_name || school; urn = prof.urn ?? urn; }
+      else if (school) await supabase.from("profiles").upsert({ id: su.id, school_name: school, urn });
     } catch {}
-    const lens = /^all saints catholic college$/i.test((school || "").trim()) ? "ascc" : "new";
-    return { id: su.id, email: su.email, school: school || "Your school", lens };
+    /* URN is the identity; the name fallback survives only for pre-URN accounts. */
+    const lens = urn === 100503 || (!urn && /^all saints catholic college$/i.test((school || "").trim())) ? "ascc" : "new";
+    return { id: su.id, email: su.email, school: school || "Your school", urn, lens };
   }
 
   useEffect(() => {
@@ -58,11 +60,11 @@ export function AuthProvider({ children }) {
     return { error };
   }
 
-  async function signUp(email, password, school) {
+  async function signUp(email, password, school, urn) {
     if (DEMO)
       return { error: { message: "This is the demonstration build. Use a demo account, or deploy with Supabase keys to open membership." } };
     const { data, error } = await supabase.auth.signUp({
-      email, password, options: { data: { school_name: school } },
+      email, password, options: { data: { school_name: school, urn: urn || null } },
     });
     if (error) return { error };
     return { error: null, needsConfirm: !data.session };
