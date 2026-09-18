@@ -1,0 +1,22 @@
+/* The All Saints Institute — design tokens. One source of truth. */
+:root{
+  --purple:#6A0CA0; --purple-deep:#4B0875; --ink:#221233;
+  --gold:#C6A035; --gold-soft:#E4CE8B;
+  --paper:#FBFAF7; --lilac:#F4EEFA; --dark:#241238;
+  --muted:#6F6580; --hair:rgba(106,12,160,.16);
+  --serif:"Fraunces", Georgia, serif;
+  --sans:"Inter", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --rag-g:#2F7A39; --rag-a:#C79A3B; --rag-r:#B03050;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+h1,h2,h3,.serif{font-family:var(--serif);font-weight:500;letter-spacing:-.01em}
+.container{max-width:1120px;margin:0 auto;padding:0 32px}
+.btn{display:inline-block;border-radius:999px;padding:13px 26px;font-family:var(--sans);
+  font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer;border:none}
+.btn.solid{background:var(--purple);color:#fff}
+.btn.line{background:none;border:1.5px solid var(--purple);color:var(--purple)}
+.btn.gold{background:var(--gold);color:#fff}
+.kick{display:flex;align-items:center;gap:10px;font-size:11.5px;font-weight:600;
+  letter-spacing:.14em;color:var(--gold);text-transform:uppercase}

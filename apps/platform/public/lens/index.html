@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Lens · The All Saints Institute</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#3b1a5e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;550;650;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+</head>
+<body>
+  </div>
+
+  <!-- ================= APP ================= -->
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="lens-brand">
+          <svg class="lens-mark" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="#6A0CA0" stroke-width="2.4"/>
+            <g class="l-iris"><circle cx="20" cy="20" r="10.5" fill="none" stroke="#C6A035" stroke-width="1.6" stroke-dasharray="3 4.2" stroke-linecap="round"/></g>
+            <circle cx="20" cy="20" r="4.4" fill="#6A0CA0"/>
+          </svg>
+          <span class="lens-name">Lens</span>
+        </div>
+        <div class="title"><span class="hub-sub" id="school-name">All Saints Catholic College</span></div>
+        <span class="asi-wm">inst<span class="asi-ti">ı<svg viewBox="0 0 100 100"><path d="M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z" fill="none" stroke="#6A0CA0" stroke-width="11"/></svg></span>tute</span>
+        <button id="export-pdf" class="export-btn" title="Export the current page as a formatted A4 landscape PDF">⤓ Export to PDF</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <div class="tabs-inner" id="tabs">
+        <button data-view="dashboard" class="active">Dashboard</button>
+        <button data-view="sef">Self-Evaluation</button>
+        <div class="dd">
+          <button class="dd-btn" type="button">Curriculum <span class="caret">▾</span></button>
+          <div class="dd-menu">
+            <button data-view="foundations">Reading, Literacy &amp; Numeracy</button>
+            <button data-view="pshe">PSHE &amp; Life Curriculum</button>
+            <button data-view="send">SEND &amp; Inclusion</button>
+          </div>
+        </div>
+        <button data-view="staff">Staff Development</button>
+        <div class="dd">
+          <button class="dd-btn" type="button">Data &amp; Outcomes <span class="caret">▾</span></button>
+          <div class="dd-menu">
+            <button data-view="results">Results &amp; Trends</button>
+            <button data-view="external">IDSR &amp; Pupil Premium</button>
+            <button data-view="years">Year Groups</button>
+            <button data-view="attendance">Attendance</button>
+            <button data-view="behaviour">Behaviour</button>
+          </div>
+        </div>
+        <div class="dd">
+          <button class="dd-btn" type="button">Personal Development <span class="caret">▾</span></button>
+          <div class="dd-menu">
+            <button data-view="enrichment">Enrichment</button>
+            <button data-view="careers">Careers &amp; Gatsby</button>
+            <button data-view="voice">Student &amp; Parent Voice</button>
+            <button data-view="media">Innovation &amp; Press</button>
+          </div>
+        </div>
+        <button data-view="library">Library</button>
+        <div class="dd">
+          <button class="dd-btn" type="button">Strategy <span class="caret">▾</span></button>
+          <div class="dd-menu">
+            <button data-view="briefings">Briefings (one-pagers)</button>
+            <button data-view="scenarios">Scenario Lab</button>
+            <button data-view="governors">Governors' Challenge</button>
+            <button data-view="framework">Framework</button>
+          </div>
+        </div>
+        <button data-view="ask">✦ Ask</button>
+      </div>
+    </nav>
+
+    <main>
+      <div id="print-header">
+        <img src="https://lirp.cdn-website.com/b31b4580/dms3rep/multi/opt/All+Saints+Web+Logo+Purple-1920w.png" alt="All Saints Catholic College">
+        <div class="ph-text">
+          <div class="ph-school">Lens · The All Saints Institute</div>
+          <div class="ph-meta"><span id="ph-section"></span> · Generated <span id="ph-date"></span> · Confidential – prepared for Ofsted inspection, July 2026</div>
+        </div>
+      </div>
+      <section class="view active" id="view-dashboard"></section>
+      <section class="view" id="view-sef"></section>
+      <section class="view" id="view-foundations"></section>
+      <section class="view" id="view-pshe"></section>
+      <section class="view" id="view-send"></section>
+      <section class="view" id="view-staff"></section>
+      <section class="view" id="view-results"></section>
+      <section class="view" id="view-external"></section>
+      <section class="view" id="view-years"></section>
+      <section class="view" id="view-attendance"></section>
+      <section class="view" id="view-behaviour"></section>
+      <section class="view" id="view-enrichment"></section>
+      <section class="view" id="view-careers"></section>
+      <section class="view" id="view-voice"></section>
+      <section class="view" id="view-library"></section>
+      <section class="view" id="view-briefings"></section>
+      <section class="view" id="view-scenarios"></section>
+      <section class="view" id="view-governors"></section>
+      <section class="view" id="view-framework"></section>
+      <section class="view" id="view-media"></section>
+      <section class="view" id="view-ask"></section>
+    </main>
+
+    <footer>
+      <div class="motto">Orare · Laborare · Servire</div>
+      Lens · The All Saints Institute. Internal SLT tool.<br>
+      2025 figures are internal SISRA estimates (provisional); 2026 figures are predictions. Confirmed data: 2023 &amp; 2024 published results.
+    </footer>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
