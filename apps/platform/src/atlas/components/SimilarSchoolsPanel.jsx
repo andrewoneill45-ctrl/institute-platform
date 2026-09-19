@@ -45,7 +45,7 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
         <div className="simf-full">
           <button className="simf-close" onClick={onClose}>✕ Close</button>
           <h2 className="simf-title">Similar Schools</h2>
-          <p style={{ color: '#64748b', fontSize: '0.95rem' }}>Not enough contextual data to find similar schools for {s.name}.</p>
+          <p style={{ color: '#6F6580', fontSize: '0.95rem' }}>Not enough contextual data to find similar schools for {s.name}.</p>
         </div>
       </div>
     );
@@ -97,11 +97,11 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
                     );
                     const pct = ((val - mn) / range) * 100;
                     const isTarget = r.isTarget;
-                    let barColor = isTarget ? '#1d5a9e' : '#64748b';
-                    if (isP8) barColor = isTarget ? '#1d5a9e' : val >= 0 ? '#0d7a42' : '#cc3333';
+                    let barColor = isTarget ? '#6A0CA0' : '#6F6580';
+                    if (isP8) barColor = isTarget ? '#6A0CA0' : val >= 0 ? '#2F7A39' : '#B03050';
                     else if (!isTarget) {
                       const tv = s[metric.field];
-                      if (tv != null) barColor = val > tv + 2 ? '#0d7a42' : val < tv - 2 ? '#cc3333' : '#64748b';
+                      if (tv != null) barColor = val > tv + 2 ? '#2F7A39' : val < tv - 2 ? '#B03050' : '#6F6580';
                     }
 
                     return (
@@ -243,10 +243,10 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
 };
 
 function truncName(name, len) { return name.length > len ? name.slice(0, len - 1) + '…' : name; }
-function ofstedCol(o) { return { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' }[o] || '#94a3b8'; }
+function ofstedCol(o) { return { Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' }[o] || '#A79FB5'; }
 function colorVs(val, target, threshold) {
-  if (val == null || target == null) return '#334155';
-  return val > target + threshold ? '#0d7a42' : val < target - threshold ? '#cc3333' : '#334155';
+  if (val == null || target == null) return '#463A57';
+  return val > target + threshold ? '#2F7A39' : val < target - threshold ? '#B03050' : '#463A57';
 }
 
 const CtxTag = ({ label, value }) => (

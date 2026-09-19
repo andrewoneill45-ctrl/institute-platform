@@ -12,13 +12,13 @@ function calcDecile(val, allVals) {
   return Math.min(10, Math.max(1, Math.ceil(rank * 10)));
 }
 export function decileColor(d) {
-  if (d == null) return '#94a3b8';
-  if (d >= 8) return '#0d7a42';
-  if (d >= 5) return '#e8920e';
-  return '#cc3333';
+  if (d == null) return '#A79FB5';
+  if (d >= 8) return '#2F7A39';
+  if (d >= 5) return '#C79A3B';
+  return '#B03050';
 }
 function decileBg(d) {
-  if (d == null) return '#f1f5f9';
+  if (d == null) return '#F5F2F9';
   if (d >= 8) return '#ecfdf5';
   if (d >= 5) return '#fffbeb';
   return '#fef2f2';
@@ -54,20 +54,16 @@ const RadarChart = ({ metrics, size = 380 }) => {
 
   return (
     <svg width="100%" viewBox={`0 0 ${fullSize} ${fullSize}`} style={{ display: 'block', maxWidth: fullSize }}>
-      {(user?.urn ? Number(school?.urn) === user.urn : (user?.school && school?.name && user.school.toLowerCase() === school.name.toLowerCase())) ? (
-        <Link to="/members/lens" style={{ display: "block", background: "#F4EEFA", border: "1px solid rgba(106,12,160,.25)", borderLeft: "3px solid #C6A035", borderRadius: 10, padding: "10px 14px", margin: "0 0 12px", color: "#4B0875", fontWeight: 600, fontSize: "0.85rem", textDecoration: "none" }}>
-          This is your school · open it in Lens →
-        </Link>) : null}
-      {grid.map((pts, i) => <polygon key={i} points={pts} fill="none" stroke={i === 4 ? '#cbd5e1' : '#e2e8f0'} strokeWidth={i === 4 ? 1.2 : 0.5} />)}
-      {Array.from({ length: n }, (_, i) => pt(i, 10)).map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#e2e8f0" strokeWidth={0.5} />)}
-      {[2, 4, 6, 8, 10].map(r => { const p = pt(0, r); return <text key={r} x={p.x + 3} y={p.y - 2} fontSize="8" fill="#cbd5e1" fontFamily="'Source Sans 3',sans-serif">{r}</text>; })}
-      <polygon points={poly} fill="rgba(29,90,158,0.12)" stroke="#1d5a9e" strokeWidth={2.5} strokeLinejoin="round" />
+      {grid.map((pts, i) => <polygon key={i} points={pts} fill="none" stroke={i === 4 ? '#DCD5E6' : '#EAE4F1'} strokeWidth={i === 4 ? 1.2 : 0.5} />)}
+      {Array.from({ length: n }, (_, i) => pt(i, 10)).map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#EAE4F1" strokeWidth={0.5} />)}
+      {[2, 4, 6, 8, 10].map(r => { const p = pt(0, r); return <text key={r} x={p.x + 3} y={p.y - 2} fontSize="8" fill="#DCD5E6" fontFamily="'Source Sans 3',sans-serif">{r}</text>; })}
+      <polygon points={poly} fill="rgba(29,90,158,0.12)" stroke="#6A0CA0" strokeWidth={2.5} strokeLinejoin="round" />
       {data.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={7} fill={decileColor(metrics[i].decile)} stroke="white" strokeWidth={2.5} />)}
       {labels.map((p, i) => {
         const m = metrics[i], anchor = p.x < cx - 10 ? 'end' : p.x > cx + 10 ? 'start' : 'middle';
         return (
           <g key={i}>
-            <text x={p.x} y={p.y - 4} textAnchor={anchor} fontSize="12" fontWeight="700" fill="#334155" fontFamily="'Source Sans 3',sans-serif">{RADAR_LABELS[m.label] || m.label}</text>
+            <text x={p.x} y={p.y - 4} textAnchor={anchor} fontSize="12" fontWeight="700" fill="#463A57" fontFamily="'Source Sans 3',sans-serif">{RADAR_LABELS[m.label] || m.label}</text>
             <text x={p.x} y={p.y + 12} textAnchor={anchor} fontSize="14" fontWeight="800" fill={decileColor(m.decile)} fontFamily="'Source Sans 3',sans-serif">{m.value}</text>
           </g>
         );
@@ -79,7 +75,7 @@ const RadarChart = ({ metrics, size = 380 }) => {
 /* ─── Trend Line Chart ─────────────────────────── */
 const TrendChart = ({ data, metrics, title }) => {
   if (!data || data.length < 2) return null;
-  const COLORS = ['#1d5a9e', '#b91c4a', '#0d7a42', '#e8920e'];
+  const COLORS = ['#6A0CA0', '#b91c4a', '#2F7A39', '#C79A3B'];
   const W = 500, H = 200, PL = 50, PR = 20, PT = 30, PB = 36;
   const cw = W - PL - PR, ch = H - PT - PB;
   const years = data.map(d => d.year);
@@ -104,8 +100,8 @@ const TrendChart = ({ data, metrics, title }) => {
           const y = PT + ch * (1 - f), val = mn + (mx - mn) * f;
           return (
             <g key={f}>
-              <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#f1f5f9" strokeWidth={1} />
-              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontFamily="'Source Sans 3',sans-serif">
+              <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="#F5F2F9" strokeWidth={1} />
+              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#A79FB5" fontFamily="'Source Sans 3',sans-serif">
                 {val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}
               </text>
             </g>
@@ -113,7 +109,7 @@ const TrendChart = ({ data, metrics, title }) => {
         })}
         {/* X axis labels */}
         {years.map((yr, i) => (
-          <text key={i} x={xPos(i)} y={H - 8} textAnchor="middle" fontSize="10" fontWeight="600" fill="#64748b" fontFamily="'Source Sans 3',sans-serif">
+          <text key={i} x={xPos(i)} y={H - 8} textAnchor="middle" fontSize="10" fontWeight="600" fill="#6F6580" fontFamily="'Source Sans 3',sans-serif">
             {yr.replace('20', "'")}
           </text>
         ))}
@@ -157,16 +153,16 @@ const DecileInfoPopup = ({ onClose }) => (
   <div className="sp-info-overlay" onClick={onClose}>
     <div className="sp-info-box" onClick={e => e.stopPropagation()}>
       <button className="sp-info-close" onClick={onClose}>✕</button>
-      <h3 style={{ margin: '0 0 10px', fontSize: '1rem', color: '#0f172a' }}>Understanding the Performance Profile</h3>
-      <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.6, margin: '0 0 12px' }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: '1rem', color: '#221233' }}>Understanding the Performance Profile</h3>
+      <p style={{ fontSize: '0.85rem', color: '#584D68', lineHeight: 1.6, margin: '0 0 12px' }}>
         Each metric is ranked against all schools of the same phase nationally and placed into a <strong>decile</strong> (1–10), where 10 is the highest performing.
       </p>
       <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#0d7a42', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Top (decile 8–10)</span></span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#e8920e', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Mid-range (decile 5–7)</span></span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#cc3333', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Below average (decile 1–4)</span></span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#2F7A39', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Top (decile 8–10)</span></span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#C79A3B', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Mid-range (decile 5–7)</span></span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#B03050', display: 'inline-block' }} /> <span style={{ fontSize: '0.82rem' }}>Below average (decile 1–4)</span></span>
       </div>
-      <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+      <p style={{ fontSize: '0.78rem', color: '#A79FB5', margin: 0 }}>
         The radar chart shows the school's profile compared nationally. A larger shape indicates stronger overall performance. Data: DfE performance tables.
       </p>
     </div>
@@ -229,15 +225,19 @@ const SchoolProfile = ({ school, allSchools, onClose, onCompare }) => {
     return [];
   }, [s, ctx, isSecondary, isPrimary]);
 
-  const ofstedColor = (o) => ({ Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' }[o] || '#94a3b8');
+  const ofstedColor = (o) => ({ Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' }[o] || '#A79FB5');
   const occupancy = s.capacity ? Math.round((s.pupils / s.capacity) * 100) : null;
 
   return (
     <div className="sp-overlay" onClick={onClose}>
+      {(user?.urn ? Number(school?.urn) === user.urn : (user?.school && school?.name && user.school.toLowerCase() === school.name.toLowerCase())) ? (
+        <Link to="/members/lens" style={{ display: "block", background: "#F4EEFA", border: "1px solid rgba(106,12,160,.25)", borderLeft: "3px solid #C6A035", borderRadius: 10, padding: "10px 14px", margin: "0 0 12px", color: "#4B0875", fontWeight: 600, fontSize: "0.85rem", textDecoration: "none" }}>
+          This is your school · open it in Lens →
+        </Link>) : null}
       <div className="sp-panel" onClick={e => e.stopPropagation()}>
         <button className="sp-close" onClick={onClose}>✕</button>
 
-        <div className="sp-header" style={{ borderLeftColor: isSecondary ? '#b91c4a' : isPrimary ? '#2672c0' : '#5b3fa0' }}>
+        <div className="sp-header" style={{ borderLeftColor: isSecondary ? '#b91c4a' : isPrimary ? '#6A0CA0' : '#5b3fa0' }}>
           <div className="sp-phase-badge">{s.phase}</div>
           <h2 className="sp-name">{s.name}</h2>
           <p className="sp-sub">{s.la} · {s.town}{s.postcode ? ` · ${s.postcode}` : ''}</p>
@@ -259,7 +259,7 @@ const SchoolProfile = ({ school, allSchools, onClose, onCompare }) => {
             {s.ofsted_safeguarding && (
               <div className="sp-ofsted-judge">
                 <span className="sp-oj-label">Safeguarding</span>
-                <span className="sp-oj-grade" style={{ color: s.ofsted_safeguarding === 'Effective' ? '#0d7a42' : '#cc3333' }}>
+                <span className="sp-oj-grade" style={{ color: s.ofsted_safeguarding === 'Effective' ? '#2F7A39' : '#B03050' }}>
                   {s.ofsted_safeguarding}
                 </span>
               </div>
@@ -302,9 +302,9 @@ const SchoolProfile = ({ school, allSchools, onClose, onCompare }) => {
             </div>
             <RadarChart metrics={radarMetrics} size={380} />
             <div className="sp-decile-legend">
-              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#0d7a42' }} />Top</span>
-              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#e8920e' }} />Mid-range</span>
-              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#cc3333' }} />Below average</span>
+              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#2F7A39' }} />Top</span>
+              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#C79A3B' }} />Mid-range</span>
+              <span className="sp-dl-item"><span className="sp-dl-dot" style={{ background: '#B03050' }} />Below average</span>
             </div>
           </div>
         )}
@@ -375,7 +375,7 @@ function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.len
 
 const OfstedJudge = ({ label, grade }) => {
   if (!grade) return null;
-  const color = { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' }[grade] || '#94a3b8';
+  const color = { Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' }[grade] || '#A79FB5';
   return (
     <div className="sp-ofsted-judge">
       <span className="sp-oj-label">{label}</span>

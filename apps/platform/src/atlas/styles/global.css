@@ -175,6 +175,7 @@ body {
 
 
 /* Atlas nameplate */
-.atlas-brand{position:absolute;left:16px;bottom:20px;z-index:110;display:flex;align-items:center;gap:8px;
-  background:#fff;padding:9px 16px;border-radius:999px;box-shadow:0 4px 20px rgba(34,18,51,.12);
-  font-family:"Fraunces",Georgia,serif;font-size:1.02rem;font-weight:600;color:#221233;pointer-events:none;letter-spacing:-.01em}
+.atlas-brand{position:absolute;left:16px;top:16px;z-index:210;display:flex;align-items:center;gap:9px;
+  background:#fff;padding:11px 20px;border-radius:999px;box-shadow:0 4px 20px rgba(34,18,51,.14);
+  font-family:"Fraunces",Georgia,serif;font-size:1.14rem;font-weight:650;color:#221233;pointer-events:none;letter-spacing:-.01em}
+.atlas-brand svg{width:17px;height:17px}

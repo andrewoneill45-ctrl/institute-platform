@@ -9,8 +9,8 @@ const p10 = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x
 const p90 = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length * 0.9)]; };
 const pctAbove = (a, v) => a.length ? Math.round(a.filter(x => x > v).length / a.length * 100) : null;
 
-const PHASE_COLORS = { Primary: '#2672c0', Secondary: '#b91c4a', Special: '#5b3fa0', 'All-through': '#0d7a42' };
-const OFSTED_COLORS = { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' };
+const PHASE_COLORS = { Primary: '#6A0CA0', Secondary: '#b91c4a', Special: '#5b3fa0', 'All-through': '#2F7A39' };
+const OFSTED_COLORS = { Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' };
 
 const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
   const [tab, setTab] = useState('overview');
@@ -206,11 +206,11 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
           <div className="sp2-body">
             {s.a8.length > 0 && <>
               <SectionTitle>Attainment 8 Distribution</SectionTitle>
-              <Histogram data={s.a8} national={s.a8All} bins={15} color="#1d5a9e" label="A8" />
+              <Histogram data={s.a8} national={s.a8All} bins={15} color="#6A0CA0" label="A8" />
               <StatStrip data={s.a8} national={s.a8All} label="A8" />
 
               <SectionTitle>Progress 8 Distribution</SectionTitle>
-              <Histogram data={s.p8} national={s.p8All} bins={15} color="#0d7a42" label="P8" center0 />
+              <Histogram data={s.p8} national={s.p8All} bins={15} color="#2F7A39" label="P8" center0 />
               <StatStrip data={s.p8} national={s.p8All} label="P8" dp={2} prefix />
 
               <SectionTitle>4+ English & Maths</SectionTitle>
@@ -219,11 +219,11 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
             </>}
             {s.rwm.length > 0 && <>
               <SectionTitle>RWM Expected %</SectionTitle>
-              <Histogram data={s.rwm} national={s.rwmAll} bins={12} color="#2672c0" label="RWM%" />
+              <Histogram data={s.rwm} national={s.rwmAll} bins={12} color="#6A0CA0" label="RWM%" />
               <StatStrip data={s.rwm} national={s.rwmAll} label="RWM" suffix="%" />
 
               <SectionTitle>Reading Score</SectionTitle>
-              <Histogram data={s.read} national={s.readAll} bins={12} color="#0d7a42" label="Reading" />
+              <Histogram data={s.read} national={s.readAll} bins={12} color="#2F7A39" label="Reading" />
               <StatStrip data={s.read} national={s.readAll} label="Read" />
             </>}
           </div>
@@ -233,7 +233,7 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
         {tab === 'context' && (
           <div className="sp2-body">
             <SectionTitle>FSM % Distribution</SectionTitle>
-            <Histogram data={s.fsm} national={s.fsmAll} bins={15} color="#e8920e" label="FSM%" />
+            <Histogram data={s.fsm} national={s.fsmAll} bins={15} color="#C79A3B" label="FSM%" />
             <StatStrip data={s.fsm} national={s.fsmAll} label="FSM" suffix="%" />
 
             {s.sen.length > 0 && <>
@@ -244,12 +244,12 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
 
             {s.eal.length > 0 && <>
               <SectionTitle>EAL % Distribution</SectionTitle>
-              <Histogram data={s.eal} national={s.ealAll} bins={12} color="#2672c0" label="EAL%" />
+              <Histogram data={s.eal} national={s.ealAll} bins={12} color="#6A0CA0" label="EAL%" />
               <StatStrip data={s.eal} national={s.ealAll} label="EAL" suffix="%" />
             </>}
 
             <SectionTitle>School Size Distribution</SectionTitle>
-            <Histogram data={s.pupils} bins={15} color="#64748b" label="Pupils" />
+            <Histogram data={s.pupils} bins={15} color="#6F6580" label="Pupils" />
             <div className="sp2-stat-strip">
               <div className="sp2-ss-item"><span className="sp2-ss-k">Avg</span><span className="sp2-ss-v">{avg(s.pupils)?.toFixed(0)}</span></div>
               <div className="sp2-ss-item"><span className="sp2-ss-k">Median</span><span className="sp2-ss-v">{med(s.pupils)?.toFixed(0)}</span></div>
@@ -279,9 +279,9 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
                     <tr key={la.la}>
                       <td className="sp2-la-name">{la.la}</td>
                       <td>{la.count}</td>
-                      <td style={{ color: la.avgA8 != null ? colorVsNat(la.avgA8, avg(s.a8All), 3) : '#94a3b8', fontWeight: 700 }}>{la.avgA8?.toFixed(1) ?? '—'}</td>
-                      <td style={{ color: la.avgP8 != null ? colorVsNat(la.avgP8, avg(s.p8All), 0.1) : '#94a3b8', fontWeight: 700 }}>{la.avgP8 != null ? (la.avgP8 > 0 ? '+' : '') + la.avgP8.toFixed(2) : '—'}</td>
-                      <td style={{ color: la.avgRWM != null ? colorVsNat(la.avgRWM, avg(s.rwmAll), 3) : '#94a3b8', fontWeight: 700 }}>{la.avgRWM?.toFixed(0) ?? '—'}%</td>
+                      <td style={{ color: la.avgA8 != null ? colorVsNat(la.avgA8, avg(s.a8All), 3) : '#A79FB5', fontWeight: 700 }}>{la.avgA8?.toFixed(1) ?? '—'}</td>
+                      <td style={{ color: la.avgP8 != null ? colorVsNat(la.avgP8, avg(s.p8All), 0.1) : '#A79FB5', fontWeight: 700 }}>{la.avgP8 != null ? (la.avgP8 > 0 ? '+' : '') + la.avgP8.toFixed(2) : '—'}</td>
+                      <td style={{ color: la.avgRWM != null ? colorVsNat(la.avgRWM, avg(s.rwmAll), 3) : '#A79FB5', fontWeight: 700 }}>{la.avgRWM?.toFixed(0) ?? '—'}%</td>
                       <td>{la.avgFSM?.toFixed(0) ?? '—'}%</td>
                     </tr>
                   ))}
@@ -329,7 +329,7 @@ const AvgCard = ({ label, value, national, prefix, suffix }) => {
       <div className="sp2-avg-value">{prefix && fv > 0 ? '+' : ''}{value}</div>
       {national && <div className="sp2-avg-nat">
         National: {prefix && nv > 0 ? '+' : ''}{national}
-        {diff != null && <span style={{ color: diff > 0 ? '#0d7a42' : diff < 0 ? '#cc3333' : '#64748b', marginLeft: 6, fontWeight: 700 }}>
+        {diff != null && <span style={{ color: diff > 0 ? '#2F7A39' : diff < 0 ? '#B03050' : '#6F6580', marginLeft: 6, fontWeight: 700 }}>
           {diff > 0 ? '▲' : diff < 0 ? '▼' : '='} {Math.abs(diff).toFixed(1)}
         </span>}
       </div>}
@@ -337,7 +337,7 @@ const AvgCard = ({ label, value, national, prefix, suffix }) => {
   );
 };
 
-const Histogram = ({ data, national, bins = 12, color = '#1d5a9e', label, center0 }) => {
+const Histogram = ({ data, national, bins = 12, color = '#6A0CA0', label, center0 }) => {
   if (!data.length) return null;
   const sorted = [...data].sort((a, b) => a - b);
   let min = sorted[0], max = sorted[sorted.length - 1];
@@ -367,7 +367,7 @@ const Histogram = ({ data, national, bins = 12, color = '#1d5a9e', label, center
         {natCounts && natCounts.map((c, i) => (
           <rect key={'n' + i} x={i * (barW + barGap)} y={h - (c / maxCount) * h}
             width={barW} height={(c / maxCount) * h}
-            fill="#e2e8f0" rx="2" />
+            fill="#EAE4F1" rx="2" />
         ))}
         {/* Filtered bars */}
         {counts.map((c, i) => (
@@ -378,12 +378,12 @@ const Histogram = ({ data, national, bins = 12, color = '#1d5a9e', label, center
         {/* Zero line for P8 */}
         {center0 && (() => {
           const zx = ((0 - min) / range) * w;
-          return <line x1={zx} y1={0} x2={zx} y2={h} stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,2" />;
+          return <line x1={zx} y1={0} x2={zx} y2={h} stroke="#A79FB5" strokeWidth="1" strokeDasharray="3,2" />;
         })()}
         {/* X-axis labels */}
         {[0, Math.floor(bins / 4), Math.floor(bins / 2), Math.floor(bins * 3 / 4), bins - 1].map(i => (
           <text key={'l' + i} x={i * (barW + barGap) + barW / 2} y={h + 14}
-            textAnchor="middle" fontSize="9" fill="#94a3b8">
+            textAnchor="middle" fontSize="9" fill="#A79FB5">
             {(min + i * bw).toFixed(label === 'P8' ? 1 : 0)}
           </text>
         ))}
@@ -391,7 +391,7 @@ const Histogram = ({ data, national, bins = 12, color = '#1d5a9e', label, center
       {national && (
         <div className="sp2-hist-legend">
           <span><span className="sp2-hist-dot" style={{ background: color }} /> Filtered</span>
-          <span><span className="sp2-hist-dot" style={{ background: '#e2e8f0' }} /> National</span>
+          <span><span className="sp2-hist-dot" style={{ background: '#EAE4F1' }} /> National</span>
         </div>
       )}
     </div>
@@ -416,8 +416,8 @@ const StatStrip = ({ data, national, label, dp = 1, suffix = '', prefix }) => {
 };
 
 function colorVsNat(val, nat, threshold) {
-  if (val == null || nat == null) return '#334155';
-  return val > nat + threshold ? '#0d7a42' : val < nat - threshold ? '#cc3333' : '#334155';
+  if (val == null || nat == null) return '#463A57';
+  return val > nat + threshold ? '#2F7A39' : val < nat - threshold ? '#B03050' : '#463A57';
 }
 
 function stripMd(text) {

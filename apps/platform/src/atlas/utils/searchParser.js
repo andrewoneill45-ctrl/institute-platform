@@ -120,7 +120,12 @@ const hasWord = (text, kw) =>
   m = original.match(/\b([A-Za-z]{1,2}\d{1,2}[A-Za-z]?\s*\d?[A-Za-z]{0,2})\b/);
   if (m) {
     const pc = m[1].toUpperCase().replace(/\s/g, '');
-    if (/^[A-Z]{1,2}\d/.test(pc) && pc.length >= 2 && pc.length <= 8) f.postcodeQuery = pc;
+    const NOT_POSTCODES = new Set(['A8', 'P8', 'KS1', 'KS2', 'KS4', 'KS5', 'Y7', 'Y8', 'Y9', 'Y10', 'Y11']);
+    const idx = original.toUpperCase().indexOf(m[1].toUpperCase());
+    const before = original.slice(0, idx).toLowerCase();
+    const hasContext = /(?:\bin|\bnear|\baround|\bpostcode)\s*$/.test(before);
+    if (/^[A-Z]{1,2}\d/.test(pc) && pc.length <= 8 && !NOT_POSTCODES.has(pc)
+        && (pc.length >= 3 || hasContext)) f.postcodeQuery = pc;
   }
 
   // 9. Extract trust names
@@ -152,7 +157,17 @@ const hasWord = (text, kw) =>
       'positive progress', 'negative progress',
       'girls', 'boys',
     ];
-    removePatterns.forEach(p => { residual = residual.replace(new RegExp(p, 'gi'), ' '); });
+    removePatterns
+      .slice()
+      .sort((a, b) => b.length - a.length)
+      .forEach(p => {
+        const isRegex = /\\d|\\s/.test(p);
+        const body = isRegex ? p : p.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        residual = residual.replace(new RegExp('\\b(?:' + body + ')\\b', 'gi'), ' ');
+      });
+    // numeric residue from metric phrases
+    residual = residual.replace(/\b(?:above|over|below|under|at least|more than|less than|fewer than)\s+[\d.]+%?/gi, ' ');
+    residual = residual.replace(/\b\d+(?:\.\d+)?%?\b/g, ' ');
     // Remove stop words
     const words = residual.split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w));
     const leftover = words.join(' ').trim();
@@ -160,27 +175,38 @@ const hasWord = (text, kw) =>
     if (leftover.length >= 2) {
       // Check if it matches known LAs, towns, or school names
       if (allSchools && allSchools.length) {
-        const laSet = new Set(allSchools.map(s => (s.la || '').toLowerCase()));
-        const townSet = new Set(allSchools.map(s => (s.town || '').toLowerCase()));
+        const laSet = new Set(allSchools.map(s => (s.la || '').toLowerCase()).filter(Boolean));
+        const townSet = new Set(allSchools.map(s => (s.town || '').toLowerCase()).filter(Boolean));
+        const isPlace = (t) => laSet.has(t) || townSet.has(t);
 
-        // Try exact LA match first
-        if (laSet.has(leftover)) {
+        if (isPlace(leftover)) {
           f.locationQuery = leftover;
-        }
-        // Try town match
-        else if (townSet.has(leftover)) {
-          f.locationQuery = leftover;
-        }
-        // Try partial match on LA/town
-        else if ([...laSet].some(la => la.includes(leftover) || leftover.includes(la))) {
-          f.locationQuery = leftover;
-        }
-        else if ([...townSet].some(t => t.includes(leftover) || leftover.includes(t))) {
-          f.locationQuery = leftover;
-        }
-        // Otherwise treat as fuzzy (could be school name or anything)
-        else {
-          f.fuzzyQuery = leftover;
+        } else {
+          // Peel a known place (up to three words) off either end of the blob:
+          // "st marys leeds" becomes name "st marys" in location "leeds".
+          let placed = false;
+          for (let n = Math.min(3, words.length - 1); n >= 1 && !placed; n--) {
+            const tail = words.slice(-n).join(' ');
+            const head = words.slice(0, n).join(' ');
+            if (isPlace(tail)) {
+              f.locationQuery = tail;
+              const rest = words.slice(0, -n).join(' ').trim();
+              if (rest) f.nameQuery = rest;
+              placed = true;
+            } else if (isPlace(head)) {
+              f.locationQuery = head;
+              const rest = words.slice(n).join(' ').trim();
+              if (rest) f.nameQuery = rest;
+              placed = true;
+            }
+          }
+          if (!placed) {
+            // Conservative partial: a place that starts with the leftover (4+ chars)
+            const part = leftover.length >= 4 &&
+              ([...laSet].find(la => la.startsWith(leftover)) || [...townSet].find(t => t.startsWith(leftover)));
+            if (part) f.locationQuery = leftover;
+            else f.fuzzyQuery = leftover;
+          }
         }
       } else {
         f.fuzzyQuery = leftover;
@@ -208,7 +234,7 @@ export function applyFilters(schools, filters) {
     if (filters.locationQuery) {
       const q = filters.locationQuery.toLowerCase();
       const fields = [s.la, s.town, s.name, s.postcode].filter(Boolean).map(x => x.toLowerCase());
-      if (!fields.some(f => f.includes(q) || q.includes(f))) return false;
+      if (!fields.some(f => f.includes(q))) return false;
     }
     if (filters.nameQuery && !(s.name || '').toLowerCase().includes(filters.nameQuery.toLowerCase())) return false;
     if (filters.postcodeQuery) {
