@@ -155,9 +155,19 @@ CAUTION: EEF's May 2025 update cut Mentoring to 0 months average – never cite 
 
 ## National profile (innovation evidence)
 60+ media items: Guardian (SEND aspirations feature July 2025; 12-hour day; teacher lie-ins), The Times ("How one head saved a sink school in the shadow of Grenfell"), Telegraph, Evening Standard, Independent, LBC, BBC One Show, Fortune, Business Insider, NY Post, Nine News Australia; Tes & Schools Week (DfE secondment – now Schools Policy and Delivery Adviser to the Secretary of State, Headteachers' Roundtable co-chair, DfE expert inclusion group); Catholic press (The Tablet, Diocese of Westminster, Aleteia); Pearson National Teaching Awards Secondary Headteacher of the Year 2022; Oracy Education Commission case study; EPI enrichment panel.
-`;
 
-const SYSTEM_PROMPT = `You are the All Saints Catholic College Evidence, Innovation and Evaluation Portal AI, supporting the Senior Leadership Team during their Ofsted inspection (7–8 July 2026, renewed framework).
+
+SECTION 48 / CATHOLIC SCHOOLS INSPECTORATE (canonical inspection - National Framework, Inspection Handbook v5.0, September 2026):
+- All Catholic schools are subject to canonical inspection by their diocesan bishop; for applicable schools this fulfils the statutory Section 48 function. Section 5 (Ofsted) inspectors must not inspect RE or the content of collective worship.
+- THREE KEY AREAS, each judged on three strands (pupil outcomes / provision / leadership), grades 1 Outstanding, 2 Good, 3 Requires improvement, 4 Inadequate. Inspectors begin with the 'good' descriptors and move up or down.
+  1. CATHOLIC LIFE AND MISSION: how well pupils understand, value and contribute to the school's Catholic life and mission; the quality of provision (a mission statement that is a clear, inspiring expression of the Church's educational mission and the school's charism - known, lived, witnessed to); how well leaders and governors promote, monitor and evaluate it, keeping Christ at the heart of the school. Outstanding leaders are "guardians of the Catholic life and mission", energised, joyful and determined.
+  2. RELIGIOUS EDUCATION: how well pupils achieve and enjoy their learning in RE; the quality of teaching, learning and assessment; leadership of RE. Compliance with the Bishops' Conference requirements for RE (curriculum time, the Religious Education Directory) is checked.
+  3. COLLECTIVE WORSHIP: how well pupils participate in and respond to worship; the quality of worship provided; leadership of worship.
+- CSED: the Catholic Self-Evaluation Document records self-evaluation of all three areas; no fixed format required. A diocesan directives supplement lists the bishop's formally promulgated 'additional requirements', with the school self-evaluating against each (directive / evidence / date / notes).
+- CSI SURVEYS: the Inspectorate's own staff survey and parent survey feed the inspection evidence.
+- When answering on Section 48 matters, ground answers in this framework and the school's uploaded S48 evidence where provided; in critical-friend stance, put the questions a diocesan inspector would ask (e.g. can pupils tell the school's story as part of the local and universal Church; is the mission statement lived or laminated; does worship planning show progression and pupil leadership; is RE parity with core subjects demonstrable in time, staffing and assessment).`;
+
+const SYSTEM_PROMPT = `You are the All Saints Catholic College Evidence, Innovation and Evaluation Portal AI, supporting the Senior Leadership Team during their Ofsted inspection (7–8 July 2026, renewed framework). The portal equally serves preparation for the school's Section 48 canonical inspection by the Catholic Schools Inspectorate; that framework is in your knowledge.
 
 Your job: answer questions about the school's data instantly, accurately and persuasively – demonstrating that this leadership team has its data at its fingertips.
 

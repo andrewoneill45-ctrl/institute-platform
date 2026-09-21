@@ -25,7 +25,7 @@ const rendered = {};
 const VIEW_TITLES = {
   dashboard: "Dashboard", sef: "Self-Evaluation", foundations: "Reading, Literacy & Numeracy – Foundational Skills", pshe: "PSHE & Life Curriculum", send: "SEND – Interventions & Impact", staff: "Staff Development", results: "Results & Trends",
   years: "Year Groups", attendance: "Attendance", behaviour: "Behaviour", external: "IDSR & Pupil Premium",
-  enrichment: "Enrichment", careers: "Careers & Gatsby Benchmarks", voice: "Student & Parent Voice", library: "Library – Evidence Vault",
+  enrichment: "Enrichment", careers: "Careers & Gatsby Benchmarks", voice: "Student & Parent Voice", library: "Library – Evidence Vault", s48: "Section 48 – Catholic Inspection",
   briefings: "Briefing – Staff",
   scenarios: "Scenario Lab", governors: "Governors' Challenge",
   framework: "Renewed Framework", media: "Innovation & Press", ask: "Ask the Portal – AI conversation"
@@ -1720,7 +1720,7 @@ function escapeHtml(s) {
 const RENDER = {
   dashboard: renderDashboard, sef: renderSef, foundations: renderFoundations, pshe: renderPshe, send: renderSend, staff: renderStaff, results: renderResults,
   years: renderYears, attendance: renderAttendance, behaviour: renderBehaviour, external: renderExternal, enrichment: renderEnrichment,
-  careers: renderCareers, voice: renderVoice, library: renderLibrary,
+  careers: renderCareers, voice: renderVoice, library: renderLibrary, s48: renderS48,
   briefings: renderBriefings, scenarios: renderScenarios, governors: renderGovernors, framework: renderFramework,
   media: renderMedia, ask: renderAsk
 };
@@ -1758,6 +1758,109 @@ function injectAtlasStrip(atlas) {
   el.prepend(d);
 }
 let __atlasCtx = null;
+
+
+/* ================= SECTION 48 - CATHOLIC SCHOOLS INSPECTORATE ================= */
+const S48 = {
+  version: "National Framework, Inspection Handbook v5.0 (September 2026)",
+  grades: "1 Outstanding / 2 Good / 3 Requires improvement / 4 Inadequate - inspectors begin with the 'good' descriptors",
+  csed: "The Catholic Self-Evaluation Document (CSED) records the school's self-evaluation of all three key areas; no fixed format is required",
+  areas: [
+    { id: "clm", name: "Catholic life and mission", strands: [
+      ["Pupil outcomes", "How well pupils understand, value, and contribute to the school's Catholic life and mission."],
+      ["Provision", "The quality of provision for the Catholic life and mission of the school - a mission statement known, lived and witnessed to throughout the school."],
+      ["Leadership", "How well leaders and governors promote, monitor and evaluate the provision for the Catholic life and mission of the school, keeping Christ at its heart."]
+    ]},
+    { id: "re", name: "Religious education", strands: [
+      ["Pupil outcomes", "How well pupils achieve and enjoy their learning in religious education."],
+      ["Provision", "The quality of teaching, learning and assessment in religious education."],
+      ["Leadership", "How well leaders and governors promote, monitor and evaluate the provision for religious education."]
+    ]},
+    { id: "cw", name: "Collective worship", strands: [
+      ["Pupil outcomes", "How well pupils participate in and respond to the school's collective worship."],
+      ["Provision", "The quality of collective worship provided by the school."],
+      ["Leadership", "How well leaders and governors promote, monitor and evaluate the provision for collective worship."]
+    ]}
+  ],
+  tags: ["CSED / self-evaluation", "Catholic life & mission", "Religious education", "Collective worship",
+    "Diocesan directives & compliance", "Staff survey (CSI)", "Parent survey (CSI)", "Pupil voice",
+    "Worship planning & monitoring", "RE curriculum & assessment", "Other evidence"],
+  tagArea: { "Catholic life & mission": "clm", "Religious education": "re", "RE curriculum & assessment": "re",
+    "Collective worship": "cw", "Worship planning & monitoring": "cw" }
+};
+const S48_KEY = "lens-s48-" + (SCHOOL_MODE === "ascc" ? "ascc" : SCHOOL_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+const s48Urls = {};
+function s48Load() { try { return JSON.parse(localStorage.getItem(S48_KEY)) || []; } catch { return []; } }
+function s48Save(items) { try { localStorage.setItem(S48_KEY, JSON.stringify(items)); } catch {} }
+
+function renderS48() {
+  var el = document.getElementById("view-s48");
+  function draw() {
+    var items = s48Load();
+    var countFor = function (id) { return items.filter(function (x) { return S48.tagArea[x.label] === id; }).length; };
+    var csedCount = items.filter(function (x) { return x.label === "CSED / self-evaluation"; }).length;
+    var state = function (n) {
+      if (!n) return '<div class="s48-state">No evidence yet - an inspector would have only the conversation.</div>';
+      if (n < 3) return '<div class="s48-state">Evidence is thin here: ' + n + ' document' + (n > 1 ? 's' : '') + '. Build the file before they ask for it.</div>';
+      return '<div class="s48-state ok">' + n + ' documents on file - a story an inspector can follow.</div>';
+    };
+    var html = '';
+    html += '<div class="card" style="max-width:1080px">';
+    html += '<h2>Section 48 &ndash; the canonical inspection</h2>';
+    html += '<p class="muted">The diocesan inspection of what makes the school Catholic: judged across three key areas, each on pupil outcomes, provision and leadership. ' + S48.csed + '.</p>';
+    html += '<div class="s48-facts"><span class="s48-fact"><b>' + S48.version + '</b></span>';
+    html += '<span class="s48-fact">' + S48.grades + '</span>';
+    html += '<span class="s48-fact">CSED on file: <b>' + (csedCount ? 'yes (' + csedCount + ')' : 'not yet') + '</b></span></div>';
+    html += '<div class="s48-board">';
+    S48.areas.forEach(function (a) {
+      html += '<div class="s48-area"><h3>' + a.name + '</h3><p class="judg">' + a.strands[0][1] + '</p>';
+      a.strands.forEach(function (s) { html += '<div class="s48-strand"><span>' + s[0] + '</span></div>'; });
+      html += state(countFor(a.id)) + '</div>';
+    });
+    html += '</div>';
+    html += '<h2 style="margin-top:26px">Evidence vault</h2>';
+    html += '<p class="muted">Tagged to the framework, so the readiness board above tells the truth. <b>The covenant applies here as everywhere in Lens:</b> never published, never ranked, never shared.</p>';
+    html += '<div class="lib-add"><input type="file" id="s48-file" multiple><select id="s48-label">';
+    S48.tags.forEach(function (l) { html += '<option>' + l + '</option>'; });
+    html += '</select><button class="btn" id="s48-btn">Add evidence</button></div>';
+    html += '<table class="lib-table"><thead><tr><th>Document</th><th>Tag</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>';
+    if (items.length) {
+      items.forEach(function (it, i) {
+        var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
+        html += '<tr><td>' + nm + '</td><td>' + escapeHtml(it.label) + '</td><td>' + (it.size / 1024).toFixed(0) + ' KB</td><td>' + it.date + '</td><td><button class="lib-x" data-i="' + i + '">&times;</button></td></tr>';
+      });
+    } else {
+      html += '<tr><td colspan="5" class="muted">Nothing yet. Start with the CSED, then the worship and RE files.</td></tr>';
+    }
+    html += '</tbody></table>';
+    html += '<h2 style="margin-top:26px">The framework, as the inspector carries it</h2><div class="s48-ref">';
+    S48.areas.forEach(function (a) {
+      html += '<details><summary>' + a.name + '</summary>';
+      a.strands.forEach(function (s) { html += '<div class="strand-name">' + s[0] + '</div><p>' + s[1] + '</p>'; });
+      html += '</details>';
+    });
+    html += '<details><summary>Diocesan directives and compliance</summary><p>The CSED supplement lists the bishop&rsquo;s formally promulgated directives; the school self-evaluates against each - directive, evidence, date, notes. File it under &ldquo;Diocesan directives &amp; compliance&rdquo; above.</p></details>';
+    html += '<details><summary>The CSI surveys</summary><p>The Inspectorate&rsquo;s own staff and parent surveys feed the inspection. Run them early, file the results here, and let Ask interrogate them before the diocese does.</p></details></div>';
+    html += '<p class="muted" style="margin-top:16px">Then take it to <a href="#" onclick="gotoView(&quot;ask&quot;);return false">Ask</a>: the Critical friend now knows this framework as well as it knows Ofsted&rsquo;s.</p></div>';
+    el.innerHTML = "";
+    el.appendChild(h(html));
+    el.querySelector("#s48-btn").addEventListener("click", function () {
+      var inp = el.querySelector("#s48-file"), label = el.querySelector("#s48-label").value;
+      var items2 = s48Load();
+      Array.prototype.forEach.call(inp.files, function (f) {
+        s48Urls[f.name] = URL.createObjectURL(f);
+        items2.unshift({ name: f.name, label: label, size: f.size, date: new Date().toLocaleDateString("en-GB") });
+      });
+      if (inp.files.length) { s48Save(items2); draw(); }
+    });
+    el.querySelectorAll(".lib-x").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var items2 = s48Load(); items2.splice(+b.dataset.i, 1); s48Save(items2); draw();
+      });
+    });
+  }
+  draw();
+}
 
 /* ================= LIBRARY – EVIDENCE VAULT ================= */
 const LIB_KEY = "lens-lib-" + (SCHOOL_MODE === "ascc" ? "ascc" : SCHOOL_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-"));

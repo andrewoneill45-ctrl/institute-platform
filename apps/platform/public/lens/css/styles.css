@@ -592,7 +592,7 @@ footer .motto { color: var(--gold); letter-spacing: 0.16em; text-transform: uppe
 .ask-stance{display:flex;gap:0;background:var(--purple-50);border:1px solid var(--line);border-radius:999px;padding:3px;width:max-content;margin:10px 0 14px}
 .stance-btn{border:none;background:none;font-family:var(--font);font-size:.78rem;font-weight:600;color:var(--muted);padding:7px 16px;border-radius:999px;cursor:pointer}
 .stance-btn.on{background:var(--purple-700);color:#fff}
-body.lens-blank #tabs button[data-view]:not([data-view="dashboard"]):not([data-view="library"]):not([data-view="framework"]):not([data-view="ask"]){display:none}
+body.lens-blank #tabs button[data-view]:not([data-view="dashboard"]):not([data-view="library"]):not([data-view="framework"]):not([data-view="ask"]):not([data-view="s48"]){display:none}
 body.lens-blank #tabs .dd{display:none}
 
 
@@ -626,3 +626,22 @@ nav.tabs{top:59px}
 .as-brand b{color:var(--purple-700);font-weight:600}
 .as-chip{font-size:.78rem;color:var(--muted);background:var(--purple-50);border-radius:999px;padding:6px 11px}
 .as-chip b{color:var(--ink)}
+
+
+/* ===== Section 48 room ===== */
+.s48-facts{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 20px}
+.s48-fact{font-size:.78rem;color:var(--muted);background:var(--purple-50);border-radius:999px;padding:6px 12px}
+.s48-fact b{color:var(--ink)}
+.s48-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:16px 0 8px}
+.s48-area{background:#fff;border:1px solid var(--line);border-top:3px solid var(--purple-700);border-radius:12px;padding:16px}
+.s48-area h3{margin:0 0 4px;font-size:1.02rem}
+.s48-area .judg{font-size:.78rem;color:var(--muted);margin:0 0 10px;line-height:1.45}
+.s48-strand{display:flex;justify-content:space-between;font-size:.78rem;padding:5px 0;border-top:1px dashed var(--line)}
+.s48-count{font-weight:700}
+.s48-state{font-size:.74rem;margin-top:10px;padding:6px 10px;border-radius:8px;background:var(--purple-50);color:var(--muted)}
+.s48-state.ok{background:#EAF3EC;color:#2F7A39}
+.s48-ref{margin-top:8px}
+.s48-ref details{border:1px solid var(--line);border-radius:10px;background:#fff;margin-bottom:8px;padding:0 14px}
+.s48-ref summary{cursor:pointer;font-weight:600;font-size:.88rem;padding:11px 0;color:var(--ink)}
+.s48-ref .strand-name{font-size:.8rem;font-weight:700;color:var(--purple-700);margin:8px 0 2px}
+.s48-ref p{font-size:.8rem;color:var(--muted);margin:0 0 10px;line-height:1.5}
