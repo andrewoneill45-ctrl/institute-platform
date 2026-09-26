@@ -26,6 +26,7 @@ export function applyPrismFilters(data, f = {}) {
   let out = data;
   if (f.phase) out = out.filter((s) => s.phase === f.phase);
   if (f.region) out = out.filter((s) => (s.region || "").toLowerCase().includes(f.region.toLowerCase()));
+  if (f.regions) out = out.filter((s) => f.regions.some((r) => (s.region || "").toLowerCase().includes(r.toLowerCase())));
   if (f.la) out = out.filter((s) => (s.la || "").toLowerCase().includes(f.la.toLowerCase()));
   (f.where || []).forEach(({ field, op, value }) => {
     if (!FIELDS[field]) return;
@@ -115,6 +116,32 @@ export function runBlock(block, data) {
   return { error: "unknown block kind" };
 }
 
+
+export const RELATED = {
+  turn_retained_pct: ["vac_rate", "ptr"], vac_rate: ["turn_retained_pct", "ptr"], ptr: ["turn_retained_pct", "vac_rate"],
+  abs_overall_pct: ["abs_persistent_pct", "susp_rate"], abs_persistent_pct: ["abs_severe_pct", "susp_rate"],
+  abs_severe_pct: ["abs_persistent_pct", "susp_rate"], susp_rate: ["abs_persistent_pct", "susp_one_plus_pct"],
+  attainment8: ["a8_disadv", "abs_persistent_pct"], basics_94: ["attainment8", "abs_persistent_pct"],
+  dest_sustained: ["dest_notsust", "attainment8"], dest_notsust: ["dest_sustained", "abs_persistent_pct"],
+  sen_k_ws_pct: ["sen_ehcp_ws_pct", "abs_persistent_pct"], eal_pct: ["fsm_pct", "attainment8"],
+};
+
+export function insightFor(block, res) {
+  const lab = FIELDS[block.metric]?.[0] || block.metric || "";
+  if (res.rows && res.rows.length > 1 && (block.kind === "groupby" || block.kind === "quartiles")) {
+    const vals = res.rows.filter((r) => r.value != null);
+    if (vals.length < 2) return null;
+    const hi = vals.reduce((a, b) => (b.value > a.value ? b : a)), lo = vals.reduce((a, b) => (b.value < a.value ? b : a));
+    return `${hi.label} leads at ${hi.value}; ${lo.label} sits lowest at ${lo.value}: a spread of ${Math.round((hi.value - lo.value) * 10) / 10}.`;
+  }
+  if (block.kind === "scatter" && res.r != null) {
+    const s = Math.abs(res.r);
+    return `${lab} ${res.r > 0 ? "rises" : "falls"} with ${FIELDS[block.x]?.[0] || block.x}: ${s >= 0.5 ? "a strong" : s >= 0.3 ? "a moderate" : "a weak"} relationship (r = ${res.r}) across ${res.n.toLocaleString("en-GB")} schools.`;
+  }
+  if (block.kind === "rank" && res.rows?.length) return `Top of the list: ${res.rows[0].label} (${res.rows[0].value}).`;
+  return null;
+}
+
 export const CHART_ALTS = {
   quartiles: ["bars", "dotplot", "table"],
   groupby: ["bars", "dotplot", "table"],
@@ -134,17 +161,28 @@ export function localPlan(q) {
   const ql = q.toLowerCase();
   const stipRaw = (ql.match(/as a (scatter|bar|dot ?plot|dot|table|ring|line)/) || [])[1];
   const chart = stipRaw ? ({ bar: "bars", dot: "dotplot", "dot plot": "dotplot", dotplot: "dotplot", line: "bars" }[stipRaw] || stipRaw) : null;
-  const pick = (pairs, dflt) => (pairs.find(([k]) => ql.includes(k)) || [null, dflt])[1];
+  const hit = (k) => (k.trim().length <= 4 ? new RegExp("\\b" + k.trim() + "\\b").test(ql) : ql.includes(k));
+  const pick = (pairs, dflt) => (pairs.find(([k]) => hit(k)) || [null, dflt])[1];
   const metric = pick([
     ["persistent", "abs_persistent_pct"], ["severe", "abs_severe_pct"], ["absen", "abs_overall_pct"], ["attend", "abs_overall_pct"],
     ["suspen", "susp_rate"], ["permanent exclu", "permex_rate"], ["exclu", "susp_rate"],
     ["retention", "turn_retained_pct"], ["retain", "turn_retained_pct"], ["turnover", "turn_retained_pct"],
     ["vacanc", "vac_rate"], ["pupil-teacher", "ptr"], ["pupils per teacher", "ptr"], ["staffing", "ptr"], ["teacher", "turn_retained_pct"],
     ["destination", "dest_sustained"], ["neet", "dest_notsust"], ["apprentice", "dest_appren"],
-    ["basics", "basics_94"], ["progress", "p8_prev"], ["ehcp", "sen_ehcp_ws_pct"], ["sen", "sen_k_ws_pct"], ["eal", "eal_pct"],
+    ["basics", "basics_94"], ["progress", "p8_prev"], ["ehcp", "sen_ehcp_ws_pct"], ["send", "sen_k_ws_pct"], ["sen", "sen_k_ws_pct"], ["eal", "eal_pct"],
     ["attainment", "attainment8"], ["a8", "attainment8"],
-  ], "attainment8");
-  const label = FIELDS[metric] ? FIELDS[metric][0] : metric;
+  ], null);
+  const MISSING = [["financ","school finance"],["fund","funding"],["budget","budgets"],["spend","spending"],["money","school finance"],["salar","pay"],[" pay","pay"],["admission","admissions"],["ehe","home education"],["home educ","home education"],["mobility","pupil movement"],["stability","pupil movement"]];
+  const miss = MISSING.find(([k]) => ql.includes(k));
+  if (!metric && !/recover|2019|pandemic/.test(ql)) {
+    const topic = miss ? miss[1] : "that";
+    return { source: "local", coverage: "miss",
+      answer: `The Institute dataset does not yet carry ${topic}${miss && miss[1]==="school finance" ? " (the financial benchmarking layer is queued)" : ""}. It does hold attainment and progress, disadvantage and SEN, absence and suspensions, teacher numbers, retention and vacancies, and KS4 destinations, for 26,553 schools. Ask within those and Prism will answer with evidence rather than improvisation.`,
+      blocks: [],
+      followups: ["Teacher retention by region", "Who is actually in the room?", "Rank schools by severe absence", "How have schools recovered since 2019?"] };
+  }
+  const m2 = metric || "attainment8";
+  const label = FIELDS[m2] ? FIELDS[m2][0] : m2;
   const phase = ql.includes("primar") ? "Primary" : "Secondary";
   const filters = { phase };
   const wantsGap = /disadvantag|fsm|poor|deprived|gap|pupil premium/.test(ql);
@@ -159,16 +197,34 @@ export function localPlan(q) {
       { kind: "groupby", metric: "attainment8", x: "region", chart: chart || "bars", title: "Attainment 8 by region", filters },
     ], followups };
 
+  const REGION_NAMES = ["north east","north west","yorkshire","east midlands","west midlands","east of england","london","south east","south west"];
+  const named = REGION_NAMES.filter((r) => ql.includes(r));
+  if (named.length >= 2) {
+    const regions = named.slice(0, 3);
+    const nice = regions.map((r) => r.replace(/(^|\s)\w/g, (c) => c.toUpperCase())).join(" and ");
+    const comp = (met, title) => ({ kind: "groupby", metric: met, x: "region", chart: "bars", title, filters: { ...filters, regions } });
+    const rel = RELATED[m2] || [];
+    return { source: "local",
+      answer: `${label} in ${nice}, with what an analyst puts beside it: the measures that usually travel with it, and every region for scale.`,
+      blocks: [
+        comp(m2, `${label}: the comparison you asked for`),
+        ...rel.slice(0, 2).map((r) => comp(r, `${FIELDS[r][0]} in the same places`)),
+        { kind: "groupby", metric: m2, x: "region", chart: "dotplot", title: `${label} across every region`, filters },
+      ],
+      followups: [`Rank schools by ${label.toLowerCase()}`, rel[0] ? `${FIELDS[rel[0]][0]} by region` : "Who is actually in the room?", `Does ${label.toLowerCase()} follow disadvantage?`] };
+  }
   const blocks = [];
   if (/against|versus| vs |correlat|scatter/.test(ql) || (wantsGap && !wantsRank))
-    blocks.push({ kind: "scatter", metric, x: "fsm_pct", chart: chart === "table" ? "table" : "scatter", title: `${label} against disadvantage`, highlight: "100503", filters });
+    blocks.push({ kind: "scatter", metric: m2, x: "fsm_pct", chart: chart === "table" ? "table" : "scatter", title: `${label} against disadvantage`, highlight: "100503", filters });
   if (wantsRank)
-    blocks.push({ kind: "rank", metric, dir: asc, limit: 10, chart: chart || "table", title: `Schools by ${label.toLowerCase()}`, filters });
+    blocks.push({ kind: "rank", metric: m2, dir: asc, limit: 10, chart: chart || "table", title: `Schools by ${label.toLowerCase()}`, filters });
   if (wantsRegion || !blocks.length)
-    blocks.push({ kind: "groupby", metric, x: "region", chart: chart || "bars", title: `${label} by region`, filters });
+    blocks.push({ kind: "groupby", metric: m2, x: "region", chart: chart || "bars", title: `${label} by region`, filters });
   if (wantsGap)
-    blocks.push({ kind: "quartiles", metric, x: "fsm_pct", chart: chart || "bars", title: `${label} by disadvantage quartile`, filters });
-  blocks.push({ kind: "stat", metric, agg: "median", chart: "stat", title: `National median · ${label}`, filters });
+    blocks.push({ kind: "quartiles", metric: m2, x: "fsm_pct", chart: chart || "bars", title: `${label} by disadvantage quartile`, filters });
+  const rel0 = (RELATED[m2] || [])[0];
+  if (rel0 && blocks.length < 3) blocks.push({ kind: "groupby", metric: rel0, x: "region", chart: "bars", title: `${FIELDS[rel0][0]}: the companion measure`, filters });
+  blocks.push({ kind: "stat", metric: m2, agg: "median", chart: "stat", title: `National median · ${label}`, filters });
 
   return { source: "local", answer: `${label} across the ${phase.toLowerCase()} estate, read the way you asked.`, blocks: blocks.slice(0, 4), followups };
 }

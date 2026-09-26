@@ -1,7 +1,7 @@
 /* Prism — the insight canvas inside Atlas. Summoned by a question; every block is a live
    query with a chart switcher; exports as an Institute-badged briefing via print. */
 import React, { useEffect, useRef, useState } from "react";
-import { runBlock, normaliseChart, CHART_ALTS, FIELDS, localPlan } from "./engine.js";
+import { runBlock, normaliseChart, CHART_ALTS, FIELDS, localPlan, insightFor } from "./engine.js";
 import { Bars, DotPlot, Scatter, Ring, Stat, DataTable } from "./charts.jsx";
 
 const QUATREFOIL = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
@@ -68,6 +68,7 @@ function Block({ block, data }) {
       )}
       {chart !== "ring" && chart !== "stat" && (<><p className="pz-kick">{res.n ? `${res.n.toLocaleString("en-GB")} schools` : "Computed live"}</p><h3>{block.title}</h3></>)}
       {body}
+      {(() => { const ins = insightFor(block, res); return ins ? <p style={{ fontSize: 12.5, color: "#6F6580", marginTop: 12, borderTop: "1px solid rgba(106,12,160,.10)", paddingTop: 10 }}>{ins}</p> : null; })()}
     </div>
   );
 }
@@ -105,8 +106,9 @@ export default function PrismCanvas() {
       p = await res.json();
       if (!p.blocks) throw new Error("badplan");
       p.source = "live";
-    } catch {
+    } catch (err) {
       p = localPlan(question);
+      p._why = String(err?.message || err).slice(0, 90);
     }
     setPlan(p); setBusy(false);
   }
@@ -169,7 +171,7 @@ export default function PrismCanvas() {
             <div className="pz-chips">
               {(plan.followups || []).map((f, i) => <button key={i} className="pz-chip" onClick={() => ask(f)}>{f}</button>)}
             </div>
-            <p className="pz-method"><b>Method.</b> Every figure computed at query time from the Institute dataset (DfE published data joined by URN). Nothing is a black box.{plan.source === "local" ? " Planned offline: the live planner answers at institute.school." : " Planned live."}</p>
+            <p className="pz-method"><b>Method.</b> Every figure computed at query time from the Institute dataset (DfE published data joined by URN). Nothing is a black box.{plan.source === "local" ? ` Planned offline${plan._why ? " (" + plan._why + ")" : ""}.` : " Planned live."}</p>
           </>
         )}
       </div>
