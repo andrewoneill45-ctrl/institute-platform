@@ -305,3 +305,14 @@ export function describeFilters(filters) {
   if (filters.gender) p.push(filters.gender.toLowerCase());
   return p.join(' ');
 }
+
+
+/* Prism: does this query want an answer rather than a filter? */
+export function isQuestion(q) {
+  const s = (q || "").trim().toLowerCase();
+  if (!s) return false;
+  if (s.endsWith("?")) return true;
+  if (/^(who|what|how|why|which|when|compare|tell me|is |are |does |do )/.test(s)) return true;
+  if (/\bas a (scatter|bar|dot|table|ring|line)/.test(s)) return true;
+  return false;
+}

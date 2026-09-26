@@ -90,6 +90,10 @@ const SearchBar = ({ schools, query, onQueryChange, onSearch, onAiSearch, result
   };
 
   const keyDown = e => {
+    if (e.key === 'Enter') {
+      const v = (e.target.value || '').trim();
+      if (isQuestion(v)) { window.dispatchEvent(new CustomEvent('asi-prism', { detail: v })); setOpen(false); return; }
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(p => Math.min(p + 1, suggestions.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(p => Math.max(p - 1, -1)); }
     else if (e.key === 'Escape') { setOpen(false); setSuggestions([]); }

@@ -1,4 +1,5 @@
 import { Suspense, lazy, Component } from "react";
+import PrismCanvas from "./prism/PrismCanvas.jsx";
 
 const AtlasApp = lazy(() => import("../atlas/App.jsx"));
 
@@ -29,6 +30,7 @@ export default function Atlas() {
           <div style={{ display: "grid", placeItems: "center", height: "100%",
             color: "var(--muted)", fontSize: 14 }}>Loading Atlas\u2026</div>}>
           <AtlasApp />
+          <PrismCanvas />
         </Suspense>
       </Boundary>
     </div>
