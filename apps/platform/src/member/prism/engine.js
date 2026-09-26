@@ -128,25 +128,47 @@ export function normaliseChart(block) {
   return alts.includes(block.chart) ? block.chart : alts[0];
 }
 
-/* Offline planner — used when the serverless function is unreachable (demo mode).
-   Honest, keyword-level; the live model does the real planning. */
+/* Offline planner — used when the serverless function is unreachable.
+   Anchors to what was actually asked; disadvantage enters only when asked. */
 export function localPlan(q) {
   const ql = q.toLowerCase();
-  const stip = (ql.match(/as a (scatter|bar|dot|table|ring|line)/) || [])[1];
-  const chart = { bar: "bars", dot: "dotplot", line: "bars" }[stip] || stip;
-  const pick = (pairs, dflt) => pairs.find(([k]) => ql.includes(k))?.[1] || dflt;
-  const metric = pick([["persistent", "abs_persistent_pct"], ["severe", "abs_severe_pct"], ["absen", "abs_overall_pct"], ["attend", "abs_overall_pct"],
-    ["suspen", "susp_rate"], ["exclu", "permex_rate"], ["retention", "turn_retained_pct"], ["teacher", "ptr"], ["vacanc", "vac_rate"],
-    ["destination", "dest_sustained"], ["basics", "basics_94"], ["progress", "p8_prev"]], "attainment8");
-  const filters = { phase: ql.includes("primar") ? "Primary" : "Secondary" };
-  if (/recover|2019|pandemic/.test(ql)) return { answer: "Recovery, computed against each school's own 2019 baseline.", blocks: [{ kind: "recovery", chart: "ring", title: "At or above their 2019 Attainment 8", filters }, { kind: "quartiles", metric: "attainment8", x: "fsm_pct", chart: chart || "bars", title: "Attainment 8 by disadvantage quartile", filters }], followups: ["Which regions recovered?", "Show it as a scatter", "Who is actually in the room?"] };
-  return {
-    answer: `${FIELDS[metric]?.[0] || "This measure"} across the ${filters.phase.toLowerCase()} estate, read against disadvantage.`,
-    blocks: [
-      { kind: "scatter", metric, x: "fsm_pct", chart: chart === "table" ? "table" : "scatter", title: `${FIELDS[metric][0]} against FSM6`, highlight: "100503", filters },
-      { kind: "quartiles", metric, x: "fsm_pct", chart: chart || "bars", title: `${FIELDS[metric][0]} by disadvantage quartile`, filters },
-      { kind: "stat", metric, agg: "median", chart: "stat", title: `National median ${FIELDS[metric][0]}`, filters },
-    ],
-    followups: ["Rank the regions", "Show the primary picture", "Which schools break this gradient?"],
-  };
+  const stipRaw = (ql.match(/as a (scatter|bar|dot ?plot|dot|table|ring|line)/) || [])[1];
+  const chart = stipRaw ? ({ bar: "bars", dot: "dotplot", "dot plot": "dotplot", dotplot: "dotplot", line: "bars" }[stipRaw] || stipRaw) : null;
+  const pick = (pairs, dflt) => (pairs.find(([k]) => ql.includes(k)) || [null, dflt])[1];
+  const metric = pick([
+    ["persistent", "abs_persistent_pct"], ["severe", "abs_severe_pct"], ["absen", "abs_overall_pct"], ["attend", "abs_overall_pct"],
+    ["suspen", "susp_rate"], ["permanent exclu", "permex_rate"], ["exclu", "susp_rate"],
+    ["retention", "turn_retained_pct"], ["retain", "turn_retained_pct"], ["turnover", "turn_retained_pct"],
+    ["vacanc", "vac_rate"], ["pupil-teacher", "ptr"], ["pupils per teacher", "ptr"], ["staffing", "ptr"], ["teacher", "turn_retained_pct"],
+    ["destination", "dest_sustained"], ["neet", "dest_notsust"], ["apprentice", "dest_appren"],
+    ["basics", "basics_94"], ["progress", "p8_prev"], ["ehcp", "sen_ehcp_ws_pct"], ["sen", "sen_k_ws_pct"], ["eal", "eal_pct"],
+    ["attainment", "attainment8"], ["a8", "attainment8"],
+  ], "attainment8");
+  const label = FIELDS[metric] ? FIELDS[metric][0] : metric;
+  const phase = ql.includes("primar") ? "Primary" : "Secondary";
+  const filters = { phase };
+  const wantsGap = /disadvantag|fsm|poor|deprived|gap|pupil premium/.test(ql);
+  const wantsRegion = /region|north|south|london|midlands|coast/.test(ql);
+  const wantsRank = /rank|top |worst |best |highest|lowest|which (schools|las|local)/.test(ql);
+  const asc = /lowest|worst absence|best attendance/.test(ql) ? "asc" : "desc";
+  const followups = [`${label} by region`, `Rank schools by ${label.toLowerCase()}`, wantsGap ? `${label} against attainment` : `Does ${label.toLowerCase()} follow disadvantage?`];
+
+  if (/recover|2019|pandemic/.test(ql))
+    return { source: "local", answer: "Recovery, computed against each school's own 2019 baseline.", blocks: [
+      { kind: "recovery", chart: "ring", title: "At or above their 2019 Attainment 8", filters },
+      { kind: "groupby", metric: "attainment8", x: "region", chart: chart || "bars", title: "Attainment 8 by region", filters },
+    ], followups };
+
+  const blocks = [];
+  if (/against|versus| vs |correlat|scatter/.test(ql) || (wantsGap && !wantsRank))
+    blocks.push({ kind: "scatter", metric, x: "fsm_pct", chart: chart === "table" ? "table" : "scatter", title: `${label} against disadvantage`, highlight: "100503", filters });
+  if (wantsRank)
+    blocks.push({ kind: "rank", metric, dir: asc, limit: 10, chart: chart || "table", title: `Schools by ${label.toLowerCase()}`, filters });
+  if (wantsRegion || !blocks.length)
+    blocks.push({ kind: "groupby", metric, x: "region", chart: chart || "bars", title: `${label} by region`, filters });
+  if (wantsGap)
+    blocks.push({ kind: "quartiles", metric, x: "fsm_pct", chart: chart || "bars", title: `${label} by disadvantage quartile`, filters });
+  blocks.push({ kind: "stat", metric, agg: "median", chart: "stat", title: `National median · ${label}`, filters });
+
+  return { source: "local", answer: `${label} across the ${phase.toLowerCase()} estate, read the way you asked.`, blocks: blocks.slice(0, 4), followups };
 }

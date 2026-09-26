@@ -104,6 +104,7 @@ export default function PrismCanvas() {
       if (!res.ok) throw new Error("offline");
       p = await res.json();
       if (!p.blocks) throw new Error("badplan");
+      p.source = "live";
     } catch {
       p = localPlan(question);
     }
@@ -168,7 +169,7 @@ export default function PrismCanvas() {
             <div className="pz-chips">
               {(plan.followups || []).map((f, i) => <button key={i} className="pz-chip" onClick={() => ask(f)}>{f}</button>)}
             </div>
-            <p className="pz-method"><b>Method.</b> Every figure computed at query time from the Institute dataset (DfE published data joined by URN). Nothing is a black box.</p>
+            <p className="pz-method"><b>Method.</b> Every figure computed at query time from the Institute dataset (DfE published data joined by URN). Nothing is a black box.{plan.source === "local" ? " Planned offline: the live planner answers at institute.school." : " Planned live."}</p>
           </>
         )}
       </div>

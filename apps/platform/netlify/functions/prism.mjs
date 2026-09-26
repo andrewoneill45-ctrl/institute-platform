@@ -13,7 +13,7 @@ SCHEMA:
 {"answer": "2-3 sentence written argument in UK English, Institute voice (rhetorical weight, no em dashes), WITHOUT specific numbers — the canvas carries the numbers",
  "blocks": [up to 4 of:
    {"kind":"scatter","metric":FIELD,"x":FIELD,"chart":"scatter","title":"...","highlight":"URN optional","filters":{...}}
-   {"kind":"quartiles","metric":FIELD,"x":"fsm_pct","agg":"median","chart":"bars|dotplot|table","title":"..."}
+   {"kind":"quartiles","metric":FIELD,"x":NUMERIC_FIELD (any numeric field; fsm_pct only when disadvantage is the subject),"agg":"median","chart":"bars|dotplot|table","title":"..."}
    {"kind":"groupby","metric":FIELD,"x":"region|la|phase|religiousCharacter|gender|ofsted","agg":"median","chart":"bars|dotplot|table","dir":"desc|asc","limit":N,"title":"..."}
    {"kind":"stat","metric":FIELD,"agg":"median|mean|count","chart":"stat","title":"..."} or {"kind":"stat","pctWhere":{"field":FIELD,"op":"lt|gt|gte","value":N},"chart":"ring|stat","title":"..."}
    {"kind":"recovery","chart":"ring","title":"..."} (share of schools at/above their 2019 Attainment 8)
@@ -24,6 +24,7 @@ FIELDS: ${FIELDS}
 filters (optional per block): {"phase":"Secondary|Primary","region":"...","la":"...","where":[{"field":F,"op":"lt|gt","value":N}]}
 
 RULES:
+- ANCHOR TO THE QUESTION. Choose metrics, groupings and the x-axis from what was actually asked. Use fsm_pct or disadvantage framing ONLY when the question concerns disadvantage, gaps or fairness; otherwise prefer groupby region/la, rank, stat, or a scatter against a field the question implies.
 - First block is the hero: the single most telling visual for the question.
 - If the user stipulates a chart type ("as a scatter", "bar chart", "as a table", "ring"), you MUST honour it on the relevant block.
 - Default phase filter Secondary unless the question implies primary or all schools.
@@ -55,7 +56,8 @@ export default async (req) => {
   const data = await r.json();
   const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
   try {
-    const plan = JSON.parse(text.replace(/```json|```/g, "").trim());
+    const m = text.match(/\{[\s\S]*\}/);
+    const plan = JSON.parse((m ? m[0] : text).trim());
     if (!Array.isArray(plan.blocks)) throw new Error("shape");
     plan.blocks = plan.blocks.slice(0, 4);
     return Response.json(plan);
