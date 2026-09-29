@@ -14,9 +14,11 @@ export default function MemberLayout() {
       <div className="member-top" style={{ flex: "none" }}><div className="container in">
         <Link to="/" style={{ textDecoration: "none" }}><Wordmark size={22} /></Link>
         <div className="tabs">
+          <NavLink to="." end className={({ isActive }) => (isActive ? "on" : "")}>Home</NavLink>
           <NavLink to="atlas" className={({ isActive }) => (isActive ? "on" : "")}>Atlas</NavLink>
           <NavLink to="lens" className={({ isActive }) => (isActive ? "on" : "")}>Lens</NavLink>
           <NavLink to="orbit" className={({ isActive }) => (isActive ? "on" : "")}>Orbit</NavLink>
+          <NavLink to="constellation" className={({ isActive }) => (isActive ? "on" : "")}>Constellation</NavLink>
         </div>
         <span className="spacer" style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{user?.school || user?.email}</span>

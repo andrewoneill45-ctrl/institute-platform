@@ -7,9 +7,11 @@ import Positions from "./site/Positions.jsx";
 import System from "./site/System.jsx";
 import Summit from "./site/Summit.jsx";
 import MemberLayout from "./member/MemberLayout.jsx";
+import MemberHome from "./member/Home.jsx";
 import Atlas from "./member/Atlas.jsx";
 import Lens from "./member/Lens.jsx";
 import Orbit from "./member/Orbit.jsx";
+import Constellation from "./member/constellation/Constellation.jsx";
 import { RequireMember } from "./lib/auth.jsx";
 
 export default function App() {
@@ -23,10 +25,11 @@ export default function App() {
       <Route path="/summit" element={<Summit />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/members" element={<RequireMember><MemberLayout /></RequireMember>}>
-        <Route index element={<Navigate to="atlas" replace />} />
+        <Route index element={<MemberHome />} />
         <Route path="atlas" element={<Atlas />} />
         <Route path="lens" element={<Lens />} />
         <Route path="orbit" element={<Orbit />} />
+        <Route path="constellation" element={<Constellation />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
