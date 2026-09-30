@@ -65,7 +65,7 @@ export function readHeaders(headerRow) {
 }
 export function classify(map) {
   if (map.att != null || (map.sessions != null && map.absent != null)) return "attendance";
-  if (map.score != null && (map.subject != null || map.date != null)) return "assessment";
+  if (map.score != null && (map.subject != null || map.date != null || map.name != null || map.upn != null)) return "assessment";
   if (map.praise != null || map.sanction != null || map.homework != null) return "engagement";
   if (map.intervention != null) return "intervention";
   if (map.event != null) return "enrichment";
@@ -78,7 +78,7 @@ const normDob = (s) => { const m = (s || "").match(/(\d{1,4})[/\-.](\d{1,2})[/\-
 export const validUPN = (u) => /^[A-Z]\d{12}$/i.test((u || "").trim());
 
 /* ── stage 3: the matching ladder — strongest first, ask below threshold ── */
-export function matchPupil(row, map, roll, aliases = {}) {
+export function matchPupil(row, map, roll, aliases = {}, scopeYear = null) {
   const upn = map.upn != null ? (row[map.upn] || "").trim().toUpperCase() : "";
   if (upn) { const p = roll.find((x) => x.upn === upn); if (p) return { upn: p.upn, rule: 1, conf: "certain" }; }
   const nm = normName(cellName(row, map));
@@ -86,23 +86,25 @@ export function matchPupil(row, map, roll, aliases = {}) {
   if (aliases[nm]) return { upn: aliases[nm], rule: 0, conf: "resolved" };
   const dob = map.dob != null ? normDob(row[map.dob]) : "";
   if (dob) { const hits = roll.filter((p) => p._nm === nm && p.dob === dob); if (hits.length === 1) return { upn: hits[0].upn, rule: 2, conf: "high" }; }
+  const pool = scopeYear != null ? roll.filter((p) => p.year === scopeYear) : roll;
   const reg = map.reg != null ? (row[map.reg] || "").trim().toLowerCase() : "";
-  if (reg) { const hits = roll.filter((p) => p._nm === nm && (p.reg || "").toLowerCase() === reg); if (hits.length === 1) return { upn: hits[0].upn, rule: 3, conf: "good" }; }
+  if (reg) { const hits = pool.filter((p) => p._nm === nm && (p.reg || "").toLowerCase() === reg); if (hits.length === 1) return { upn: hits[0].upn, rule: 3, conf: "good" }; }
   const yr = map.year != null ? String(row[map.year] || "").replace(/\D/g, "") : "";
-  const loose = roll.filter((p) => (p._nm === nm || p._nm.includes(nm) || nm.includes(p._nm)) && (!yr || String(p.year) === yr));
+  const loose = pool.filter((p) => (p._nm === nm || p._nm.includes(nm) || nm.includes(p._nm)) && (!yr || String(p.year) === yr));
   if (loose.length === 1 && loose[0]._nm === nm) return { upn: loose[0].upn, rule: 3, conf: "good" };
   if (loose.length >= 1) return { review: true, name: cellName(row, map), candidates: loose.slice(0, 4).map((p) => ({ upn: p.upn, name: p.name, reg: p.reg })) };
   return null;
 }
 
 /* ── ingest: one file → roll rows or evidence facts + a ledger entry ── */
-export function ingest(state, fileName, text) {
+export function ingest(state, fileName, text, opts = {}) {
+  const scopeYear = opts.year ?? null;
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0]);
   const kind = classify(map);
   const body = rows.slice(1);
-  const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today() };
+  const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [] };
 
   if (kind === "roll") {
     const roll = [...state.roll];
@@ -123,6 +125,7 @@ export function ingest(state, fileName, text) {
       led.matched++;
     });
     if (led.held) led.assumptions = [...assumptions, `${led.held} rows held: UPN missing or malformed`];
+    led.years = [...new Set(roll.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
     return { ...state, roll, ledger: [led, ...state.ledger] };
   }
 
@@ -133,17 +136,19 @@ export function ingest(state, fileName, text) {
 
   const evidence = [...state.evidence]; const review = [...state.review];
   body.forEach((r) => {
-    const m = matchPupil(r, map, state.roll, state.aliases);
+    const m = matchPupil(r, map, state.roll, state.aliases, scopeYear);
     if (!m) { led.held++; return; }
     if (m.review) { led.held++; review.push({ file: fileName, kind, name: m.name, candidates: m.candidates, row: r, mapKeys: map }); return; }
     led.matched++;
     const base = { upn: m.upn, file: fileName, conf: m.conf, date: today() };
-    if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : "General", score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : "1" });
+    if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName });
     if (kind === "attendance") evidence.push({ ...base, t: "attendance", pct: map.att != null ? num(r[map.att]) : pctFrom(r, map), unauth: map.unauth != null ? num(r[map.unauth]) : null, when: map.date != null ? (r[map.date] || "").trim() : "current" });
     if (kind === "engagement") evidence.push({ ...base, t: "engagement", praise: num(r[map.praise]), sanction: num(r[map.sanction]), homework: num(r[map.homework]) });
     if (kind === "enrichment") evidence.push({ ...base, t: "enrichment", what: map.event != null ? (r[map.event] || "").trim() : fileName, when: map.date != null ? (r[map.date] || "").trim() : "" });
     if (kind === "intervention") evidence.push({ ...base, t: "intervention", what: (r[map.intervention] || "").trim(), dosage: map.dosage != null ? num(r[map.dosage]) : null });
   });
+  const touched = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
+  led.years = [...new Set(state.roll.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
   return { ...state, evidence, review, ledger: [led, ...state.ledger] };
 }
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[%\s]/g, "")); return isFinite(n) ? n : null; };
