@@ -1863,7 +1863,25 @@ function s48AnalyseXlsx(name, buf) {
   var text = all.join("\n").slice(0, 6000);
   var out = { chars: text.length, text: text };
   if (series.length) out.series = series;
+  else out.sheets = wb.SheetNames.slice(0, 6).map(function (sn) { return { name: sn, csv: XLSX.utils.sheet_to_csv(wb.Sheets[sn]).slice(0, 5000) }; });
   return out;
+}
+/* stage two: when the rules cannot see the table, the AI reads it — transcription only */
+function s48Understand(it, after) {
+  if (it.aiTried || !it.read) return;
+  var sheets = it.read.sheets || (it.read.text ? [{ name: it.name, csv: it.read.text.slice(0, 8000) }] : null);
+  if (!sheets) return;
+  it.aiTried = true;
+  fetch("/.netlify/functions/understand", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file: it.name, sheets: sheets })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (d && d.series && d.series.length) {
+      var clean = d.series.filter(function (s) { return s && s.label && s.years && s.vals && s.vals.filter(function (v) { return typeof v === "number" && isFinite(v); }).length >= 2; }).slice(0, 4);
+      if (clean.length) { it.read.series = clean; it.read.ai = true; if (d.summary) it.read.summary = d.summary; delete it.read.sheets; }
+    }
+    after();
+  }).catch(function () { after(); });
 }
 function s48Chart(s) {
   var ok = s.vals.map(function (v, i) { return [i, v]; }).filter(function (p) { return isFinite(p[1]); });
@@ -1948,7 +1966,7 @@ function renderS48() {
           it.read.series.forEach(function (s) {
             var ok = s.vals.filter(isFinite);
             var dir = ok[ok.length - 1] > ok[0] ? "rising" : ok[ok.length - 1] < ok[0] ? "falling" : "level";
-            html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + '</div></div>';
+            html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + (it.read.ai ? ' &middot; AI-read, figures transcribed' : '') + '</div></div>';
           });
         });
         html += '</div>';
@@ -1965,7 +1983,12 @@ function renderS48() {
     if (items.length) {
       items.forEach(function (it, i) {
         var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
-        var readCell = it.read ? (it.read.series ? '<b style="color:#2F7A39">analysed</b>' : 'read') : '<span class="muted" title="PDF and Word are stored only in this release; Excel, CSV and text are read">stored only</span>';
+        var readCell;
+        if (it.read && it.read.series) readCell = '<b style="color:#2F7A39">analysed</b>' + (it.read.ai ? ' <span class="muted" title="The AI read the layout; every figure transcribed from the file, none calculated">&middot; AI-read</span>' : '');
+        else if (it.read && it.read.chars) readCell = 'read';
+        else if (it.read && it.read.note) readCell = '<span class="muted">stored only &middot; ' + escapeHtml(it.read.note) + '</span>';
+        else if (s48Readable(it.name)) readCell = '<span style="color:#8a6d1c">stored before the reader existed &middot; remove (&times;) and add the file again to analyse it</span>';
+        else readCell = '<span class="muted" title="Excel, CSV and text are read; PDF and Word are stored only in this release">stored only</span>';
         html += '<tr><td>' + nm + '</td><td>' + escapeHtml(it.label) + '</td><td>' + (it.size / 1024).toFixed(0) + ' KB</td><td>' + readCell + '</td><td>' + it.date + '</td><td><button class="lib-x" data-i="' + i + '">&times;</button></td></tr>';
       });
     } else {
@@ -1980,7 +2003,7 @@ function renderS48() {
           var ok = s.vals.filter(isFinite);
           if (ok.length < 2) return;
           var dir = ok[ok.length - 1] > ok[0] ? "rising" : ok[ok.length - 1] < ok[0] ? "falling" : "level";
-          html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + '</div></div>';
+          html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + (it.read.ai ? ' &middot; AI-read, figures transcribed' : '') + '</div></div>';
         });
       });
       html += '</div>';
@@ -2001,6 +2024,12 @@ function renderS48() {
       var files = Array.prototype.slice.call(inp.files);
       if (!files.length) return;
       var pending = files.length, items2 = s48Load();
+      var finish = function () {
+        s48Save(items2); draw();
+        items2.forEach(function (it) {
+          if (it.read && !it.read.series) s48Understand(it, function () { s48Save(items2); draw(); });
+        });
+      };
       files.forEach(function (f) {
         s48Urls[f.name] = URL.createObjectURL(f);
         var it = { name: f.name, label: label, size: f.size, date: new Date().toLocaleDateString("en-GB") };
@@ -2009,11 +2038,11 @@ function renderS48() {
           var rd = new FileReader(), xl = s48IsXlsx(f.name);
           rd.onload = function () {
             try { it.read = xl ? s48AnalyseXlsx(f.name, rd.result) : s48Analyse(f.name, String(rd.result)); } catch (e) {}
-            if (!--pending) { s48Save(items2); draw(); }
+            if (!--pending) finish();
           };
-          rd.onerror = function () { if (!--pending) { s48Save(items2); draw(); } };
+          rd.onerror = function () { if (!--pending) finish(); };
           if (xl) rd.readAsArrayBuffer(f); else rd.readAsText(f);
-        } else if (!--pending) { s48Save(items2); draw(); }
+        } else if (!--pending) finish();
       });
     });
     el.querySelectorAll(".lib-x").forEach(function (b) {
