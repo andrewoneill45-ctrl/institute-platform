@@ -211,7 +211,8 @@ export default async (req) => {
     m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"
   ).map(m => ({ role: m.role, content: m.content.slice(0, 8000) })) : [];
 
-  const messages = [...history, { role: "user", content: question }];
+  const evidence = (body.evidence || "").toString().slice(0, 5000);
+  const messages = [...history, { role: "user", content: evidence ? evidence + "\n\nQUESTION: " + question : question }];
 
   try {
     // Stream the answer. Netlify's synchronous functions are killed after ~10s

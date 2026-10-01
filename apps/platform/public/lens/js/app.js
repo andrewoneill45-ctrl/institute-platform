@@ -1627,7 +1627,7 @@ async function sendAsk() {
     const res = await fetch("/.netlify/functions/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, history: askHistory.slice(-6), stance: askStance })
+      body: JSON.stringify({ question: q, history: askHistory.slice(-6), stance: askStance, evidence: (typeof s48Digest === "function" ? s48Digest() : "") })
     });
     if (!res.ok) {
       let errMsg;
@@ -1788,6 +1788,94 @@ const S48 = {
   tagArea: { "Catholic life & mission": "clm", "Religious education": "re", "RE curriculum & assessment": "re",
     "Collective worship": "cw", "Worship planning & monitoring": "cw" }
 };
+/* The vault learns to read: text and CSV in this release, honestly declined otherwise. */
+function s48Readable(name) { return /\.(csv|txt|tsv)$/i.test(name); }
+function s48Analyse(name, text) {
+  var out = { chars: Math.min(text.length, 6000), text: text.slice(0, 6000) };
+  if (!/\.(csv|tsv)$/i.test(name)) return out;
+  var sep = /\.tsv$/i.test(name) ? "\t" : ",";
+  var rows = text.split(/\r?\n/).filter(function (r) { return r.trim(); }).map(function (r) { return r.split(sep); });
+  if (rows.length < 2) return out;
+  var head = rows[0].map(function (c) { return c.trim(); });
+  var body = rows.slice(1);
+  /* transposed layout first: years across the top, measures down the side */
+  var yrHead = head.slice(1).filter(function (c) { return /20\d\d/.test(c); });
+  if (yrHead.length >= 2 && yrHead.length >= head.length - 2) {
+    var years = head.slice(1).map(function (c) { return c.trim(); });
+    var tser = [];
+    body.forEach(function (r) {
+      var vals = r.slice(1).map(function (v) { return parseFloat(String(v || "").replace(/[%\s]/g, "")); });
+      if (vals.filter(isFinite).length >= 2 && tser.length < 3 && (r[0] || "").trim())
+        tser.push({ label: r[0].trim(), years: years, vals: vals });
+    });
+    if (tser.length) { out.series = tser; }
+    return out;
+  }
+  /* vertical layout: a column named Year, or whose values are years */
+  var yearCol = -1;
+  head.forEach(function (hd, i) { if (yearCol < 0 && /^(year|cohort|series|academic year)$/i.test(hd)) yearCol = i; });
+  if (yearCol < 0) head.forEach(function (hd, i) {
+    if (yearCol < 0 && body.every(function (r) { return /^\s*20\d\d/.test(r[i] || ""); })) yearCol = i;
+  });
+  if (yearCol < 0) return out;
+  var series = [];
+  head.forEach(function (hd, i) {
+    if (i === yearCol) return;
+    var vals = body.map(function (r) { return parseFloat(String(r[i] || "").replace(/[%\s]/g, "")); });
+    if (vals.filter(function (v) { return isFinite(v); }).length >= 2 && series.length < 3)
+      series.push({ label: hd, years: body.map(function (r) { return (r[yearCol] || "").trim(); }), vals: vals });
+  });
+  if (series.length) out.series = series;
+  return out;
+}
+function s48Chart(s) {
+  var ok = s.vals.map(function (v, i) { return [i, v]; }).filter(function (p) { return isFinite(p[1]); });
+  if (ok.length < 2) return "";
+  var W = 340, H = 128, L = 34, R = 14, T = 16, B = 26;
+  var min = Math.min.apply(null, ok.map(function (p) { return p[1]; })), max = Math.max.apply(null, ok.map(function (p) { return p[1]; }));
+  var pad = (max - min) * 0.15 || 1; min -= pad; max += pad;
+  var n = s.vals.length - 1 || 1;
+  var X = function (i) { return L + i * (W - L - R) / n; }, Y = function (v) { return T + (max - v) * (H - T - B) / (max - min); };
+  var pts = ok.map(function (p) { return X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join(" ");
+  var first = ok[0], last = ok[ok.length - 1];
+  var col = last[1] > first[1] ? "#2F7A39" : last[1] < first[1] ? "#B3261E" : "#C6A035";
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;display:block">';
+  svg += '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="rgba(106,12,160,.18)"/>';
+  svg += '<polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+  ok.forEach(function (p) { svg += '<circle cx="' + X(p[0]).toFixed(1) + '" cy="' + Y(p[1]).toFixed(1) + '" r="3.2" fill="' + col + '" stroke="#fff" stroke-width="1.4"/>'; });
+  s.years.forEach(function (yr, i) {
+    if (i === 0 || i === s.years.length - 1 || s.years.length <= 5)
+      svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9.5" fill="#6F6580">' + String(yr).replace(/[^0-9/]/g, "").slice(0, 7) + '</text>';
+  });
+  svg += '<text x="' + X(first[0]).toFixed(1) + '" y="' + (Y(first[1]) - 7) + '" text-anchor="middle" font-size="10" font-weight="700" fill="#221233">' + first[1] + '</text>';
+  svg += '<text x="' + X(last[0]).toFixed(1) + '" y="' + (Y(last[1]) - 7) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + col + '">' + last[1] + '</text>';
+  svg += '</svg>';
+  return svg;
+}
+function s48Spark(s) {
+  var ok = s.vals.map(function (v, i) { return [i, v]; }).filter(function (p) { return isFinite(p[1]); });
+  if (ok.length < 2) return "";
+  var min = Math.min.apply(null, ok.map(function (p) { return p[1]; })), max = Math.max.apply(null, ok.map(function (p) { return p[1]; }));
+  var span = (max - min) || 1, n = s.vals.length - 1 || 1;
+  var pts = ok.map(function (p) { return (6 + p[0] * 108 / n).toFixed(1) + "," + (24 - (p[1] - min) * 18 / span).toFixed(1); }).join(" ");
+  var first = ok[0][1], last = ok[ok.length - 1][1];
+  var col = last > first ? "#2F7A39" : last < first ? "#B3261E" : "#C6A035";
+  return '<svg viewBox="0 0 120 28" width="120" height="28" style="vertical-align:middle"><polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round"/></svg>';
+}
+function s48Digest() {
+  var items = s48Load(), parts = [], budget = 4200;
+  items.forEach(function (it) {
+    if (!it.read) return;
+    var line = "[" + it.label + "] " + it.name + ": ";
+    if (it.read.series) it.read.series.forEach(function (s) {
+      var ok = s.vals.filter(isFinite);
+      line += s.label + " " + s.years[0] + "\u2192" + s.years[s.years.length - 1] + ": " + ok[0] + " \u2192 " + ok[ok.length - 1] + ". ";
+    });
+    else line += (it.read.text || "").slice(0, 700).replace(/\s+/g, " ");
+    if (budget - line.length > 0) { parts.push(line); budget -= line.length; }
+  });
+  return parts.length ? "SCHOOL EVIDENCE ON FILE (Section 48 vault, uploaded by the school; cite it):\n" + parts.join("\n") : "";
+}
 const S48_KEY = "lens-s48-" + (SCHOOL_MODE === "ascc" ? "ascc" : SCHOOL_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
 const s48Urls = {};
 function s48Load() { try { return JSON.parse(localStorage.getItem(S48_KEY)) || []; } catch { return []; } }
@@ -1815,7 +1903,20 @@ function renderS48() {
     S48.areas.forEach(function (a) {
       html += '<div class="s48-area"><h3>' + a.name + '</h3><p class="judg">' + a.strands[0][1] + '</p>';
       a.strands.forEach(function (s) { html += '<div class="s48-strand"><span>' + s[0] + '</span></div>'; });
-      html += state(countFor(a.id)) + '</div>';
+      html += state(countFor(a.id));
+      var reads = items.filter(function (x) { return S48.tagArea[x.label] === a.id && x.read && x.read.series; });
+      if (reads.length) {
+        html += '<div class="s48-charts">';
+        reads.forEach(function (it) {
+          it.read.series.forEach(function (s) {
+            var ok = s.vals.filter(isFinite);
+            var dir = ok[ok.length - 1] > ok[0] ? "rising" : ok[ok.length - 1] < ok[0] ? "falling" : "level";
+            html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + '</div></div>';
+          });
+        });
+        html += '</div>';
+      }
+      html += '</div>';
     });
     html += '</div>';
     html += '<h2 style="margin-top:26px">Evidence vault</h2>';
@@ -1823,14 +1924,15 @@ function renderS48() {
     html += '<div class="lib-add"><input type="file" id="s48-file" multiple><select id="s48-label">';
     S48.tags.forEach(function (l) { html += '<option>' + l + '</option>'; });
     html += '</select><button class="btn" id="s48-btn">Add evidence</button></div>';
-    html += '<table class="lib-table"><thead><tr><th>Document</th><th>Tag</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>';
+    html += '<table class="lib-table"><thead><tr><th>Document</th><th>Tag</th><th>Size</th><th>Read</th><th>Added</th><th></th></tr></thead><tbody>';
     if (items.length) {
       items.forEach(function (it, i) {
         var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
-        html += '<tr><td>' + nm + '</td><td>' + escapeHtml(it.label) + '</td><td>' + (it.size / 1024).toFixed(0) + ' KB</td><td>' + it.date + '</td><td><button class="lib-x" data-i="' + i + '">&times;</button></td></tr>';
+        var readCell = it.read ? (it.read.series ? '<b style="color:#2F7A39">analysed</b>' : 'read') : '<span class="muted" title="Save as CSV or plain text for analysis in this release">stored only</span>';
+        html += '<tr><td>' + nm + '</td><td>' + escapeHtml(it.label) + '</td><td>' + (it.size / 1024).toFixed(0) + ' KB</td><td>' + readCell + '</td><td>' + it.date + '</td><td><button class="lib-x" data-i="' + i + '">&times;</button></td></tr>';
       });
     } else {
-      html += '<tr><td colspan="5" class="muted">Nothing yet. Start with the CSED, then the worship and RE files.</td></tr>';
+      html += '<tr><td colspan="6" class="muted">Nothing yet. Start with the CSED, then the worship and RE files.</td></tr>';
     }
     html += '</tbody></table>';
     html += '<h2 style="margin-top:26px">The framework, as the inspector carries it</h2><div class="s48-ref">';
@@ -1846,12 +1948,20 @@ function renderS48() {
     el.appendChild(h(html));
     el.querySelector("#s48-btn").addEventListener("click", function () {
       var inp = el.querySelector("#s48-file"), label = el.querySelector("#s48-label").value;
-      var items2 = s48Load();
-      Array.prototype.forEach.call(inp.files, function (f) {
+      var files = Array.prototype.slice.call(inp.files);
+      if (!files.length) return;
+      var pending = files.length, items2 = s48Load();
+      files.forEach(function (f) {
         s48Urls[f.name] = URL.createObjectURL(f);
-        items2.unshift({ name: f.name, label: label, size: f.size, date: new Date().toLocaleDateString("en-GB") });
+        var it = { name: f.name, label: label, size: f.size, date: new Date().toLocaleDateString("en-GB") };
+        items2.unshift(it);
+        if (s48Readable(f.name)) {
+          var rd = new FileReader();
+          rd.onload = function () { try { it.read = s48Analyse(f.name, String(rd.result)); } catch (e) {} if (!--pending) { s48Save(items2); draw(); } };
+          rd.onerror = function () { if (!--pending) { s48Save(items2); draw(); } };
+          rd.readAsText(f);
+        } else if (!--pending) { s48Save(items2); draw(); }
       });
-      if (inp.files.length) { s48Save(items2); draw(); }
     });
     el.querySelectorAll(".lib-x").forEach(function (b) {
       b.addEventListener("click", function () {
