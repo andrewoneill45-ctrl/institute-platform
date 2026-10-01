@@ -1789,7 +1789,8 @@ const S48 = {
     "Collective worship": "cw", "Worship planning & monitoring": "cw" }
 };
 /* The vault learns to read: text and CSV in this release, honestly declined otherwise. */
-function s48Readable(name) { return /\.(csv|txt|tsv)$/i.test(name); }
+function s48Readable(name) { return /\.(csv|txt|tsv|xlsx|xls)$/i.test(name); }
+function s48IsXlsx(name) { return /\.(xlsx|xls)$/i.test(name); }
 function s48Analyse(name, text) {
   var out = { chars: Math.min(text.length, 6000), text: text.slice(0, 6000) };
   if (!/\.(csv|tsv)$/i.test(name)) return out;
@@ -1825,6 +1826,42 @@ function s48Analyse(name, text) {
     if (vals.filter(function (v) { return isFinite(v); }).length >= 2 && series.length < 3)
       series.push({ label: hd, years: body.map(function (r) { return (r[yearCol] || "").trim(); }), vals: vals });
   });
+  if (series.length) out.series = series;
+  return out;
+}
+function s48SheetYear(nm) { var m = String(nm).match(/20\d\d(?:[\/_-]\d{2,4})?/); return m ? m[0].replace(/_/g, "/") : String(nm); }
+function s48AnalyseXlsx(name, buf) {
+  if (typeof XLSX === "undefined") return { text: "", note: "Excel reader unavailable" };
+  var wb; try { wb = XLSX.read(buf, { type: "array" }); } catch (e) { return { text: "", note: "could not open workbook" }; }
+  var all = [], series = [], perSheet = [], measureRe = /(%|grade|avg|average|score|pass|attain|point|a\*|level|entr|pupil|number|standard)/i;
+  wb.SheetNames.forEach(function (sn) {
+    var csv = XLSX.utils.sheet_to_csv(wb.Sheets[sn]);
+    all.push("[" + sn + "]\n" + csv);
+    var r = s48Analyse(sn + ".csv", csv);
+    if (r.series) { r.series.forEach(function (s) { if (series.length < 3) { if (wb.SheetNames.length > 1) s.label += " \u00b7 " + sn; series.push(s); } }); return; }
+    /* summary pairs: rows with a text label and exactly one number */
+    var pairs = {}, rows = csv.split(/\r?\n/).map(function (x) { return x.split(","); }).filter(function (x) { return x.some(function (c) { return c.trim(); }); });
+    rows.forEach(function (rw) {
+      var label = (rw[0] || "").trim();
+      if (!label || /^20\d\d/.test(label)) return;
+      var nums = rw.slice(1).map(function (v) { return parseFloat(String(v).replace(/[%\s]/g, "")); }).filter(isFinite);
+      if (nums.length === 1 && pairs[label] == null) pairs[label] = nums[0];
+    });
+    if (Object.keys(pairs).length) perSheet.push({ year: s48SheetYear(sn), pairs: pairs, rows: rows.length });
+  });
+  if (!series.length && perSheet.length >= 2) {
+    perSheet.sort(function (a, b) { return a.year < b.year ? -1 : 1; });
+    var freq = {};
+    perSheet.forEach(function (ps) { Object.keys(ps.pairs).forEach(function (l) { freq[l] = (freq[l] || 0) + 1; }); });
+    var shared = Object.keys(freq).filter(function (l) { return freq[l] >= 2; });
+    var meas = shared.filter(function (l) { return measureRe.test(l); });
+    var pick = (meas.length ? meas : (perSheet.every(function (p) { return p.rows <= 30; }) ? shared : [])).slice(0, 3);
+    pick.forEach(function (l) {
+      series.push({ label: l, years: perSheet.map(function (p) { return p.year; }), vals: perSheet.map(function (p) { return p.pairs[l] != null ? p.pairs[l] : NaN; }) });
+    });
+  }
+  var text = all.join("\n").slice(0, 6000);
+  var out = { chars: text.length, text: text };
   if (series.length) out.series = series;
   return out;
 }
@@ -1928,13 +1965,26 @@ function renderS48() {
     if (items.length) {
       items.forEach(function (it, i) {
         var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
-        var readCell = it.read ? (it.read.series ? '<b style="color:#2F7A39">analysed</b>' : 'read') : '<span class="muted" title="Save as CSV or plain text for analysis in this release">stored only</span>';
+        var readCell = it.read ? (it.read.series ? '<b style="color:#2F7A39">analysed</b>' : 'read') : '<span class="muted" title="PDF and Word are stored only in this release; Excel, CSV and text are read">stored only</span>';
         html += '<tr><td>' + nm + '</td><td>' + escapeHtml(it.label) + '</td><td>' + (it.size / 1024).toFixed(0) + ' KB</td><td>' + readCell + '</td><td>' + it.date + '</td><td><button class="lib-x" data-i="' + i + '">&times;</button></td></tr>';
       });
     } else {
       html += '<tr><td colspan="6" class="muted">Nothing yet. Start with the CSED, then the worship and RE files.</td></tr>';
     }
     html += '</tbody></table>';
+    var loose = items.filter(function (x) { return x.read && x.read.series && !S48.tagArea[x.label]; });
+    if (loose.length) {
+      html += '<h2 style="margin-top:22px">Evidence read</h2><p class="muted">Analysed from your uploads. Tag results files to a framework area (for instance RE curriculum &amp; assessment) and these charts sit inside the readiness board itself.</p><div class="s48-charts">';
+      loose.forEach(function (it) {
+        it.read.series.forEach(function (s) {
+          var ok = s.vals.filter(isFinite);
+          if (ok.length < 2) return;
+          var dir = ok[ok.length - 1] > ok[0] ? "rising" : ok[ok.length - 1] < ok[0] ? "falling" : "level";
+          html += '<div class="s48-chart"><div class="s48-chart-t">' + escapeHtml(s.label) + ' <b>' + ok[0] + ' &rarr; ' + ok[ok.length - 1] + '</b>, ' + dir + '</div>' + s48Chart(s) + '<div class="s48-chart-src">' + escapeHtml(it.name) + '</div></div>';
+        });
+      });
+      html += '</div>';
+    }
     html += '<h2 style="margin-top:26px">The framework, as the inspector carries it</h2><div class="s48-ref">';
     S48.areas.forEach(function (a) {
       html += '<details><summary>' + a.name + '</summary>';
@@ -1956,10 +2006,13 @@ function renderS48() {
         var it = { name: f.name, label: label, size: f.size, date: new Date().toLocaleDateString("en-GB") };
         items2.unshift(it);
         if (s48Readable(f.name)) {
-          var rd = new FileReader();
-          rd.onload = function () { try { it.read = s48Analyse(f.name, String(rd.result)); } catch (e) {} if (!--pending) { s48Save(items2); draw(); } };
+          var rd = new FileReader(), xl = s48IsXlsx(f.name);
+          rd.onload = function () {
+            try { it.read = xl ? s48AnalyseXlsx(f.name, rd.result) : s48Analyse(f.name, String(rd.result)); } catch (e) {}
+            if (!--pending) { s48Save(items2); draw(); }
+          };
           rd.onerror = function () { if (!--pending) { s48Save(items2); draw(); } };
-          rd.readAsText(f);
+          if (xl) rd.readAsArrayBuffer(f); else rd.readAsText(f);
         } else if (!--pending) { s48Save(items2); draw(); }
       });
     });
