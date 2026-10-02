@@ -1789,6 +1789,7 @@ const S48 = {
     "Collective worship": "cw", "Worship planning & monitoring": "cw" }
 };
 /* The vault learns to read: text and CSV in this release, honestly declined otherwise. */
+var S48_READER_V = 'reader v7: pupil-level Excel';
 function s48Readable(name) { return /\.(csv|txt|tsv|xlsx|xls)$/i.test(name); }
 function s48IsXlsx(name) { return /\.(xlsx|xls)$/i.test(name); }
 function s48Analyse(name, text) {
@@ -1829,12 +1830,44 @@ function s48Analyse(name, text) {
   if (series.length) out.series = series;
   return out;
 }
-function s48SheetYear(nm) { var m = String(nm).match(/20\d\d(?:[\/_-]\d{2,4})?/); return m ? m[0].replace(/_/g, "/") : String(nm); }
+function s48SheetYear(nm) { var m = String(nm).match(/20\d\d(?:[\/_-]\d{2,4})?/) || String(nm).match(/\b\d{2}[\/_-]\d{2}\b/); return m ? m[0].replace(/_/g, "/") : String(nm); }
 function s48AnalyseXlsx(name, buf) {
   if (typeof XLSX === "undefined") return { text: "", note: "Excel reader unavailable" };
   var wb; try { wb = XLSX.read(buf, { type: "array" }); } catch (e) { return { text: "", note: "could not open workbook" }; }
-  var all = [], series = [], perSheet = [], measureRe = /(%|grade|avg|average|score|pass|attain|point|a\*|level|entr|pupil|number|standard)/i;
+  var inPlay = false; var all = [], series = [], perSheet = [], measureRe = /(%|grade|avg|average|score|pass|attain|point|a\*|level|entr|pupil|number|standard)/i;
   wb.SheetNames.forEach(function (sn) {
+    var aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
+    /* pupil-level sheet: a header row containing UPN, pupils beneath */
+    var hRow = -1;
+    for (var hi = 0; hi < Math.min(4, aoa.length); hi++) if (aoa[hi].some(function (c) { return /^upn$/i.test(String(c).trim()); })) { hRow = hi; break; }
+    if (hRow >= 0 && aoa.length > hRow + 5) {
+      var fields = aoa[hRow].map(function (c) { return String(c).trim(); });
+      var gcseCol = -1;
+      fields.forEach(function (f, i) { if (gcseCol < 0 && /^gcse\b/i.test(f)) gcseCol = i; });
+      if (gcseCol >= 0) {
+        var grades = [];
+        aoa.slice(hRow + 1).forEach(function (rw) {
+          var g = parseFloat(String(rw[gcseCol] || "").replace(/[^0-9.]/g, ""));
+          if (isFinite(g) && g >= 1 && g <= 9) grades.push(g);
+        });
+        var bodyN = aoa.length - hRow - 1;
+        if (grades.length < Math.max(5, bodyN * 0.4)) { inPlay = true; }
+        if (grades.length >= 5) {
+          var n = grades.length;
+          var p4 = Math.round(1000 * grades.filter(function (g) { return g >= 4; }).length / n) / 10;
+          var p5 = Math.round(1000 * grades.filter(function (g) { return g >= 5; }).length / n) / 10;
+          var av = Math.round(10 * grades.reduce(function (a, b) { return a + b; }, 0) / n) / 10;
+          var pairs = {};
+          pairs["GCSE Grade 4+ %"] = p4; pairs["GCSE Grade 5+ %"] = p5; pairs["GCSE average grade"] = av;
+          perSheet.push({ year: s48SheetYear(sn), pairs: pairs, rows: 4 });
+          all.push("[" + sn + "] pupil-level cohort of " + n + ": GCSE 4+ " + p4 + "%, 5+ " + p5 + "%, average grade " + av + ". Pupil rows withheld from any digest.");
+          return;
+        }
+      }
+      /* pupil-level but no usable GCSE column: keep only a safe note */
+      all.push("[" + sn + "] pupil-level sheet (" + (aoa.length - hRow - 1) + " rows). Pupil rows withheld from any digest.");
+      return;
+    }
     var csv = XLSX.utils.sheet_to_csv(wb.Sheets[sn]);
     all.push("[" + sn + "]\n" + csv);
     var r = s48Analyse(sn + ".csv", csv);
@@ -1862,8 +1895,15 @@ function s48AnalyseXlsx(name, buf) {
   }
   var text = all.join("\n").slice(0, 6000);
   var out = { chars: text.length, text: text };
+  if (inPlay) out.inPlay = true;
   if (series.length) out.series = series;
-  else out.sheets = wb.SheetNames.slice(0, 6).map(function (sn) { return { name: sn, csv: XLSX.utils.sheet_to_csv(wb.Sheets[sn]).slice(0, 5000) }; });
+  else out.sheets = wb.SheetNames.slice(0, 6).map(function (sn) {
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
+    var drop = {};
+    rows.slice(0, 3).forEach(function (hr) { hr.forEach(function (c, i) { if (/name|dob|birth|upn|admission/i.test(String(c))) drop[i] = 1; }); });
+    var safe = rows.map(function (rw) { return rw.filter(function (_, i) { return !drop[i]; }).join(","); }).join("\n");
+    return { name: sn, csv: safe.slice(0, 5000) };
+  });
   return out;
 }
 /* stage two: when the rules cannot see the table, the AI reads it — transcription only */
@@ -1926,7 +1966,11 @@ function s48Digest() {
       var ok = s.vals.filter(isFinite);
       line += s.label + " " + s.years[0] + "\u2192" + s.years[s.years.length - 1] + ": " + ok[0] + " \u2192 " + ok[ok.length - 1] + ". ";
     });
-    else line += (it.read.text || "").slice(0, 700).replace(/\s+/g, " ");
+    else {
+      var tx = (it.read.text || "");
+      if (/[A-Z]\d{12}/.test(tx)) line += "pupil-level file; rows withheld for privacy, headline figures only where analysed.";
+      else line += tx.slice(0, 700).replace(/\s+/g, " ");
+    }
     if (budget - line.length > 0) { parts.push(line); budget -= line.length; }
   });
   return parts.length ? "SCHOOL EVIDENCE ON FILE (Section 48 vault, uploaded by the school; cite it):\n" + parts.join("\n") : "";
@@ -1975,7 +2019,7 @@ function renderS48() {
     });
     html += '</div>';
     html += '<h2 style="margin-top:26px">Evidence vault</h2>';
-    html += '<p class="muted">Tagged to the framework, so the readiness board above tells the truth. <b>The covenant applies here as everywhere in Lens:</b> never published, never ranked, never shared.</p>';
+    html += '<p class="muted"><b>Self-evaluation: the record, looking back.</b> Finished cohorts, historic results, survey returns, the CSED. Live pupil tracking belongs in Constellation, and nothing moves between the two unless you move it. Tagged to the framework, so the readiness board above tells the truth. <b>The covenant applies here as everywhere in Lens:</b> never published, never ranked, never shared. <span class="muted" style="font-size:.72rem">' + S48_READER_V + '</span></p>';
     html += '<div class="lib-add"><input type="file" id="s48-file" multiple><select id="s48-label">';
     S48.tags.forEach(function (l) { html += '<option>' + l + '</option>'; });
     html += '</select><button class="btn" id="s48-btn">Add evidence</button></div>';
@@ -1984,7 +2028,8 @@ function renderS48() {
       items.forEach(function (it, i) {
         var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
         var readCell;
-        if (it.read && it.read.series) readCell = '<b style="color:#2F7A39">analysed</b>' + (it.read.ai ? ' <span class="muted" title="The AI read the layout; every figure transcribed from the file, none calculated">&middot; AI-read</span>' : '');
+        if (it.read && it.read.inPlay) readCell = '<span style="color:#8a6d1c">looks in-play: an unfinished cohort. This vault is self-evaluation; live pupils belong in Constellation. It stays here only if you mean it as evidence.</span>';
+        else if (it.read && it.read.series) readCell = '<b style="color:#2F7A39">analysed</b>' + (it.read.ai ? ' <span class="muted" title="The AI read the layout; every figure transcribed from the file, none calculated">&middot; AI-read</span>' : '');
         else if (it.read && it.read.chars) readCell = 'read';
         else if (it.read && it.read.note) readCell = '<span class="muted">stored only &middot; ' + escapeHtml(it.read.note) + '</span>';
         else if (s48Readable(it.name)) readCell = '<span style="color:#8a6d1c">stored before the reader existed &middot; remove (&times;) and add the file again to analyse it</span>';
@@ -2037,7 +2082,7 @@ function renderS48() {
         if (s48Readable(f.name)) {
           var rd = new FileReader(), xl = s48IsXlsx(f.name);
           rd.onload = function () {
-            try { it.read = xl ? s48AnalyseXlsx(f.name, rd.result) : s48Analyse(f.name, String(rd.result)); } catch (e) {}
+            try { it.read = xl ? s48AnalyseXlsx(f.name, new Uint8Array(rd.result)) : s48Analyse(f.name, String(rd.result)); } catch (e) { it.read = { chars: 0, note: "error while reading: " + (e && e.message ? e.message : e) }; }
             if (!--pending) finish();
           };
           rd.onerror = function () { if (!--pending) finish(); };

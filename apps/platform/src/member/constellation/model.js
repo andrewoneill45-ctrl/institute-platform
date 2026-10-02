@@ -47,7 +47,7 @@ const HEADS = {
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /reg|form|tutor ?group|class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
   att: /attendance ?%|% ?att|attendance$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /unauth/i,
-  subject: /subject|course/i, score: /score|mark\b|result/i,
+  subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
   date: /date$|window|term|assessment ?(point|date)/i,
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
@@ -102,6 +102,7 @@ export function ingest(state, fileName, text, opts = {}) {
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0]);
+  if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
   const kind = classify(map);
   const body = rows.slice(1);
   const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [] };
