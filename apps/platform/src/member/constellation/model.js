@@ -121,12 +121,12 @@ export function ingest(state, fileName, text, opts = {}) {
   const numericish = (i) => rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[i]).replace(/[%\s]/g, "")))).length >= 3;
   let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
   /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
-  if (windowCols.length < 2) {
-    const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !idCols.has(c.i) && numericish(c.i));
+  if (windowCols.length < 2 && classify(map) !== "roll") {
+    const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !idCols.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
   }
   let kind = classify(map);
-  if (windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
+  if (kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
   const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
   const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
   const body = rows.slice(1);
