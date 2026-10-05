@@ -23,6 +23,9 @@ export async function saveState(schoolId, state) {
     db.transaction("kv", "readwrite").objectStore("kv").put(state, "state");
   } catch { /* best effort */ }
 }
+export function rowsToCsv(aoa) {
+  return aoa.map((r) => r.map((c) => '"' + String(c ?? "").replace(/"/g, '""') + '"').join(",")).join("\n");
+}
 export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {} });
 
 /* ── CSV: small, honest parser (quoted fields, CRLF) ── */
@@ -41,6 +44,7 @@ export function parseCSV(text) {
 }
 
 /* ── stage 2, offline edition: read the headers, log every assumption ── */
+const WINDOW_RE = /(michaelmas|lenten|trinity|autumn|spring|summer|advent|ap ?\d|term ?\d|assessment ?\d)/i;
 const HEADS = {
   upn: /^upn$|unique pupil/i, name: /pupil ?name|^name$|full ?name|surname.?forename|student/i,
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
@@ -75,7 +79,7 @@ export function classify(map) {
 const cellName = (r, map) => map.name === -1 ? `${(r[map.surname] || "").trim()}, ${(r[map.forename] || "").trim()}` : (r[map.name] || "").trim();
 const normName = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
 const normDob = (s) => { const m = (s || "").match(/(\d{1,4})[/\-.](\d{1,2})[/\-.](\d{1,4})/); if (!m) return ""; let [, a, b, c] = m; if (a.length === 4) return `${a}-${b.padStart(2, "0")}-${c.padStart(2, "0")}`; return `${c.length === 2 ? "20" + c : c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`; };
-export const validUPN = (u) => /^[A-Z]\d{12}$/i.test((u || "").trim());
+export const validUPN = (u) => /^[A-Z]\d{12}$/i.test((u || "").trim()) || /^[A-Z]\d{11}[A-Z]$/i.test((u || "").trim());
 
 /* ── stage 3: the matching ladder — strongest first, ask below threshold ── */
 export function matchPupil(row, map, roll, aliases = {}, scopeYear = null) {
@@ -103,7 +107,9 @@ export function ingest(state, fileName, text, opts = {}) {
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0]);
   if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
-  const kind = classify(map);
+  const windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[c.i]).replace(/[%\s]/g, "")))).length >= 3);
+  let kind = classify(map);
+  if (windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
   const body = rows.slice(1);
   const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [] };
 
@@ -111,7 +117,7 @@ export function ingest(state, fileName, text, opts = {}) {
     const roll = [...state.roll];
     body.forEach((r) => {
       const upn = (r[map.upn] || "").trim().toUpperCase();
-      if (!validUPN(upn)) { led.held++; return; }
+      if (!validUPN(upn)) { led.held++; (led.heldNames = led.heldNames || []).push(cellName(r, map) || "(no name)"); return; }
       const p = {
         upn, name: cellName(r, map) || upn, dob: map.dob != null ? normDob(r[map.dob]) : "",
         year: map.year != null ? Number(String(r[map.year]).replace(/\D/g, "")) || null : null,
@@ -125,7 +131,7 @@ export function ingest(state, fileName, text, opts = {}) {
       if (i >= 0) roll[i] = { ...roll[i], ...p }; else roll.push(p);
       led.matched++;
     });
-    if (led.held) led.assumptions = [...assumptions, `${led.held} rows held: UPN missing or malformed`];
+    if (led.held) led.assumptions = [...assumptions, `${led.held} rows held, UPN missing or malformed (temporary UPNs are accepted; blanks are not): ${(led.heldNames || []).slice(0, 10).join(", ")}${led.held > 10 ? "\u2026" : ""}`];
     led.years = [...new Set(roll.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
     return { ...state, roll, ledger: [led, ...state.ledger] };
   }
@@ -136,6 +142,26 @@ export function ingest(state, fileName, text, opts = {}) {
   }
 
   const evidence = [...state.evidence]; const review = [...state.review];
+  if (kind === "tracker") {
+    const subject = fileName.replace(/\.[^.]+$/, "").replace(/\s*\u00b7.*$/, "").replace(/(tracker|data|20\d\d([_\/-]\d\d)?)/gi, "").trim() || "Tracker";
+    const roll = state.roll.map((p) => ({ ...p }));
+    let priorFilled = 0;
+    body.forEach((r) => {
+      const m = matchPupil(r, map, roll, state.aliases, scopeYear);
+      if (!m) { led.held++; return; }
+      if (m.review) { led.held++; review.push({ file: fileName, kind, name: m.name, candidates: m.candidates, row: r, mapKeys: map }); return; }
+      led.matched++;
+      windowCols.forEach((wc) => {
+        const v = parseFloat(String(r[wc.i] ?? "").replace(/[%\s]/g, ""));
+        if (isFinite(v)) evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject, score: v, when: wc.h });
+      });
+      if (map.prior != null) { const pr = num(r[map.prior]); const p = roll.find((x) => x.upn === m.upn); if (pr != null && p && p.prior == null) { p.prior = pr; priorFilled++; } }
+    });
+    led.assumptions = [...led.assumptions, `read as a tracker: ${windowCols.length} assessment windows (${windowCols.map((c) => c.h).slice(0, 4).join(", ")}${windowCols.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
+    const touched2 = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
+    led.years = [...new Set(roll.filter((p) => touched2.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
+    return { ...state, roll, evidence, review, ledger: [led, ...state.ledger] };
+  }
   body.forEach((r) => {
     const m = matchPupil(r, map, state.roll, state.aliases, scopeYear);
     if (!m) { led.held++; return; }
@@ -171,7 +197,8 @@ export function computeAll(state) {
     const small = cohort.length < 30;
     /* assessment windows: within-cohort percentile per (subject, when), averaged per pupil */
     const ev = state.evidence;
-    const wins = [...new Set(ev.filter((e) => e.t === "assessment" && e.when !== "prior" && cohort.some((p) => p.upn === e.upn)).map((e) => e.when))].sort();
+    const termRank = (w) => { const s = String(w).toLowerCase(); const m = s.match(/(20\d\d)/); const yr = m ? +m[1] * 10 : 0; if (/michaelmas|advent|autumn/.test(s)) return yr + 0; if (/lenten|lent|spring/.test(s)) return yr + 1; if (/trinity|summer/.test(s)) return yr + 2; const n = s.match(/(?:ap|term|assessment) ?(\d)/); if (n) return yr + (+n[1] - 1); return null; };
+    const wins = [...new Set(ev.filter((e) => e.t === "assessment" && e.when !== "prior" && cohort.some((p) => p.upn === e.upn)).map((e) => e.when))].sort((a, b) => { const ra = termRank(a), rb = termRank(b); if (ra != null && rb != null && ra !== rb) return ra - rb; return String(a) < String(b) ? -1 : 1; });
     const scoreSets = {};
     ev.forEach((e) => { if (e.t === "assessment" && e.score != null) { const k = e.subject + "|" + e.when; (scoreSets[k] = scoreSets[k] || []).push(e); } });
     for (const k in scoreSets) scoreSets[k].sorted = scoreSets[k].map((e) => e.score).sort((a, b) => a - b);

@@ -3,7 +3,7 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, ingest, computeAll, findSignals, BANDS } from "./model.js";
+import { loadState, saveState, blankState, ingest, computeAll, findSignals, rowsToCsv, BANDS } from "./model.js";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
 const DIR = { improving: "#2F7A39", steady: GOLD, declining: "#B3261E" };
@@ -36,7 +36,22 @@ export default function Constellation() {
   const [upYear, setUpYear] = useState(null);
   async function onFiles(list) {
     let s = state;
-    for (const f of list) s = ingest(s, f.name, await f.text(), { year: upYear });
+    for (const f of list) {
+      if (/\.(xlsx|xls)$/i.test(f.name)) {
+        await loadXLSX();
+        try {
+          const wb = window.XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: "array" });
+          for (const sn of wb.SheetNames) {
+            const aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
+            let hRow = 0;
+            for (let i = 0; i < Math.min(5, aoa.length); i++) if (aoa[i].some((c) => /^upn$/i.test(String(c).trim()))) { hRow = i; break; }
+            if (aoa.length > hRow + 1) s = ingest(s, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear });
+          }
+        } catch (e) {
+          s = { ...s, ledger: [{ file: f.name, kind: "unreadable", matched: 0, of: 0, assumptions: ["could not open workbook: " + (e?.message || e)], date: new Date().toLocaleDateString("en-GB") }, ...s.ledger] };
+        }
+      } else s = ingest(s, f.name, await f.text(), { year: upYear });
+    }
     setState({ ...s });
   }
   const resolve = (item, upn) => {
@@ -99,7 +114,7 @@ export default function Constellation() {
               <div style={kick}>Upload anything</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 8px" }}>In-play: the children in the building now</h3>
               <p style={{ fontSize: 12.5, color: MUTED, margin: "0 0 6px" }}><b>This intake is for live pupils only.</b> Finished cohorts, historic results and inspection evidence belong in Lens's Section 48 vault; nothing moves between the two unless you move it.</p>
-              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year: each file only ever points at a pupil who already exists. CSV in this release; Excel, Word and scans follow.</p>
+              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year: each file only ever points at a pupil who already exists. CSV and Excel in this release, including year-group trackers with termly columns; Word and scans follow.</p>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "12px 0 2px" }}>
                 <span style={{ ...kick, marginRight: 4 }}>These files cover</span>
                 <button onClick={() => setUpYear(null)} style={chip(upYear == null, DEEP)}>Whole school</button>
@@ -109,7 +124,7 @@ export default function Constellation() {
               </div>
               <label style={{ display: "block", border: `1.5px dashed rgba(106,12,160,.35)`, borderRadius: 14, padding: "26px 18px", textAlign: "center", cursor: "pointer", margin: "8px 0 6px", background: LILAC, color: DEEP, fontWeight: 600, fontSize: 13.5 }}>
                 Drop files or click to choose
-                <input type="file" multiple accept=".csv" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
+                <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
               <p style={{ fontSize: 11.5, color: MUTED }}>Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
@@ -311,6 +326,14 @@ function QuintileGrid({ year, pupils, onPick }) {
       <p style={{ fontSize: 11.5, color: MUTED_, marginTop: 8 }}>On the diagonal, performing in line with your start; below it, fallen behind; above it, exceeding. Quintiles for humans, percentiles for the maths.</p>
     </div>
   );
+}
+
+let xlsxP = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  if (xlsxP) return xlsxP;
+  xlsxP = new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "/lens/js/vendor-xlsx.js?v=7"; sc.onload = res; sc.onerror = () => rej(new Error("Excel reader failed to load")); document.head.appendChild(sc); });
+  return xlsxP;
 }
 
 function groupLedger(ledger) {
