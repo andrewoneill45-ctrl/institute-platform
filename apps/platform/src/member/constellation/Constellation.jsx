@@ -99,6 +99,7 @@ export default function Constellation() {
             <div style={{ display: "grid", gridTemplateColumns: chosen ? "1.15fr 1fr" : "1fr", gap: 18 }}>
               <div style={{ ...card, padding: "26px 28px" }}>
                 <div style={kick}>The school against its issues · a child sits where their sharpest concern lives</div>
+                <SchoolLine pupils={pupils.filter((p) => year == null || p.year === year)} label={year == null ? "Whole school" : "Year " + year} />
                 <ThemeSky pupils={pupils} years={years} yearFilter={year} pick={pick} onPick={setPick} />
                 <p style={{ fontSize: 11.5, color: MUTED, margin: "8px 0 0" }}>The centre is on track. Each sector is an issue; distance is how serious it has become; colour is the year group, so one glance answers whether an issue belongs to a year or to the school. No child collapsing in a core measure can be averaged back to the middle.</p>
               </div>
@@ -126,7 +127,7 @@ export default function Constellation() {
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
-              <p style={{ fontSize: 11.5, color: MUTED }}>Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
+              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { if (window.confirm("Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone.")) { indexedDB.deleteDatabase("asi-constellation-" + sid); setState(blankState()); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>Start again on this device</button> · Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={kick}>Held for review · never guessed</div>
@@ -279,6 +280,16 @@ function PupilPanel({ p }) {
       <Bar label="Progress" v={p.progress} /><Bar label="Attendance" v={p.attendance} /><Bar label="Engagement" v={p.engagement} />
       <div style={{ ...kick, marginTop: 10 }}>What the school is doing</div>
       <Bar label="Enrichment" v={p.enrichment} family="prov" /><Bar label="Interventions" v={p.interventions} family="prov" />
+      {p.subjects?.length > 1 && (
+        <>
+          <div style={{ ...kick, marginTop: 10 }}>Subjects at the latest window · strongest to weakest, as percentile in the cohort</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "6px 0 2px" }}>
+            {p.subjects.slice(0, 12).map((x) => (
+              <span key={x.s} style={{ fontSize: 11.5, borderRadius: 999, padding: "4px 10px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA", color: "#221233" }}>{x.s} <b>{x.pct}</b></span>
+            ))}
+          </div>
+        </>
+      )}
       {p.wins?.length > 1 && (
         <>
           <div style={{ ...kick, marginTop: 10 }}>Percentile across assessment windows</div>
@@ -334,6 +345,20 @@ function loadXLSX() {
   if (xlsxP) return xlsxP;
   xlsxP = new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "/lens/js/vendor-xlsx.js?v=7"; sc.onload = res; sc.onerror = () => rej(new Error("Excel reader failed to load")); document.head.appendChild(sc); });
   return xlsxP;
+}
+
+function SchoolLine({ pupils, label }) {
+  const n = pupils.length;
+  if (!n) return null;
+  const onTrack = pupils.filter((p) => p.band === 0).length;
+  const serious = pupils.filter((p) => p.band === 2).length;
+  const dec = pupils.filter((p) => p.dir === "declining").length;
+  const capped = pupils.filter((p) => p.capped).length;
+  return (
+    <p style={{ fontFamily: "Fraunces, serif", fontSize: 16.5, margin: "8px 0 2px", color: "#221233" }}>
+      {label}: of <b>{n}</b> pupils with evidence, <b style={{ color: "#2F7A39" }}>{onTrack} on track</b>, <b style={{ color: "#8a6d1c" }}>{n - onTrack - serious} some concern</b>, <b style={{ color: "#B3261E" }}>{serious} serious</b> · {dec} moving the wrong way{capped ? ` · ${capped} held visible by the no-compensation rule` : ""}.
+    </p>
+  );
 }
 
 function groupLedger(ledger) {

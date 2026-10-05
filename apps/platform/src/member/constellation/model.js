@@ -46,7 +46,7 @@ export function parseCSV(text) {
 /* ── stage 2, offline edition: read the headers, log every assumption ── */
 const WINDOW_RE = /(michaelmas|lenten|trinity|autumn|spring|summer|advent|ap ?\d|term ?\d|assessment ?\d)/i;
 const HEADS = {
-  upn: /^upn$|unique pupil/i, name: /pupil ?name|^name$|full ?name|surname.?forename|student/i,
+  upn: /^upn$|unique pupil/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /reg|form|tutor ?group|class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
@@ -58,13 +58,23 @@ const HEADS = {
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
   ppg: /ppg|pupil ?premium|disadvantag|fsm/i, sen: /sen|ehcp/i,
 };
-export function readHeaders(headerRow) {
+export function readHeaders(headerRow, body) {
   const map = {}, assumptions = [];
   headerRow.forEach((h, i) => {
     const hh = (h || "").trim();
     for (const [k, re] of Object.entries(HEADS)) if (re.test(hh) && map[k] == null) { map[k] = i; return; }
   });
   if (map.name == null && map.forename != null && map.surname != null) { map.name = -1; assumptions.push("name assembled from surname + forename"); }
+  /* a name column must actually vary: if it collapses, pick the name-ish column with most distinct values */
+  if (body && body.length >= 8 && map.name != null && map.name >= 0) {
+    const uniq = (i) => new Set(body.slice(0, 60).map((r) => (r[i] || "").trim())).size;
+    if (uniq(map.name) < Math.min(body.length, 60) * 0.5) {
+      let best = -1, bestU = 0;
+      headerRow.forEach((hd, i) => { if (/name/i.test(String(hd)) && !/status|type|flag|file/i.test(String(hd))) { const u = uniq(i); if (u > bestU) { bestU = u; best = i; } } });
+      if (best >= 0 && best !== map.name) { map.name = best; assumptions.push("name column re-chosen by distinctness"); }
+      else if (map.forename != null && map.surname != null) { map.name = -1; assumptions.push("name assembled from surname + forename"); }
+    }
+  }
   return { map, assumptions };
 }
 export function classify(map) {
@@ -105,11 +115,20 @@ export function ingest(state, fileName, text, opts = {}) {
   const scopeYear = opts.year ?? null;
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
-  const { map, assumptions } = readHeaders(rows[0]);
+  const { map, assumptions } = readHeaders(rows[0], rows.slice(1));
   if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
-  const windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[c.i]).replace(/[%\s]/g, "")))).length >= 3);
+  const idCols = new Set(Object.values(map));
+  const numericish = (i) => rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[i]).replace(/[%\s]/g, "")))).length >= 3;
+  let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
+  /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
+  if (windowCols.length < 2) {
+    const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !idCols.has(c.i) && numericish(c.i));
+    if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
+  }
   let kind = classify(map);
   if (windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
+  const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
+  const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
   const body = rows.slice(1);
   const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [] };
 
@@ -153,11 +172,15 @@ export function ingest(state, fileName, text, opts = {}) {
       led.matched++;
       windowCols.forEach((wc) => {
         const v = parseFloat(String(r[wc.i] ?? "").replace(/[%\s]/g, ""));
-        if (isFinite(v)) evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject, score: v, when: wc.h });
+        if (!isFinite(v)) return;
+        const when = wc.single ? subject : (winOf(wc.h) || wc.h);
+        const subj = wc.single ? subjOf(wc.h, subject) : subjOf(wc.h, subject);
+        evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when });
       });
       if (map.prior != null) { const pr = num(r[map.prior]); const p = roll.find((x) => x.upn === m.upn); if (pr != null && p && p.prior == null) { p.prior = pr; priorFilled++; } }
     });
-    led.assumptions = [...led.assumptions, `read as a tracker: ${windowCols.length} assessment windows (${windowCols.map((c) => c.h).slice(0, 4).join(", ")}${windowCols.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
+    const winSet = [...new Set(windowCols.map((wc) => wc.single ? subject : (winOf(wc.h) || wc.h)))];
+    led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
     const touched2 = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
     led.years = [...new Set(roll.filter((p) => touched2.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
     return { ...state, roll, evidence, review, ledger: [led, ...state.ledger] };
@@ -246,10 +269,14 @@ export function computeAll(state) {
       let capped = false;
       if (band != null && worstCore - band > 1) { band = worstCore - 1; capped = true; }
       const dir = (progress != null && dirP < -6) || trend < -1.5 ? "declining" : (dirP > 6 || trend > 1.5) ? "improving" : "steady";
+      const lastWin = [...wins].reverse().find((w) => mine.some((e) => e.t === "assessment" && e.when === w && e.score != null));
+      const subjects = lastWin == null ? [] : mine.filter((e) => e.t === "assessment" && e.when === lastWin && e.score != null)
+        .map((e) => ({ s: e.subject, pct: pctile(e.score, scoreSets[e.subject + "|" + lastWin].sorted) }))
+        .filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct);
       const evCount = mine.length;
       out[p.upn] = { ...p, year: Number(year), progress, attendance, engagement, enrichment, interventions,
         concern, band, capped, dir, priorQ: quintile(priorP), nowQ: quintile(curP), curP, priorP, perWin, wins,
-        nowAtt, expected, trend, trips, ivs: ivs.map((e) => e.what), conf: evCount >= 6 ? "solid" : evCount >= 3 ? "forming" : "thin", evCount };
+        nowAtt, expected, trend, trips, subjects, ivs: ivs.map((e) => e.what), conf: evCount >= 6 ? "solid" : evCount >= 3 ? "forming" : "thin", evCount };
     }
   }
   return out;
