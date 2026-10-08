@@ -30,6 +30,7 @@ export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [
 
 /* ── CSV: small, honest parser (quoted fields, CRLF) ── */
 export function parseCSV(text) {
+  text = String(text).replace(/^\uFEFF/, "");
   const rows = []; let row = [], cell = "", q = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -46,11 +47,12 @@ export function parseCSV(text) {
 /* ── stage 2, offline edition: read the headers, log every assumption ── */
 const WINDOW_RE = /(michaelmas|lenten|trinity|autumn|spring|summer|advent|ap ?\d|term ?\d|assessment ?\d)/i;
 const HEADS = {
-  upn: /^upn$|unique pupil/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
+  upn: /^(?!.*(former|previous|old))(.*\bupn\b|unique pupil.*)$/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
-  att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /unauth/i,
+  attPlus: /% ?present ?\+ ?aea/i,
+  att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct|% ?present$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /% ?unauth/i,
   subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
   date: /date$|window|term|assessment ?(point|date)/i,
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
@@ -78,7 +80,7 @@ export function readHeaders(headerRow, body) {
   return { map, assumptions };
 }
 export function classify(map) {
-  if (map.att != null || (map.sessions != null && map.absent != null)) return "attendance";
+  if (map.att != null || map.attPlus != null || (map.sessions != null && map.absent != null)) return "attendance";
   if (map.score != null && (map.subject != null || map.date != null || map.name != null || map.upn != null)) return "assessment";
   if (map.praise != null || map.sanction != null || map.homework != null) return "engagement";
   if (map.intervention != null) return "intervention";
@@ -129,9 +131,9 @@ export function ingest(state, fileName, text, opts = {}) {
   }
   let kind = classify(map);
   if (kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
-  if (/attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "unknown")) {
-    const canAtt = map.att != null || (map.sessions != null && map.absent != null);
-    if (kind === "tracker") kind = canAtt ? "attendance" : "unknown";
+  if (/attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "assessment" || kind === "unknown")) {
+    const canAtt = map.att != null || map.attPlus != null || (map.sessions != null && map.absent != null);
+    if (kind !== "unknown") kind = canAtt ? "attendance" : "unknown";
     assumptions.push(kind === "attendance"
       ? "file named as attendance: read as attendance, never as assessments"
       : "file named as attendance, but no attendance % or sessions column was recognised: stored unread rather than inventing assessments. Tell Claude the column names and the reader will learn them");
@@ -166,7 +168,8 @@ export function ingest(state, fileName, text, opts = {}) {
   }
 
   if (kind === "unknown" || !state.roll.length) {
-    led.assumptions = [...assumptions, !state.roll.length ? "no roll yet: upload the MIS roll first, it is the spine" : "could not classify the columns"];
+    const heads = rows[0].map((c) => String(c).trim()).filter(Boolean);
+    led.assumptions = [...assumptions, !state.roll.length ? "no roll yet: upload the MIS roll first, it is the spine" : "could not classify the columns", `columns seen: ${heads.slice(0, 14).join(", ")}${heads.length > 14 ? ` and ${heads.length - 14} more` : ""}`];
     return { ...state, ledger: [led, ...state.ledger] };
   }
 
@@ -202,11 +205,18 @@ export function ingest(state, fileName, text, opts = {}) {
     led.matched++;
     const base = { upn: m.upn, file: fileName, conf: m.conf, date: today() };
     if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName });
-    if (kind === "attendance") evidence.push({ ...base, t: "attendance", pct: map.att != null ? num(r[map.att]) : pctFrom(r, map), unauth: map.unauth != null ? num(r[map.unauth]) : null, when: map.date != null ? (r[map.date] || "").trim() : "current" });
+    if (kind === "attendance") {
+      const pcol = map.attPlus ?? map.att;
+      const pv = pcol != null ? num(r[pcol]) : pctFrom(r, map);
+      if (pv == null) { led.matched--; led.blank = (led.blank || 0) + 1; }
+      else evidence.push({ ...base, t: "attendance", pct: pv, unauth: map.unauth != null ? num(r[map.unauth]) : null, when: map.date != null ? (r[map.date] || "").trim() : "current" });
+    }
     if (kind === "engagement") evidence.push({ ...base, t: "engagement", praise: num(r[map.praise]), sanction: num(r[map.sanction]), homework: num(r[map.homework]) });
     if (kind === "enrichment") evidence.push({ ...base, t: "enrichment", what: map.event != null ? (r[map.event] || "").trim() : fileName, when: map.date != null ? (r[map.date] || "").trim() : "" });
     if (kind === "intervention") evidence.push({ ...base, t: "intervention", what: (r[map.intervention] || "").trim(), dosage: map.dosage != null ? num(r[map.dosage]) : null });
   });
+  if (led.blank) led.assumptions = [...led.assumptions, `${led.blank} rows carried no attendance values and were skipped`];
+  if (kind === "attendance" && led.held > 0) led.assumptions = [...led.assumptions, `${led.held} rows matched no pupil on the roll (leavers or other cohorts in the history): ignored`];
   if (scopeYear != null && led.held > led.matched) led.assumptions = [...led.assumptions, `most rows fell outside the Year ${scopeYear} scope chosen at upload: if this file covers the whole school, remove it and add it again with "Whole school" selected`];
   const touched = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
   led.years = [...new Set(state.roll.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
