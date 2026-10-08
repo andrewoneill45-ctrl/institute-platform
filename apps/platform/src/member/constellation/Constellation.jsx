@@ -73,6 +73,7 @@ function Constellation() {
     }
     setState({ ...s });
     setUpNote("");
+    setUpYear(null);
   }
   const resolve = (item, upn) => {
     const s = { ...state, review: state.review.filter((r) => r !== item) };
@@ -425,7 +426,7 @@ function GradeTable({ rows }) {
 function PupilCard({ p, onClose }) {
   const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : "#B3261E";
   return (
-    <div style={{ position: "absolute", top: 2, right: "max(16px, calc(50vw - 565px))", width: 356, maxHeight: "calc(70vh - 6px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
+    <div style={{ position: "fixed", top: 92, right: 22, zIndex: 40, width: 356, maxHeight: "calc(100vh - 116px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
       <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 9, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
       <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, paddingRight: 16 }}>{p.name}</div>
       <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.sen ? " · SEN" : ""}</div>

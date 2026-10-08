@@ -50,7 +50,7 @@ const HEADS = {
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
-  att: /attendance ?%|% ?att|attendance$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /unauth/i,
+  att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /unauth/i,
   subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
   date: /date$|window|term|assessment ?(point|date)/i,
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
@@ -122,13 +122,20 @@ export function ingest(state, fileName, text, opts = {}) {
   const numericish = (i) => rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[i]).replace(/[%\s]/g, "")))).length >= 3;
   let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
   /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
-  if (windowCols.length < 2 && classify(map) !== "roll") {
+  if (windowCols.length < 2 && classify(map) !== "roll" && !/attend|behaviou?r|conduct/i.test(fileName)) {
     const wideId = new Set(Object.entries(map).filter(([k]) => k !== "score" && k !== "subject").map(([, i]) => i));
     const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !wideId.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
   }
   let kind = classify(map);
   if (kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
+  if (/attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "unknown")) {
+    const canAtt = map.att != null || (map.sessions != null && map.absent != null);
+    if (kind === "tracker") kind = canAtt ? "attendance" : "unknown";
+    assumptions.push(kind === "attendance"
+      ? "file named as attendance: read as attendance, never as assessments"
+      : "file named as attendance, but no attendance % or sessions column was recognised: stored unread rather than inventing assessments. Tell Claude the column names and the reader will learn them");
+  }
   const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
   const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
   const body = rows.slice(1);
@@ -200,6 +207,7 @@ export function ingest(state, fileName, text, opts = {}) {
     if (kind === "enrichment") evidence.push({ ...base, t: "enrichment", what: map.event != null ? (r[map.event] || "").trim() : fileName, when: map.date != null ? (r[map.date] || "").trim() : "" });
     if (kind === "intervention") evidence.push({ ...base, t: "intervention", what: (r[map.intervention] || "").trim(), dosage: map.dosage != null ? num(r[map.dosage]) : null });
   });
+  if (scopeYear != null && led.held > led.matched) led.assumptions = [...led.assumptions, `most rows fell outside the Year ${scopeYear} scope chosen at upload: if this file covers the whole school, remove it and add it again with "Whole school" selected`];
   const touched = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
   led.years = [...new Set(state.roll.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
   return { ...state, evidence, review, ledger: [led, ...state.ledger] };
@@ -295,6 +303,7 @@ export function computeAll(state) {
       const baseOf = (s) => s.replace(/\b(meg|target|prediction|predicted|predict|grade|current|working|wag|qob)\b/gi, "").replace(/\b(20)?\d\d[\/_-]\d\d\b/g, "").replace(/\s+/g, " ").trim();
       const kmap = {};
       latest.forEach((e) => {
+        if (!(e.score <= 9.5)) return; /* grade scale only: a 54% never reads as "predicted 54" */
         const m = MEAS.find(([re]) => re.test(e.subject)); if (!m) return;
         const b = baseOf(e.subject) || e.subject;
         (kmap[b] = kmap[b] || { s: b })[m[1]] = e.score;
