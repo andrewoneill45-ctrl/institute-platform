@@ -62,7 +62,11 @@ export function layoutShoal(pupils, years) {
 
 /* ── the mandala: one year coiled — rings are the zones, slices the forms ── */
 export function layoutMandala(pupils) {
-  const regs = [...new Set(pupils.map((p) => (p.reg || "").trim()).filter(Boolean))].sort();
+  /* sectors must be real tutor groups: short names, a sane count, covering the year */
+  const looksLikeForm = (s) => s.length <= 7 && !/^[A-Z]\d{11,12}[A-Z]?$/i.test(s);
+  let regs = [...new Set(pupils.map((p) => (p.reg || "").trim()).filter(Boolean))].filter(looksLikeForm).sort();
+  const covered = pupils.filter((p) => regs.includes((p.reg || "").trim())).length;
+  if (regs.length < 2 || regs.length > 10 || covered < pupils.length * 0.85) regs = [];
   const sectors = regs.length >= 2 ? regs : [""];
   const span = (2 * Math.PI) / sectors.length, pad = Math.min(0.09, span * 0.14);
   const a0 = (si) => -Math.PI / 2 + si * span;
@@ -97,6 +101,25 @@ export function layoutMandala(pupils) {
       lx: CX + (R_RIM + 92) * Math.cos(a0(si) + span / 2), ly: CY + (R_RIM + 92) * Math.sin(a0(si) + span / 2),
       serious: serious.length });
   });
+  /* a child whose form is unknown is still placed: full-circle fallback by band */
+  pupils.forEach((p) => {
+    if (p.concern == null || byU[p.upn]) return;
+    const ang = -Math.PI / 2 + h01(p.upn) * 2 * Math.PI;
+    const rad = p.band === 0 ? 26 + Math.sqrt(h01(p.upn + "r")) * (R_ON - 32)
+      : p.band === 1 ? R_ON + 22 + h01(p.upn + "r") * (R_WATCH - R_ON - 36)
+      : R_WATCH + 18 + h01(p.upn + "r") * (R_RIM - R_WATCH - 26);
+    byU[p.upn] = { x: CX + rad * Math.cos(ang), y: CY + rad * Math.sin(ang), ang };
+    if (p.band === 2) {
+      const x = byU[p.upn].x, y = byU[p.upn].y, right = Math.cos(ang) >= -0.02;
+      labels.push({ upn: p.upn, name: p.name, why: reasonFor(p),
+        x1: x + 7 * Math.cos(ang), y1: y + 7 * Math.sin(ang),
+        x2: CX + (R_RIM + 14) * Math.cos(ang), y2: CY + (R_RIM + 14) * Math.sin(ang),
+        tx: CX + (R_RIM + 20) * Math.cos(ang), ty: CY + (R_RIM + 20) * Math.sin(ang),
+        anchor: right ? "start" : "end" });
+    }
+  });
+  /* sector labels stay on the page */
+  sectorMeta.forEach((s) => { s.ly = Math.max(24, Math.min(SKY_H - 26, s.ly)); });
   /* label collision ease: nudge vertically within each side, order by ty */
   ["start", "end"].forEach((side) => {
     const ls = labels.filter((L) => L.anchor === side).sort((a, b) => a.ty - b.ty);

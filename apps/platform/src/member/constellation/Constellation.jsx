@@ -247,7 +247,7 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
     const coilYear = want.mode === "year" ? want.year : scene.year;
     const dirIn = want.mode === "year";
     if (animRef.current) cancelAnimationFrame(animRef.current.raf);
-    const t0 = performance.now(), DUR = 820;
+    const t0 = performance.now(), DUR = 1550;
     const anim = { coilYear, dirIn, raf: 0 };
     animRef.current = anim;
     const step = (now) => {
@@ -264,9 +264,11 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
   const coiling = scene.mode === "coil";
   const yearShown = scene.mode === "year" ? scene.year : coiling ? scene.year : null;
   const mand = yearShown != null ? mands[yearShown] : null;
-  const e = easeInOut(Math.max(0, Math.min(1, t)));
-  const shoalA = coiling ? 1 - e : scene.mode === "school" ? 1 : 0;      /* shoal chrome */
-  const mandA = coiling ? Math.max(0, (e - 0.55) / 0.45) : scene.mode === "year" ? 1 : 0; /* mandala chrome */
+  const k = Math.max(0, Math.min(1, t)); /* linear clock; each dot takes its own ease */
+  const e = easeInOut(k);
+  const STAG = 0.34;
+  const shoalA = coiling ? 1 - easeInOut(Math.min(1, k * 1.35)) : scene.mode === "school" ? 1 : 0;
+  const mandA = coiling ? easeInOut(Math.max(0, (k - 0.5) / 0.5)) : scene.mode === "year" ? 1 : 0;
 
   const fillFor = (p, inYearWorld) => {
     if (!inYearWorld) return SHOALC[p.dir] || SHOALC.steady;
@@ -343,9 +345,14 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
         else if (scene.mode === "year") {
           if (!inYear || !E) return null;
           ({ x, y } = E); inYearWorld = true;
-        } else { /* coiling */
-          if (inYear && S && E) { ({ x, y } = coilPoint(S, E, e)); inYearWorld = e > 0.5; }
-          else if (S) { ({ x, y } = S); op = 1 - e; if (op <= 0.02) return null; }
+        } else { /* coiling: a wave, the serious end peeling away first */
+          if (inYear && S && E) {
+            const along = Math.max(0, Math.min(1, (S.x - shoal.gutter) / shoal.stripW)); /* 1 = serious end */
+            const delay = (1 - along) * STAG;
+            const pe = easeInOut(Math.max(0, Math.min(1, (k - delay) / (1 - STAG))));
+            ({ x, y } = coilPoint(S, E, pe)); inYearWorld = pe > 0.5;
+          }
+          else if (S) { ({ x, y } = S); op = 1 - easeInOut(Math.min(1, k * 1.5)); if (op <= 0.02) return null; }
           else return null;
         }
         const dim = !inGroup(p);
@@ -526,8 +533,8 @@ function Metrics({ pupils, label }) {
       <Fig v={pupils.filter((q) => q.band === 1).length} l="some concern" c="#8a6d1c" />
       <Fig v={pupils.filter((q) => q.band === 2).length} l="serious" c="#B3261E" />
       <Fig v={pupils.filter((q) => q.dir === "declining").length} l="moving the wrong way" />
-      <Fig v={med((q) => q.progress)} l="median learning" />
-      <Fig v={med((q) => q.engagement)} l="median engagement" />
+      {med((q) => q.progress) !== "\u2013" && <Fig v={med((q) => q.progress)} l="median learning" />}
+      {med((q) => q.engagement) !== "\u2013" && <Fig v={med((q) => q.engagement)} l="median engagement" />}
       {pupils.some((q) => q.capped) && <Fig v={pupils.filter((q) => q.capped).length} l="held visible" c="#B3261E" />}
     </div>
   );

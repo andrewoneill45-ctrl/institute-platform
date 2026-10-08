@@ -49,7 +49,7 @@ const HEADS = {
   upn: /^upn$|unique pupil/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
-  reg: /reg|form|tutor ?group|class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
+  reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
   att: /attendance ?%|% ?att|attendance$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /unauth/i,
   subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
   date: /date$|window|term|assessment ?(point|date)/i,
