@@ -106,8 +106,8 @@ function Constellation() {
 
         {/* ═══ SCHOOL VIEW ═══ */}
         {tab === "view" && (state.roll.length ? (() => {
-          const hasPP = state.roll.some((x) => x.ppg), hasSEN = state.roll.some((x) => x.sen), hasG = state.roll.some((x) => x.gender);
-          const inGroup = (q) => group == null || (group === "pp" ? q.ppg : group === "sen" ? q.sen : group === "m" ? q.gender === "M" : q.gender === "F");
+          const hasPP = state.roll.some((x) => x.ppg), hasFSM = state.roll.some((x) => x.fsm), hasEAL = state.roll.some((x) => x.eal), hasSEN = state.roll.some((x) => x.sen), hasG = state.roll.some((x) => x.gender);
+          const inGroup = (q) => group == null || (group === "pp" ? q.ppg : group === "fsm" ? q.fsm : group === "eal" ? q.eal : group === "sen" ? q.sen : group === "m" ? q.gender === "M" : q.gender === "F");
           const scopePupils = pupils.filter((q) => (year == null || q.year === year) && inGroup(q));
           return (
           <>
@@ -115,7 +115,7 @@ function Constellation() {
               {year != null && (
                 <button onClick={() => { setYear(null); setPick(null); }} style={{ ...chip(true, DEEP), display: "inline-flex", alignItems: "center", gap: 6 }}>&#8249; Back to the school</button>
               )}
-              {[["pp", "Pupil Premium", hasPP], ["sen", "SEN", hasSEN], ["m", "Boys", hasG], ["f", "Girls", hasG]].map(([k, l, show]) => show && (
+              {[["pp", "Pupil Premium", hasPP], ["fsm", "FSM", hasFSM], ["sen", "SEN", hasSEN], ["eal", "EAL", hasEAL], ["m", "Boys", hasG], ["f", "Girls", hasG]].map(([k, l, show]) => show && (
                 <button key={k} onClick={() => setGroup(group === k ? null : k)} style={chip(group === k, GOLD)}>{l}</button>
               ))}
               <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>
@@ -124,7 +124,7 @@ function Constellation() {
                   : <>pulled by: <i style={swatch("#6A0CA0")} />learning · <i style={swatch("#C6A035")} />engagement · <i style={swatch("#B3261E")} />both · <i style={swatch("#CBB8DF")} />on track</>}
               </span>
             </div>
-            <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
+            <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", fsm: "FSM", eal: "EAL", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
             <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
@@ -431,7 +431,7 @@ function PupilCard({ p, onClose }) {
     <div style={{ position: "sticky", top: 14, flexShrink: 0, width: 356, maxHeight: "calc(100vh - 28px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
       <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 9, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
       <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, paddingRight: 16 }}>{p.name}</div>
-      <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.sen ? " · SEN" : ""}</div>
+      <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.fsm && !p.ppg ? " · FSM" : ""}{p.sen ? " · SEN" : ""}{p.eal ? " · EAL" : ""}</div>
       <p style={{ fontSize: 13, margin: "0 0 4px" }}><b style={{ color: bandC }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</b>{p.dir !== "steady" ? <> and <b style={{ color: DIR_[p.dir] }}>{p.dir}</b></> : ", holding steady"} · evidence {p.conf} ({p.evCount})</p>
       {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 4px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
       {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 2px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}

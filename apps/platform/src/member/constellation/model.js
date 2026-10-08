@@ -58,7 +58,7 @@ const HEADS = {
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
-  ppg: /ppg|pupil ?premium|disadvantag|fsm/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
+  ppg: /ppg|pupil ?premium|\bpp\b|disadvantag/i, fsm: /fsm/i, eal: /\beal\b|english as ?(an )?additional/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
 };
 export function readHeaders(headerRow, body) {
   const map = {}, assumptions = [];
@@ -153,8 +153,10 @@ export function ingest(state, fileName, text, opts = {}) {
         year: map.year != null ? Number(String(r[map.year]).replace(/\D/g, "")) || null : null,
         reg: map.reg != null ? (r[map.reg] || "").trim() : "",
         prior: map.prior != null ? num(r[map.prior]) : null,
-        ppg: map.ppg != null ? /^(y|1|true|fsm|pp)/i.test((r[map.ppg] || "").trim()) : false,
-        sen: map.sen != null ? /^(y|1|true|e|k|ehcp|sen)/i.test((r[map.sen] || "").trim()) : false,
+        ppg: map.ppg != null ? /^(y|t|1)/i.test((r[map.ppg] || "").trim()) : false,
+        fsm: map.fsm != null ? /^(y|t|1)/i.test((r[map.fsm] || "").trim()) : false,
+        eal: map.eal != null ? /^(y|t|1)/i.test((r[map.eal] || "").trim()) : false,
+        sen: map.sen != null ? /^(y|t|1|e|k)/i.test((r[map.sen] || "").trim()) : false,
         gender: map.gender != null ? (/^(m|b)/i.test((r[map.gender] || "").trim()) ? "M" : /^(f|g)/i.test((r[map.gender] || "").trim()) ? "F" : null) : null,
       };
       p._nm = normName(p.name);
