@@ -91,7 +91,7 @@ function Constellation() {
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#FBFAF7", color: INK, backgroundImage: "radial-gradient(760px 400px at 50% -70px, rgba(106,12,160,.07), transparent 70%)" }}>
-      <div style={{ maxWidth: 1160, margin: "0 auto", padding: "26px 28px 70px" }}>
+      <div style={{ maxWidth: tab === "view" ? "none" : 1160, margin: "0 auto", padding: "26px 34px 70px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 14 }}>
           <div>
             <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 30, letterSpacing: "-.015em", margin: 0 }}>Constellation</h1>
@@ -125,8 +125,10 @@ function Constellation() {
               </span>
             </div>
             <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
-            <div style={{ position: "relative", width: "100vw", left: "50%", transform: "translateX(-50%)" }}>
-              <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
+            <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
+              </div>
               {chosen && <PupilCard p={chosen} onClose={() => setPick(null)} />}
             </div>
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
@@ -426,7 +428,7 @@ function GradeTable({ rows }) {
 function PupilCard({ p, onClose }) {
   const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : "#B3261E";
   return (
-    <div style={{ position: "fixed", top: 92, right: 22, zIndex: 40, width: 356, maxHeight: "calc(100vh - 116px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
+    <div style={{ position: "sticky", top: 14, flexShrink: 0, width: 356, maxHeight: "calc(100vh - 28px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
       <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 9, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
       <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, paddingRight: 16 }}>{p.name}</div>
       <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.sen ? " · SEN" : ""}</div>
