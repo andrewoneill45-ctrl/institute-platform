@@ -35,6 +35,7 @@ function Constellation() {
   const [tab, setTab] = useState("view");
   const [year, setYear] = useState(null);
   const [pick, setPick] = useState(null);
+  const [group, setGroup] = useState(null);
 
   const loadedFor = useRef(null);
   useEffect(() => {
@@ -103,26 +104,34 @@ function Constellation() {
         </div>
 
         {/* ═══ SCHOOL VIEW ═══ */}
-        {tab === "view" && (state.roll.length ? (
+        {tab === "view" && (state.roll.length ? (() => {
+          const hasPP = state.roll.some((x) => x.ppg), hasSEN = state.roll.some((x) => x.sen), hasG = state.roll.some((x) => x.gender);
+          const inView = (q) => (year == null || q.year === year) && (group == null || (group === "pp" ? q.ppg : group === "sen" ? q.sen : group === "m" ? q.gender === "M" : q.gender === "F"));
+          const seen = pupils.filter(inView);
+          return (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 6px", flexWrap: "wrap" }}>
-              <span style={kick}>Year group</span>
-              <button onClick={() => setYear(null)} style={chip(year == null, DEEP)}>{"All"}</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap" }}>
+              <button onClick={() => setYear(null)} style={chip(year == null, DEEP)}>All years</button>
               {years.map((y, i) => (
                 <button key={y} onClick={() => setYear(year === y ? null : y)} style={chip(year === y, YEARC[i % YEARC.length])}>
                   <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: YEARC[i % YEARC.length], marginRight: 6 }} />Y{y}
                 </button>
               ))}
+              <span style={{ width: 1, height: 20, background: "rgba(106,12,160,.18)", margin: "0 4px" }} />
+              {[["pp", "Pupil Premium", hasPP], ["sen", "SEN", hasSEN], ["m", "Boys", hasG], ["f", "Girls", hasG]].map(([k, l, show]) => show && (
+                <button key={k} onClick={() => setGroup(group === k ? null : k)} style={chip(group === k, GOLD)}>{l}</button>
+              ))}
               <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>outline: <i style={dotk("#2F7A39")} />improving · <i style={dotk("#B3261E")} />declining · dashed ring, held visible</span>
             </div>
-            <SchoolLine pupils={pupils.filter((p) => year == null || p.year === year)} label={year == null ? "Whole school" : "Year " + year} />
-            <div style={{ position: "relative", width: "100vw", left: "50%", transform: "translateX(-50%)", marginTop: 4 }}>
-              <Field pupils={pupils} years={years} yearFilter={year} pick={pick} onPick={setPick} />
+            <Metrics pupils={seen} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
+            <div style={{ position: "relative", width: "100vw", left: "50%", transform: "translateX(-50%)" }}>
+              <Field pupils={pupils} inView={inView} pick={pick} onPick={setPick} yc={(y) => YEARC[years.indexOf(y) % YEARC.length]} />
               {chosen && <PupilCard p={chosen} onClose={() => setPick(null)} />}
             </div>
-            <p style={{ fontSize: 11.5, color: MUTED, margin: "2px 0 0", maxWidth: 740 }}>On-track children rest in the calm centre. A learning concern pulls a child to the right, an engagement concern to the left (attendance is its loudest evidence, not a separate issue), and a child weak in both sinks south, furthest of all. Distance is seriousness, colour is year group, and no child can be averaged back to the middle.</p>
+            <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 640, textAlign: "center" }}>On-track children rest in the calm centre. A learning concern pulls a child right, an engagement concern left (attendance is its loudest evidence, not a separate issue), and a child weak in both sinks south, furthest of all. No child can be averaged back to the middle.</p>
           </>
-        ) : <Empty onGo={() => setTab("up")} />)}
+          );
+        })() : <Empty onGo={() => setTab("up")} />)}
 
         {/* ═══ UPLOADS ═══ */}
         {tab === "up" && (
@@ -218,51 +227,63 @@ function place2(p) {
   const ld = l == null ? 0 : Math.max(0, 62 - l) / 62;
   const ed = e == null ? 0 : Math.max(0, 62 - e) / 62;
   if (ld <= 0.02 && ed <= 0.02) return { centre: true };
-  let vx = (ld - ed) * 0.866, vy = (ld + ed) * 0.5;
-  let m = Math.hypot(vx, vy);
-  const worst = Math.max(ld, ed);
-  if (m < worst * 0.8) { const s = (worst * 0.8) / (m || 1); vx *= s; vy *= s; m = Math.hypot(vx, vy); } /* no compensation in the geometry */
-  if (m > 1) { vx /= m; vy /= m; m = 1; }
-  return { vx, vy, ld, ed, both: ld > 0.15 && ed > 0.15 };
+  return { ld, ed, both: ld > 0.15 && ed > 0.15, sev: Math.min(1, Math.hypot((ld - ed) * 0.866, (ld + ed) * 0.5) < Math.max(ld, ed) * 0.8 ? Math.max(ld, ed) * 0.8 : Math.hypot((ld - ed) * 0.866, (ld + ed) * 0.5)) };
 }
 
-function Field({ pupils, years, yearFilter, pick, onPick }) {
-  const W = 1000, H = 600, cx = W / 2, cy = 252, R = 212;
-  const yc = (y) => YEARC[years.indexOf(y) % YEARC.length];
+function Field({ pupils, inView, pick, onPick, yc }) {
+  const W = 1000, H = 586, cx = W / 2, cy = 248, R = 206;
   const placed = pupils.map((p) => ({ p, at: place2(p) })).filter(({ at }) => !at.none);
-  const learnN = placed.filter(({ at }) => !at.centre && at.ld > at.ed + 0.08 && !at.both).length;
-  const engN = placed.filter(({ at }) => !at.centre && at.ed > at.ld + 0.08 && !at.both).length;
-  const bothN = placed.filter(({ at }) => at.both).length;
+  const vis = placed.filter(({ p }) => inView(p));
+  const learnN = vis.filter(({ at }) => !at.centre && !at.both && at.ld > at.ed).length;
+  const engN = vis.filter(({ at }) => !at.centre && !at.both && at.ed >= at.ld).length;
+  const bothN = vis.filter(({ at }) => at.both).length;
+  const centreN = vis.filter(({ at }) => at.centre).length;
+  const glow = (n) => Math.min(0.45, n / 160);
+  const ordered = [...placed].sort((x, y) => (x.p.band ?? 0) - (y.p.band ?? 0));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxHeight: "72vh" }} role="img" aria-label="The school field: learning pulls right, engagement pulls left, both pull south">
-      {[0.33, 0.66, 1].map((f) => <circle key={f} cx={cx} cy={cy} r={R * f} fill="none" stroke="rgba(106,12,160,.09)" strokeDasharray="1 7" strokeLinecap="round" />)}
-      <circle cx={cx} cy={cy} r="54" fill="#F4EEFA" opacity=".55" />
-      <text x={cx} y={cy + 3.5} textAnchor="middle" fontSize="11" fill={MUTED_}>on track</text>
-      <g textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fill="#221233">
-        <text x={cx + R * 0.93} y={cy + R * 0.56} fontSize="16">Learning</text>
-        <text x={cx + R * 0.93} y={cy + R * 0.56 + 16} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{learnN} pupils</text>
-        <text x={cx - R * 0.93} y={cy + R * 0.56} fontSize="16">Engagement</text>
-        <text x={cx - R * 0.93} y={cy + R * 0.56 + 16} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{engN} pupils</text>
-        <text x={cx} y={cy + R + 44} fontSize="16">Learning and engagement together</text>
-        <text x={cx} y={cy + R + 60} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{bothN} pupils · the children carrying both weights sit furthest of all</text>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxHeight: "70vh" }} role="img" aria-label="The school field: learning pulls right, engagement pulls left, both pull south">
+      <defs>
+        <radialGradient id="cwash"><stop offset="0%" stopColor="#F4EEFA" stopOpacity=".9" /><stop offset="55%" stopColor="#F4EEFA" stopOpacity=".32" /><stop offset="100%" stopColor="#F4EEFA" stopOpacity="0" /></radialGradient>
+        <radialGradient id="cpole"><stop offset="0%" stopColor="#C6A035" stopOpacity=".5" /><stop offset="100%" stopColor="#C6A035" stopOpacity="0" /></radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={R * 1.25} fill="url(#cwash)" />
+      <circle cx={cx + R * 0.82} cy={cy + R * 0.48} r="110" fill="url(#cpole)" opacity={glow(learnN)} />
+      <circle cx={cx - R * 0.82} cy={cy + R * 0.48} r="110" fill="url(#cpole)" opacity={glow(engN)} />
+      <circle cx={cx} cy={cy + R * 0.96} r="110" fill="url(#cpole)" opacity={glow(bothN)} />
+      {[0.5, 1].map((f) => <circle key={f} cx={cx} cy={cy} r={R * f} fill="none" stroke="rgba(106,12,160,.10)" strokeDasharray="1 7" strokeLinecap="round" />)}
+      <circle cx={cx} cy={cy} r="52" fill="#fff" opacity=".55" />
+      <text x={cx} y={cy - 2} textAnchor="middle" fontSize="11" fill={MUTED_}>on track</text>
+      <text x={cx} y={cy + 15} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="15" fill="#221233">{centreN}</text>
+      <g textAnchor="middle">
+        <text x={cx + R * 0.95} y={cy + R * 0.6} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Learning</text>
+        <text x={cx + R * 0.95} y={cy + R * 0.6 + 15} fontSize="10.5" fill={MUTED_}>{learnN} pupils</text>
+        <text x={cx - R * 0.95} y={cy + R * 0.6} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Engagement</text>
+        <text x={cx - R * 0.95} y={cy + R * 0.6 + 15} fontSize="10.5" fill={MUTED_}>{engN} pupils</text>
+        <text x={cx} y={cy + R + 40} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Learning and engagement together</text>
+        <text x={cx} y={cy + R + 55} fontSize="10.5" fill={MUTED_}>{bothN} pupils · carrying both weights, they sit furthest of all</text>
       </g>
-      {placed.map(({ p, at }) => {
-        const dim = yearFilter != null && p.year !== yearFilter;
+      {ordered.map(({ p, at }) => {
+        const dim = !inView(p);
         let x, y;
-        if (at.centre) { const a = (hash(p.upn) % 360) * Math.PI / 180, r = 5 + (hash(p.upn) % 42); x = cx + r * Math.cos(a); y = cy + r * 0.78 * Math.sin(a); }
-        else {
-          const ja = ((hash(p.upn) % 100) / 100 - 0.5) * 0.16, jr = 0.93 + ((hash(p.upn + "r") % 100) / 100) * 0.14;
-          const ang = Math.atan2(at.vy, at.vx) + ja, mag = Math.min(1, Math.hypot(at.vx, at.vy) * jr);
-          x = cx + (60 + mag * (R - 60)) * Math.cos(ang); y = cy + (60 + mag * (R - 60)) * Math.sin(ang);
+        if (at.centre) { const a = (hash(p.upn) % 360) * Math.PI / 180, r = 5 + (hash(p.upn) % 40); x = cx + r * Math.cos(a); y = cy + r * 0.78 * Math.sin(a); }
+        else if (at.both) {
+          const ang = Math.PI / 2 + ((hash(p.upn) % 1000) / 1000 - 0.5) * 0.5;
+          const r = 62 + Math.min(1, (at.ld + at.ed) / 1.7) * (R - 56);
+          x = cx + r * Math.cos(ang); y = cy + r * Math.sin(ang);
+        } else {
+          const axis = at.ld > at.ed ? Math.PI / 6 : Math.PI - Math.PI / 6; /* 30° toward each pole */
+          const ang = axis + ((hash(p.upn) % 1000) / 1000 - 0.5) * 1.1 * (at.ld > at.ed ? 1 : -1) * 1;
+          const r = 62 + at.sev * (0.93 + ((hash(p.upn + "r") % 100) / 100) * 0.1) * (R - 56);
+          x = cx + Math.min(R, r) * Math.cos(ang); y = cy + Math.min(R, r) * Math.sin(ang);
         }
         const on = pick === p.upn;
-        const stroke = p.dir === "improving" ? "#2F7A39" : p.dir === "declining" ? "#B3261E" : "#fff";
+        const dirStroke = p.dir === "improving" ? "#2F7A39" : p.dir === "declining" ? "#B3261E" : null;
         return (
-          <g key={p.upn} onClick={() => !dim && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : 1}>
+          <g key={p.upn} onClick={() => !dim && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.06 : 1}>
             <title>{p.name} · Year {p.year}</title>
-            {on && <circle cx={x} cy={y} r="10" fill="rgba(198,160,53,.3)" />}
-            <circle cx={x} cy={y} r={p.band === 2 ? 4.1 : 3} fill={yc(p.year)} stroke={stroke} strokeWidth="1.1" opacity={p.conf === "thin" ? 0.5 : 0.92} />
-            {p.capped && <circle cx={x} cy={y} r="6.6" fill="none" stroke="#B3261E" strokeWidth="1" strokeDasharray="2 2.5" />}
+            {on && <circle cx={x} cy={y} r="9" fill="rgba(198,160,53,.32)" />}
+            <circle cx={x} cy={y} r={p.band === 2 ? 3.8 : 2.7} fill={yc(p.year)} stroke={dirStroke || "#FBFAF7"} strokeWidth={dirStroke ? 1.2 : 0.8} opacity={p.conf === "thin" ? 0.55 : 0.95} />
+            {p.capped && <circle cx={x} cy={y} r="6.2" fill="none" stroke="#B3261E" strokeWidth="0.9" strokeDasharray="2 2.4" />}
           </g>
         );
       })}
@@ -273,72 +294,102 @@ const DIR_ = { improving: "#2F7A39", steady: "#C6A035", declining: "#B3261E" };
 const MUTED_ = "#6F6580";
 
 const WORD = (v) => (v == null ? null : v >= 75 ? "strong" : v >= 62 ? "secure" : v >= 40 ? "some concern" : "serious concern");
+const SLAB = { fontSize: 11, fontWeight: 600, color: "#4B0875", margin: "12px 0 6px" };
 function Meter({ label, v, family, sub }) {
   return (
-    <div style={{ marginBottom: sub ? 5 : 10 }}>
+    <div style={{ marginBottom: sub ? 5 : 9 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: sub ? 11 : 12.5 }}>
         <span style={{ color: sub ? MUTED_ : "#221233", fontWeight: sub ? 400 : 600 }}>{label}</span>
         <span style={{ fontVariantNumeric: "tabular-nums", color: sub ? MUTED_ : "#221233" }}>{v == null ? "no evidence yet" : <><b>{WORD(v)}</b> · {v} / 100</>}</span>
       </div>
-      <div style={{ height: sub ? 5 : 7, borderRadius: 999, background: "#F4EEFA", marginTop: 3 }}>
+      <div style={{ height: sub ? 4 : 6, borderRadius: 999, background: "#F4EEFA", marginTop: 3 }}>
         {v != null && <div style={{ height: "100%", width: `${v}%`, borderRadius: 999, background: family === "prov" ? "linear-gradient(90deg,#C6A035,#8a6d1c)" : v < 40 ? "linear-gradient(90deg,#B3261E,#8a1d17)" : "linear-gradient(90deg,#6A0CA0,#4B0875)" }} />}
       </div>
     </div>
   );
 }
 
-function PupilCard({ p, onClose }) {
+function GradeTable({ rows }) {
+  const cell = { padding: "6px 2px", fontSize: 12.5, fontVariantNumeric: "tabular-nums" };
   return (
-    <div style={{ position: "absolute", top: 6, right: "max(16px, calc(50vw - 560px))", width: 350, maxHeight: "calc(72vh - 12px)", overflowY: "auto", background: "#fff", borderRadius: 20, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 24px 70px rgba(34,18,51,.18)", padding: "18px 20px" }}>
-      <button onClick={onClose} style={{ position: "absolute", top: 10, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
-      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600 }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.ppg ? " · PP" : ""}{p.sen ? " · SEN" : ""}</div>
-      <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 19, margin: "2px 0 4px" }}>{p.name}</div>
-      <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
-        <b style={{ fontSize: 13.5 }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</b>
-        <span style={{ fontSize: 11, fontWeight: 700, color: DIR_[p.dir] }}>{p.dir}</span>
-        <span style={{ fontSize: 10.5, color: MUTED_, background: "#F4EEFA", borderRadius: 999, padding: "2px 9px" }}>evidence: {p.conf} ({p.evCount})</span>
-      </div>
-      {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 6px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
-      {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 8px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
-      <p style={{ fontSize: 10.5, color: MUTED_, margin: "0 0 8px" }}>Every score runs to 100; 62 and above reads as on track.</p>
-      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "6px 0 5px" }}>How the pupil is doing</div>
-      <Meter label="Learning" v={p.progress} />
-      <Meter label="Engagement" v={p.engagement} />
-      {p.engParts && (p.engParts.attendance != null || p.engParts.conduct != null || p.engParts.participation != null) && (
-        <div style={{ margin: "-4px 0 8px 10px" }}>
-          <Meter sub label={p.nowAtt != null ? `Attendance (${p.nowAtt}% against ${p.expected}% expected)` : "Attendance"} v={p.engParts.attendance} />
-          <Meter sub label="Conduct and homework" v={p.engParts.conduct} />
-          <Meter sub label="Taking part" v={p.engParts.participation} />
-        </div>
-      )}
-      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 5px" }}>What the school is doing</div>
-      <Meter label="Enrichment" v={p.enrichment} family="prov" />
-      <Meter label="Interventions" v={p.interventions} family="prov" />
-      {p.subjects?.length > 1 && (
+    <div>
+      <div style={SLAB}>Grades at a glance · furthest behind target first</div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ fontSize: 10.5, color: MUTED_ }}>
+            <td style={{ ...cell, fontSize: 10.5 }}>Subject</td>
+            <td style={{ ...cell, fontSize: 10.5, textAlign: "center" }}>Working at</td>
+            <td style={{ ...cell, fontSize: 10.5, textAlign: "center" }}>Predicted</td>
+            <td style={{ ...cell, fontSize: 10.5, textAlign: "center" }}>Target</td>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 12).map((r) => {
+            const ok = r.pred != null && r.target != null ? (r.pred >= r.target ? 1 : -1) : 0;
+            return (
+              <tr key={r.s} style={{ borderTop: "1px solid rgba(106,12,160,.1)" }}>
+                <td style={{ ...cell, fontWeight: 600 }}>{r.s}</td>
+                <td style={{ ...cell, textAlign: "center", color: MUTED_ }}>{r.now ?? "–"}</td>
+                <td style={{ ...cell, textAlign: "center", fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 15.5, color: ok > 0 ? "#2F7A39" : ok < 0 ? "#B3261E" : "#221233" }}>{r.pred ?? "–"}</td>
+                <td style={{ ...cell, textAlign: "center", color: MUTED_ }}>{r.target ?? "–"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PupilCard({ p, onClose }) {
+  const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : "#B3261E";
+  return (
+    <div style={{ position: "absolute", top: 2, right: "max(16px, calc(50vw - 565px))", width: 356, maxHeight: "calc(70vh - 6px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
+      <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 9, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
+      <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, paddingRight: 16 }}>{p.name}</div>
+      <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.sen ? " · SEN" : ""}</div>
+      <p style={{ fontSize: 13, margin: "0 0 4px" }}><b style={{ color: bandC }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</b>{p.dir !== "steady" ? <> and <b style={{ color: DIR_[p.dir] }}>{p.dir}</b></> : ", holding steady"} · evidence {p.conf} ({p.evCount})</p>
+      {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 4px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
+      {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 2px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
+      {p.ks4 ? <GradeTable rows={p.ks4} /> : p.subjects?.length > 1 && (
         <>
-          <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 5px" }}>Subjects · strongest to weakest, percentile in the cohort</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+          <div style={SLAB}>Subjects · strongest to weakest, percentile in the cohort</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             {p.subjects.slice(0, 12).map((x) => (
               <span key={x.s} style={{ fontSize: 10.5, borderRadius: 999, padding: "3px 9px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA" }}>{x.s} <b>{x.pct}</b></span>
             ))}
           </div>
         </>
       )}
+      <div style={SLAB}>How the pupil is doing</div>
+      <Meter label="Learning" v={p.progress} />
+      <Meter label="Engagement" v={p.engagement} />
+      {p.engParts && (p.engParts.attendance != null || p.engParts.conduct != null || p.engParts.participation != null) && (
+        <div style={{ margin: "-3px 0 6px 10px" }}>
+          <Meter sub label={p.nowAtt != null ? `Attendance (${p.nowAtt}% against ${p.expected}% expected)` : "Attendance"} v={p.engParts.attendance} />
+          <Meter sub label="Conduct and homework" v={p.engParts.conduct} />
+          <Meter sub label="Taking part" v={p.engParts.participation} />
+        </div>
+      )}
+      <div style={SLAB}>What the school is doing</div>
+      <Meter label="Enrichment" v={p.enrichment} family="prov" />
+      <Meter label="Interventions" v={p.interventions} family="prov" />
       {p.wins?.length > 1 && (
         <>
-          <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 2px" }}>Percentile across assessment windows</div>
-          <svg viewBox="0 0 300 64" width="100%">
-            <line x1="8" y1="56" x2="292" y2="56" stroke="rgba(106,12,160,.15)" />
+          <div style={SLAB}>Percentile across assessment windows</div>
+          <svg viewBox="0 0 300 62" width="100%">
+            <line x1="8" y1="54" x2="292" y2="54" stroke="rgba(106,12,160,.15)" />
             {p.perWin.map((v, i) => v != null && (
               <g key={i}>
-                <circle cx={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} cy={56 - v * 0.46} r="3.4" fill="#6A0CA0" />
-                {i > 0 && p.perWin[i - 1] != null && <line x1={16 + ((i - 1) * 270) / Math.max(1, p.perWin.length - 1)} y1={56 - p.perWin[i - 1] * 0.46} x2={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} y2={56 - v * 0.46} stroke="#6A0CA0" strokeWidth="2" />}
+                <circle cx={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} cy={54 - v * 0.44} r="3.2" fill="#6A0CA0" />
+                {i > 0 && p.perWin[i - 1] != null && <line x1={16 + ((i - 1) * 270) / Math.max(1, p.perWin.length - 1)} y1={54 - p.perWin[i - 1] * 0.44} x2={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} y2={54 - v * 0.44} stroke="#6A0CA0" strokeWidth="2" />}
               </g>
             ))}
           </svg>
         </>
       )}
-      {p.trips > 0 || p.ivs?.length ? <p style={{ fontSize: 11.5, color: MUTED_, margin: "4px 0 0" }}>{p.trips ? `${p.trips} enrichment event${p.trips > 1 ? "s" : ""} this year. ` : ""}{p.ivs?.length ? `In: ${p.ivs.join(", ")}.` : ""}</p> : null}
+      {(p.trips > 0 || p.ivs?.length > 0) && <p style={{ fontSize: 11.5, color: MUTED_, margin: "4px 0 0" }}>{p.trips ? `${p.trips} enrichment event${p.trips > 1 ? "s" : ""} this year. ` : ""}{p.ivs?.length ? `In: ${p.ivs.join(", ")}.` : ""}</p>}
+      <p style={{ fontSize: 10, color: MUTED_, margin: "8px 0 0" }}>Every score runs to 100; 62 and above reads as on track.</p>
     </div>
   );
 }
@@ -381,17 +432,30 @@ function loadXLSX() {
   return xlsxP;
 }
 
-function SchoolLine({ pupils, label }) {
-  const n = pupils.length;
-  if (!n) return null;
-  const onTrack = pupils.filter((p) => p.band === 0).length;
-  const serious = pupils.filter((p) => p.band === 2).length;
-  const dec = pupils.filter((p) => p.dir === "declining").length;
-  const capped = pupils.filter((p) => p.capped).length;
+function Fig({ v, l, c }) {
   return (
-    <p style={{ fontFamily: "Fraunces, serif", fontSize: 16.5, margin: "8px 0 2px", color: "#221233" }}>
-      {label}: of <b>{n}</b> pupils with evidence, <b style={{ color: "#2F7A39" }}>{onTrack} on track</b>, <b style={{ color: "#8a6d1c" }}>{n - onTrack - serious} some concern</b>, <b style={{ color: "#B3261E" }}>{serious} serious</b> · {dec} moving the wrong way{capped ? ` · ${capped} held visible by the no-compensation rule` : ""}.
-    </p>
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 7 }}>
+      <b style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 21, color: c || "#221233", fontVariantNumeric: "tabular-nums" }}>{v}</b>
+      <span style={{ fontSize: 11, color: "#6F6580" }}>{l}</span>
+    </span>
+  );
+}
+function Metrics({ pupils, label }) {
+  const n = pupils.length;
+  if (!n) return <p style={{ fontSize: 12.5, color: "#6F6580", margin: "4px 0 0" }}>{label}: no pupils with evidence yet in this view.</p>;
+  const med = (f) => { const v = pupils.map(f).filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : "–"; };
+  return (
+    <div style={{ display: "flex", gap: 26, alignItems: "baseline", flexWrap: "wrap", borderTop: "1px solid rgba(106,12,160,.14)", borderBottom: "1px solid rgba(106,12,160,.14)", padding: "10px 2px", margin: "0 0 2px" }}>
+      <span style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 14.5, marginRight: 2 }}>{label}</span>
+      <Fig v={n} l="pupils with evidence" />
+      <Fig v={pupils.filter((q) => q.band === 0).length} l="on track" c="#2F7A39" />
+      <Fig v={pupils.filter((q) => q.band === 1).length} l="some concern" c="#8a6d1c" />
+      <Fig v={pupils.filter((q) => q.band === 2).length} l="serious" c="#B3261E" />
+      <Fig v={pupils.filter((q) => q.dir === "declining").length} l="moving the wrong way" />
+      <Fig v={med((q) => q.progress)} l="median learning" />
+      <Fig v={med((q) => q.engagement)} l="median engagement" />
+      {pupils.some((q) => q.capped) && <Fig v={pupils.filter((q) => q.capped).length} l="held visible" c="#B3261E" />}
+    </div>
   );
 }
 

@@ -56,7 +56,7 @@ const HEADS = {
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
-  ppg: /ppg|pupil ?premium|disadvantag|fsm/i, sen: /sen|ehcp/i,
+  ppg: /ppg|pupil ?premium|disadvantag|fsm/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
 };
 export function readHeaders(headerRow, body) {
   const map = {}, assumptions = [];
@@ -123,7 +123,8 @@ export function ingest(state, fileName, text, opts = {}) {
   let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
   /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
   if (windowCols.length < 2 && classify(map) !== "roll") {
-    const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !idCols.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
+    const wideId = new Set(Object.entries(map).filter(([k]) => k !== "score" && k !== "subject").map(([, i]) => i));
+    const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !wideId.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
   }
   let kind = classify(map);
@@ -145,6 +146,7 @@ export function ingest(state, fileName, text, opts = {}) {
         prior: map.prior != null ? num(r[map.prior]) : null,
         ppg: map.ppg != null ? /^(y|1|true|fsm|pp)/i.test((r[map.ppg] || "").trim()) : false,
         sen: map.sen != null ? /^(y|1|true|e|k|ehcp|sen)/i.test((r[map.sen] || "").trim()) : false,
+        gender: map.gender != null ? (/^(m|b)/i.test((r[map.gender] || "").trim()) ? "M" : /^(f|g)/i.test((r[map.gender] || "").trim()) ? "F" : null) : null,
       };
       p._nm = normName(p.name);
       const i = roll.findIndex((x) => x.upn === upn);
@@ -285,13 +287,24 @@ export function computeAll(state) {
       if (band != null && worstCore - band > 1) { band = worstCore - 1; capped = true; }
       const dir = (progress != null && dirP < -6) || trend < -1.5 ? "declining" : (dirP > 6 || trend > 1.5) ? "improving" : "steady";
       const lastWin = [...wins].reverse().find((w) => mine.some((e) => e.t === "assessment" && e.when === w && e.score != null));
-      const subjects = lastWin == null ? [] : mine.filter((e) => e.t === "assessment" && e.when === lastWin && e.score != null)
-        .map((e) => ({ s: e.subject, pct: pctile(e.score, scoreSets[e.subject + "|" + lastWin].sorted) }))
+      const latest = lastWin == null ? [] : mine.filter((e) => e.t === "assessment" && e.when === lastWin && e.score != null);
+      const subjects = latest.map((e) => ({ s: e.subject, pct: pctile(e.score, scoreSets[e.subject + "|" + lastWin].sorted) }))
         .filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct);
+      /* KS4 at a glance: columns named Subject + MEG / Prediction / Grade split into a grade table */
+      const MEAS = [[/\b(meg|target)\b/i, "target"], [/\bpredict(ion|ed)?\b/i, "pred"], [/\b(grade|current|working|wag)\b/i, "now"], [/\bqob\b/i, "qob"]];
+      const baseOf = (s) => s.replace(/\b(meg|target|prediction|predicted|predict|grade|current|working|wag|qob)\b/gi, "").replace(/\b(20)?\d\d[\/_-]\d\d\b/g, "").replace(/\s+/g, " ").trim();
+      const kmap = {};
+      latest.forEach((e) => {
+        const m = MEAS.find(([re]) => re.test(e.subject)); if (!m) return;
+        const b = baseOf(e.subject) || e.subject;
+        (kmap[b] = kmap[b] || { s: b })[m[1]] = e.score;
+      });
+      let ks4 = Object.values(kmap).filter((x) => x.now != null || x.pred != null || x.target != null);
+      ks4 = ks4.length >= 2 ? ks4.sort((a, b) => ((a.pred ?? a.now ?? 99) - (a.target ?? 0)) - ((b.pred ?? b.now ?? 99) - (b.target ?? 0))) : null;
       const evCount = mine.length;
       out[p.upn] = { ...p, year: Number(year), progress, attendance, engagement, engParts: { attendance, conduct, participation }, enrichment, interventions,
         concern, band, capped, dir, priorQ: quintile(priorP), nowQ: quintile(curP), curP, priorP, perWin, wins,
-        nowAtt, expected, trend, trips, subjects, ivs: ivs.map((e) => e.what), conf: evCount >= 6 ? "solid" : evCount >= 3 ? "forming" : "thin", evCount };
+        nowAtt, expected, trend, trips, subjects, ks4, ivs: ivs.map((e) => e.what), conf: evCount >= 6 ? "solid" : evCount >= 3 ? "forming" : "thin", evCount };
     }
   }
   return out;
