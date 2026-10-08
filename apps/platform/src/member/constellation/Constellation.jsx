@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
 import { loadState, saveState, blankState, ingest, computeAll, findSignals, rowsToCsv, removeUpload, BANDS } from "./model.js";
+import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, coilPoint, easeInOut, pullOf } from "./sky.js";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
 const DIR = { improving: "#2F7A39", steady: GOLD, declining: "#B3261E" };
@@ -49,7 +50,6 @@ function Constellation() {
   const pupils = Object.values(computed);
   const years = [...new Set(pupils.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
   const signals = useMemo(() => findSignals(computed), [computed]);
-  useEffect(() => { if (year == null && years.length) setYear(years[0]); }, [years.length]);
 
   const [upYear, setUpYear] = useState(null);
   const [upNote, setUpNote] = useState("");
@@ -106,29 +106,33 @@ function Constellation() {
         {/* ═══ SCHOOL VIEW ═══ */}
         {tab === "view" && (state.roll.length ? (() => {
           const hasPP = state.roll.some((x) => x.ppg), hasSEN = state.roll.some((x) => x.sen), hasG = state.roll.some((x) => x.gender);
-          const inView = (q) => (year == null || q.year === year) && (group == null || (group === "pp" ? q.ppg : group === "sen" ? q.sen : group === "m" ? q.gender === "M" : q.gender === "F"));
-          const seen = pupils.filter(inView);
+          const inGroup = (q) => group == null || (group === "pp" ? q.ppg : group === "sen" ? q.sen : group === "m" ? q.gender === "M" : q.gender === "F");
+          const scopePupils = pupils.filter((q) => (year == null || q.year === year) && inGroup(q));
           return (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap" }}>
-              <button onClick={() => setYear(null)} style={chip(year == null, DEEP)}>All years</button>
-              {years.map((y, i) => (
-                <button key={y} onClick={() => setYear(year === y ? null : y)} style={chip(year === y, YEARC[i % YEARC.length])}>
-                  <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: YEARC[i % YEARC.length], marginRight: 6 }} />Y{y}
-                </button>
-              ))}
-              <span style={{ width: 1, height: 20, background: "rgba(106,12,160,.18)", margin: "0 4px" }} />
+              {year != null && (
+                <button onClick={() => { setYear(null); setPick(null); }} style={{ ...chip(true, DEEP), display: "inline-flex", alignItems: "center", gap: 6 }}>&#8249; Back to the school</button>
+              )}
               {[["pp", "Pupil Premium", hasPP], ["sen", "SEN", hasSEN], ["m", "Boys", hasG], ["f", "Girls", hasG]].map(([k, l, show]) => show && (
                 <button key={k} onClick={() => setGroup(group === k ? null : k)} style={chip(group === k, GOLD)}>{l}</button>
               ))}
-              <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>outline: <i style={dotk("#2F7A39")} />improving · <i style={dotk("#B3261E")} />declining · dashed ring, held visible</span>
+              <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>
+                {year == null
+                  ? <>dot: steady · <b style={{ color: "#2F7A39" }}>improving</b> · <b style={{ color: "#B3261E" }}>declining</b> · click a year to coil it</>
+                  : <>pulled by: <i style={swatch("#6A0CA0")} />learning · <i style={swatch("#C6A035")} />engagement · <i style={swatch("#B3261E")} />both · <i style={swatch("#CBB8DF")} />on track</>}
+              </span>
             </div>
-            <Metrics pupils={seen} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
+            <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
             <div style={{ position: "relative", width: "100vw", left: "50%", transform: "translateX(-50%)" }}>
-              <Field pupils={pupils} inView={inView} pick={pick} onPick={setPick} yc={(y) => YEARC[years.indexOf(y) % YEARC.length]} />
+              <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
               {chosen && <PupilCard p={chosen} onClose={() => setPick(null)} />}
             </div>
-            <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 640, textAlign: "center" }}>On-track children rest in the calm centre. A learning concern pulls a child right, an engagement concern left (attendance is its loudest evidence, not a separate issue), and a child weak in both sinks south, furthest of all. No child can be averaged back to the middle.</p>
+            <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
+              {year == null
+                ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle."
+                : "The rings are the strip's zones, coiled: distance from the centre means what it always meant. The slices are the tutor groups; colour is what pulls each child; every serious child carries their name on the rim. Back, and the circle unrolls."}
+            </p>
           </>
           );
         })() : <Empty onGo={() => setTab("up")} />)}
@@ -202,12 +206,12 @@ function Constellation() {
                   <b style={{ fontSize: 14, color: s.tone === "bad" ? "#B3261E" : s.tone === "warn" ? "#8a6d1c" : "#2F7A39" }}>{s.title}</b>
                   <p style={{ fontSize: 12.5, color: MUTED, margin: "3px 0 6px" }}>{s.detail}</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {s.upns.slice(0, 10).map((u) => <button key={u} onClick={() => { setPick(u); setYear(null); setTab("view"); }} style={{ border: "none", cursor: "pointer", background: LILAC, color: DEEP, borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>{computed[u].name}</button>)}
+                    {s.upns.slice(0, 10).map((u) => <button key={u} onClick={() => { setPick(u); setYear(computed[u].year ?? null); setTab("view"); }} style={{ border: "none", cursor: "pointer", background: LILAC, color: DEEP, borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>{computed[u].name}</button>)}
                   </div>
                 </div>
               ))}
             </div>
-            {years.map((y) => <QuintileGrid key={y} year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(null); setTab("view"); }} />)}
+            {years.map((y) => <QuintileGrid key={y} year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} />)}
           </div>
         )}
       </div>
@@ -219,71 +223,141 @@ const YEARC = ["#6A0CA0", "#C6A035", "#2F7A39", "#B3532A", "#3E5F8A", "#A03E76",
 const chip = (on, c) => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: on ? "#F4EEFA" : "#fff", color: on ? "#4B0875" : "#6F6580", boxShadow: "0 1px 2px rgba(34,18,51,.04), 0 8px 24px rgba(34,18,51,.06)", outline: on ? `1.5px solid ${c}` : "none" });
 const dotk = (c) => ({ display: "inline-block", width: 8, height: 8, borderRadius: 4, border: `2px solid ${c}`, background: "#fff", margin: "0 4px 0 8px", verticalAlign: "-1px" });
 
-function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+const SHOALC = { steady: "#6A0CA0", improving: "#2F7A39", declining: "#B3261E" };
+const PULLC = { learning: "#6A0CA0", engagement: "#C6A035", both: "#B3261E" };
+const swatch = (c) => ({ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: c, margin: "0 4px 0 8px", verticalAlign: "-1px" });
 
-function place2(p) {
-  const l = p.progress, e = p.engagement;
-  if (l == null && e == null) return { none: true };
-  const ld = l == null ? 0 : Math.max(0, 62 - l) / 62;
-  const ed = e == null ? 0 : Math.max(0, 62 - e) / 62;
-  if (ld <= 0.02 && ed <= 0.02) return { centre: true };
-  return { ld, ed, both: ld > 0.15 && ed > 0.15, sev: Math.min(1, Math.hypot((ld - ed) * 0.866, (ld + ed) * 0.5) < Math.max(ld, ed) * 0.8 ? Math.max(ld, ed) * 0.8 : Math.hypot((ld - ed) * 0.866, (ld + ed) * 0.5)) };
-}
+function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick }) {
+  const shoal = useMemo(() => layoutShoal(pupils, years), [pupils, years]);
+  const mands = useMemo(() => {
+    const m = {};
+    years.forEach((y) => { m[y] = layoutMandala(pupils.filter((p) => p.year === y)); });
+    return m;
+  }, [pupils, years]);
 
-function Field({ pupils, inView, pick, onPick, yc }) {
-  const W = 1000, H = 586, cx = W / 2, cy = 248, R = 206;
-  const placed = pupils.map((p) => ({ p, at: place2(p) })).filter(({ at }) => !at.none);
-  const vis = placed.filter(({ p }) => inView(p));
-  const learnN = vis.filter(({ at }) => !at.centre && !at.both && at.ld > at.ed).length;
-  const engN = vis.filter(({ at }) => !at.centre && !at.both && at.ed >= at.ld).length;
-  const bothN = vis.filter(({ at }) => at.both).length;
-  const centreN = vis.filter(({ at }) => at.centre).length;
-  const glow = (n) => Math.min(0.45, n / 160);
-  const ordered = [...placed].sort((x, y) => (x.p.band ?? 0) - (y.p.band ?? 0));
+  /* scene lags the prop while the coil runs */
+  const [scene, setScene] = useState(year == null ? { mode: "school" } : { mode: "year", year });
+  const [t, setT] = useState(1);
+  const animRef = useRef(null);
+  useEffect(() => {
+    const want = year == null ? { mode: "school" } : { mode: "year", year };
+    if (want.mode === scene.mode && want.year === scene.year) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setScene(want); setT(1); return; }
+    const coilYear = want.mode === "year" ? want.year : scene.year;
+    const dirIn = want.mode === "year";
+    if (animRef.current) cancelAnimationFrame(animRef.current.raf);
+    const t0 = performance.now(), DUR = 820;
+    const anim = { coilYear, dirIn, raf: 0 };
+    animRef.current = anim;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / DUR);
+      setT(dirIn ? k : 1 - k);
+      setScene({ mode: "coil", year: coilYear, dirIn });
+      if (k < 1) anim.raf = requestAnimationFrame(step);
+      else { animRef.current = null; setScene(want); setT(1); }
+    };
+    anim.raf = requestAnimationFrame(step);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current.raf); };
+  }, [year]);
+
+  const coiling = scene.mode === "coil";
+  const yearShown = scene.mode === "year" ? scene.year : coiling ? scene.year : null;
+  const mand = yearShown != null ? mands[yearShown] : null;
+  const e = easeInOut(Math.max(0, Math.min(1, t)));
+  const shoalA = coiling ? 1 - e : scene.mode === "school" ? 1 : 0;      /* shoal chrome */
+  const mandA = coiling ? Math.max(0, (e - 0.55) / 0.45) : scene.mode === "year" ? 1 : 0; /* mandala chrome */
+
+  const fillFor = (p, inYearWorld) => {
+    if (!inYearWorld) return SHOALC[p.dir] || SHOALC.steady;
+    const pu = pullOf(p);
+    return pu ? PULLC[pu] : "#CBB8DF";
+  };
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxHeight: "70vh" }} role="img" aria-label="The school field: learning pulls right, engagement pulls left, both pull south">
-      <defs>
-        <radialGradient id="cwash"><stop offset="0%" stopColor="#F4EEFA" stopOpacity=".9" /><stop offset="55%" stopColor="#F4EEFA" stopOpacity=".32" /><stop offset="100%" stopColor="#F4EEFA" stopOpacity="0" /></radialGradient>
-        <radialGradient id="cpole"><stop offset="0%" stopColor="#C6A035" stopOpacity=".5" /><stop offset="100%" stopColor="#C6A035" stopOpacity="0" /></radialGradient>
-      </defs>
-      <circle cx={cx} cy={cy} r={R * 1.25} fill="url(#cwash)" />
-      <circle cx={cx + R * 0.82} cy={cy + R * 0.48} r="110" fill="url(#cpole)" opacity={glow(learnN)} />
-      <circle cx={cx - R * 0.82} cy={cy + R * 0.48} r="110" fill="url(#cpole)" opacity={glow(engN)} />
-      <circle cx={cx} cy={cy + R * 0.96} r="110" fill="url(#cpole)" opacity={glow(bothN)} />
-      {[0.5, 1].map((f) => <circle key={f} cx={cx} cy={cy} r={R * f} fill="none" stroke="rgba(106,12,160,.10)" strokeDasharray="1 7" strokeLinecap="round" />)}
-      <circle cx={cx} cy={cy} r="52" fill="#fff" opacity=".55" />
-      <text x={cx} y={cy - 2} textAnchor="middle" fontSize="11" fill={MUTED_}>on track</text>
-      <text x={cx} y={cy + 15} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="15" fill="#221233">{centreN}</text>
-      <g textAnchor="middle">
-        <text x={cx + R * 0.95} y={cy + R * 0.6} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Learning</text>
-        <text x={cx + R * 0.95} y={cy + R * 0.6 + 15} fontSize="10.5" fill={MUTED_}>{learnN} pupils</text>
-        <text x={cx - R * 0.95} y={cy + R * 0.6} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Engagement</text>
-        <text x={cx - R * 0.95} y={cy + R * 0.6 + 15} fontSize="10.5" fill={MUTED_}>{engN} pupils</text>
-        <text x={cx} y={cy + R + 40} fontFamily="Fraunces, serif" fontWeight="600" fontSize="16.5" fill="#221233">Learning and engagement together</text>
-        <text x={cx} y={cy + R + 55} fontSize="10.5" fill={MUTED_}>{bothN} pupils · carrying both weights, they sit furthest of all</text>
-      </g>
-      {ordered.map(({ p, at }) => {
-        const dim = !inView(p);
-        let x, y;
-        if (at.centre) { const a = (hash(p.upn) % 360) * Math.PI / 180, r = 5 + (hash(p.upn) % 40); x = cx + r * Math.cos(a); y = cy + r * 0.78 * Math.sin(a); }
-        else if (at.both) {
-          const ang = Math.PI / 2 + ((hash(p.upn) % 1000) / 1000 - 0.5) * 0.5;
-          const r = 62 + Math.min(1, (at.ld + at.ed) / 1.7) * (R - 56);
-          x = cx + r * Math.cos(ang); y = cy + r * Math.sin(ang);
-        } else {
-          const axis = at.ld > at.ed ? Math.PI / 6 : Math.PI - Math.PI / 6; /* 30° toward each pole */
-          const ang = axis + ((hash(p.upn) % 1000) / 1000 - 0.5) * 1.1 * (at.ld > at.ed ? 1 : -1) * 1;
-          const r = 62 + at.sev * (0.93 + ((hash(p.upn + "r") % 100) / 100) * 0.1) * (R - 56);
-          x = cx + Math.min(R, r) * Math.cos(ang); y = cy + Math.min(R, r) * Math.sin(ang);
+    <svg viewBox={`0 0 ${SKY_W} ${SKY_H}`} width="100%" style={{ display: "block", maxHeight: "74vh" }} role="img"
+      aria-label={yearShown != null ? `Year ${yearShown}, coiled: rings are concern, slices are tutor groups` : "The school: one strip per year group, each dot a child"}>
+
+      {/* shoal chrome */}
+      {shoalA > 0.01 && (
+        <g opacity={shoalA}>
+          <text x={shoal.gutter} y={30} fontSize="11" fontWeight="600" fill="#2F7A39">On track</text>
+          <text x={shoal.zones.watch} y={30} fontSize="11" fontWeight="600" fill="#8a6d1c">Some concern</text>
+          <text x={shoal.zones.serious} y={30} fontSize="11" fontWeight="600" fill="#B3261E">Serious</text>
+          {shoal.rows.map((r) => (
+            <g key={r.year} onClick={() => scene.mode === "school" && onOpenYear(r.year)} style={{ cursor: "pointer" }}>
+              <rect x={shoal.gutter - 4} y={r.y0} width={shoal.stripW + 8} height={r.h} rx="14" fill="#ffffff" />
+              <rect x={shoal.gutter - 4} y={r.y0} width={shoal.zones.watch - shoal.gutter + 4} height={r.h} rx="14" fill="#F2FBF4" />
+              <rect x={shoal.zones.watch} y={r.y0} width={shoal.zones.serious - shoal.zones.watch} height={r.h} fill="#FBF6E6" />
+              <rect x={shoal.zones.serious} y={r.y0} width={shoal.zones.right - shoal.zones.serious + 4} height={r.h} rx="14" fill="#FBEFED" />
+              <line x1={shoal.zones.watch} y1={r.y0 + 3} x2={shoal.zones.watch} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
+              <line x1={shoal.zones.serious} y1={r.y0 + 3} x2={shoal.zones.serious} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
+              <text x={shoal.gutter - 18} y={r.mid - 2} textAnchor="end" fontFamily="Fraunces, serif" fontWeight="600" fontSize="19" fill="#221233">Y{r.year}</text>
+              <text x={shoal.gutter - 18} y={r.mid + 14} textAnchor="end" fontSize="10.5" fill="#6F6580">{r.n} pupils</text>
+              <text x={shoal.zones.right + 12} y={r.mid - 2} fontSize="11" fill="#B3261E" fontWeight="600">{r.serious ? r.serious + " serious" : ""}</text>
+              <text x={shoal.zones.right + 12} y={r.mid + 13} fontSize="10.5" fill="#6F6580">{r.declining} declining</text>
+            </g>
+          ))}
+        </g>
+      )}
+
+      {/* mandala chrome */}
+      {mand && mandA > 0.01 && (
+        <g opacity={mandA}>
+          <circle cx={CX} cy={CY} r={R_RIM} fill="#ffffff" />
+          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(179,38,30,.3)" />
+          <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.42)" />
+          <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".45" />
+          <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
+          {mand.sectorMeta.map((s) => (
+            <g key={s.reg}>
+              <line x1={CX + 40 * Math.cos(s.a)} y1={CY + 40 * Math.sin(s.a)} x2={CX + (R_RIM + 6) * Math.cos(s.a)} y2={CY + (R_RIM + 6) * Math.sin(s.a)} stroke="rgba(106,12,160,.12)" />
+              <text x={s.lx} y={s.ly} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="15" fill="#221233">{s.reg}</text>
+              <text x={s.lx} y={s.ly + 15} textAnchor="middle" fontSize="10" fill={s.serious >= 4 ? "#B3261E" : "#6F6580"}>{s.serious} serious</text>
+            </g>
+          ))}
+          <g onClick={onBack} style={{ cursor: "pointer" }}>
+            <text x={CX} y={CY - 14} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="25" fill="#221233">Year {yearShown}</text>
+            <text x={CX} y={CY + 6} textAnchor="middle" fontSize="11.5" fill="#6F6580">{mand.counts.n} with evidence · {mand.counts.calm} on track</text>
+            <text x={CX} y={CY + 22} textAnchor="middle" fontSize="11.5" fill="#6F6580">{mand.counts.watch} some concern · {mand.counts.serious} serious, named on the rim</text>
+          </g>
+          {mand.hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{mand.hidden} more on the rim without room for a label: their dots and cards still open</text>}
+          {mand.labels.map((L) => (
+            <g key={L.upn} onClick={() => onPick(L.upn)} style={{ cursor: "pointer" }}>
+              <line x1={L.x1} y1={L.y1} x2={L.x2} y2={L.y2} stroke="rgba(34,18,51,.25)" strokeWidth="0.8" />
+              <text x={L.tx} y={L.ty} textAnchor={L.anchor} fontSize="11.5" fontWeight="600" fill="#221233">{L.name}</text>
+              <text x={L.tx} y={L.ty + 13} textAnchor={L.anchor} fontSize="9.5" fill="#6F6580">{L.why}</text>
+            </g>
+          ))}
+        </g>
+      )}
+
+      {/* the children */}
+      {pupils.map((p) => {
+        if (p.concern == null) return null;
+        const S = shoal.byU[p.upn];
+        const inYear = yearShown != null && p.year === yearShown;
+        const E = inYear && mand ? mand.byU[p.upn] : null;
+        let x, y, inYearWorld = false, op = 1;
+        if (scene.mode === "school") { if (!S) return null; ({ x, y } = S); }
+        else if (scene.mode === "year") {
+          if (!inYear || !E) return null;
+          ({ x, y } = E); inYearWorld = true;
+        } else { /* coiling */
+          if (inYear && S && E) { ({ x, y } = coilPoint(S, E, e)); inYearWorld = e > 0.5; }
+          else if (S) { ({ x, y } = S); op = 1 - e; if (op <= 0.02) return null; }
+          else return null;
         }
+        const dim = !inGroup(p);
         const on = pick === p.upn;
-        const dirStroke = p.dir === "improving" ? "#2F7A39" : p.dir === "declining" ? "#B3261E" : null;
+        const serious = p.band === 2;
+        const r = inYearWorld ? (serious ? 4.4 : 3.2) : (serious ? 3.6 : 2.7);
         return (
-          <g key={p.upn} onClick={() => !dim && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.06 : 1}>
+          <g key={p.upn} onClick={() => !dim && scene.mode !== "coil" && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : op}>
             <title>{p.name} · Year {p.year}</title>
-            {on && <circle cx={x} cy={y} r="9" fill="rgba(198,160,53,.32)" />}
-            <circle cx={x} cy={y} r={p.band === 2 ? 3.8 : 2.7} fill={yc(p.year)} stroke={dirStroke || "#FBFAF7"} strokeWidth={dirStroke ? 1.2 : 0.8} opacity={p.conf === "thin" ? 0.55 : 0.95} />
-            {p.capped && <circle cx={x} cy={y} r="6.2" fill="none" stroke="#B3261E" strokeWidth="0.9" strokeDasharray="2 2.4" />}
+            {on && <circle cx={x} cy={y} r={r + 6.5} fill="rgba(198,160,53,.32)" />}
+            <circle cx={x} cy={y} r={r} fill={fillFor(p, inYearWorld)} stroke={inYearWorld && p.dir === "declining" ? "#B3261E" : inYearWorld && p.dir === "improving" ? "#2F7A39" : "#FBFAF7"} strokeWidth={inYearWorld && p.dir !== "steady" ? 1.1 : 0.7} opacity={p.conf === "thin" ? 0.55 : 0.95} />
+            {p.capped && !coiling && <circle cx={x} cy={y} r={r + 3.2} fill="none" stroke="#B3261E" strokeWidth="0.9" strokeDasharray="2 2.4" />}
           </g>
         );
       })}
