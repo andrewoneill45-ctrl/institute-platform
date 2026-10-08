@@ -11,7 +11,24 @@ const shadow = "0 1px 2px rgba(34,18,51,.04), 0 16px 44px rgba(34,18,51,.09)";
 const card = { background: "#fff", borderRadius: 20, boxShadow: shadow, padding: "22px 24px" };
 const kick = { fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: PURPLE, fontWeight: 600 };
 
-export default function Constellation() {
+class Boundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (this.state.err) return (
+      <div style={{ padding: "40px 28px", fontFamily: "Inter, sans-serif", color: "#221233" }}>
+        <h2 style={{ fontFamily: "Fraunces, serif", fontWeight: 600 }}>Constellation hit an error</h2>
+        <p style={{ fontSize: 13.5, color: "#6F6580" }}>Nothing is lost: your data is still on this device. Send this line to get it fixed:</p>
+        <code style={{ fontSize: 12, background: "#F4EEFA", borderRadius: 8, padding: "8px 12px", display: "inline-block" }}>{String(this.state.err && this.state.err.message || this.state.err)}</code>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+export default function ConstellationGuarded() { return <Boundary><Constellation /></Boundary>; }
+
+function Constellation() {
   const { user } = useAuth();
   const sid = user?.urn || user?.school || "school";
   const [state, setState] = useState(null);
@@ -192,6 +209,8 @@ export default function Constellation() {
 const YEARC = ["#6A0CA0", "#C6A035", "#2F7A39", "#B3532A", "#3E5F8A", "#A03E76", "#0B6E6A"];
 const chip = (on, c) => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: on ? "#F4EEFA" : "#fff", color: on ? "#4B0875" : "#6F6580", boxShadow: "0 1px 2px rgba(34,18,51,.04), 0 8px 24px rgba(34,18,51,.06)", outline: on ? `1.5px solid ${c}` : "none" });
 const dotk = (c) => ({ display: "inline-block", width: 8, height: 8, borderRadius: 4, border: `2px solid ${c}`, background: "#fff", margin: "0 4px 0 8px", verticalAlign: "-1px" });
+
+function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
 
 function place2(p) {
   const l = p.progress, e = p.engagement;
