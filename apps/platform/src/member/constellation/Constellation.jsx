@@ -3,7 +3,7 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, ingest, computeAll, findSignals, rowsToCsv, BANDS } from "./model.js";
+import { loadState, saveState, blankState, ingest, computeAll, findSignals, rowsToCsv, removeUpload, BANDS } from "./model.js";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
 const DIR = { improving: "#2F7A39", steady: GOLD, declining: "#B3261E" };
@@ -34,6 +34,7 @@ export default function Constellation() {
   useEffect(() => { if (year == null && years.length) setYear(years[0]); }, [years.length]);
 
   const [upYear, setUpYear] = useState(null);
+  const [upNote, setUpNote] = useState("");
   async function onFiles(list) {
     let s = state;
     for (const f of list) {
@@ -45,14 +46,15 @@ export default function Constellation() {
             const aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
             let hRow = 0;
             for (let i = 0; i < Math.min(5, aoa.length); i++) if (aoa[i].some((c) => /^upn$/i.test(String(c).trim()))) { hRow = i; break; }
-            if (aoa.length > hRow + 1) s = ingest(s, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear });
+            if (aoa.length > hRow + 1) s = ingest(s, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear, note: upNote });
           }
         } catch (e) {
           s = { ...s, ledger: [{ file: f.name, kind: "unreadable", matched: 0, of: 0, assumptions: ["could not open workbook: " + (e?.message || e)], date: new Date().toLocaleDateString("en-GB") }, ...s.ledger] };
         }
-      } else s = ingest(s, f.name, await f.text(), { year: upYear });
+      } else s = ingest(s, f.name, await f.text(), { year: upYear, note: upNote });
     }
     setState({ ...s });
+    setUpNote("");
   }
   const resolve = (item, upn) => {
     const s = { ...state, review: state.review.filter((r) => r !== item) };
@@ -86,7 +88,7 @@ export default function Constellation() {
         {/* ═══ SCHOOL VIEW ═══ */}
         {tab === "view" && (state.roll.length ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 14px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 6px", flexWrap: "wrap" }}>
               <span style={kick}>Year group</span>
               <button onClick={() => setYear(null)} style={chip(year == null, DEEP)}>{"All"}</button>
               {years.map((y, i) => (
@@ -94,17 +96,14 @@ export default function Constellation() {
                   <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: YEARC[i % YEARC.length], marginRight: 6 }} />Y{y}
                 </button>
               ))}
-              <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>outline: <i style={dotk("#2F7A39")} />improving · <i style={dotk("#B3261E")} />declining</span>
+              <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>outline: <i style={dotk("#2F7A39")} />improving · <i style={dotk("#B3261E")} />declining · dashed ring, held visible</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: chosen ? "1.15fr 1fr" : "1fr", gap: 18 }}>
-              <div style={{ ...card, padding: "26px 28px" }}>
-                <div style={kick}>The school against its issues · a child sits where their sharpest concern lives</div>
-                <SchoolLine pupils={pupils.filter((p) => year == null || p.year === year)} label={year == null ? "Whole school" : "Year " + year} />
-                <ThemeSky pupils={pupils} years={years} yearFilter={year} pick={pick} onPick={setPick} />
-                <p style={{ fontSize: 11.5, color: MUTED, margin: "8px 0 0" }}>The centre is on track. Each sector is an issue; distance is how serious it has become; colour is the year group, so one glance answers whether an issue belongs to a year or to the school. No child collapsing in a core measure can be averaged back to the middle.</p>
-              </div>
-              {chosen && <PupilPanel p={chosen} />}
+            <SchoolLine pupils={pupils.filter((p) => year == null || p.year === year)} label={year == null ? "Whole school" : "Year " + year} />
+            <div style={{ position: "relative", width: "100vw", left: "50%", transform: "translateX(-50%)", marginTop: 4 }}>
+              <Field pupils={pupils} years={years} yearFilter={year} pick={pick} onPick={setPick} />
+              {chosen && <PupilCard p={chosen} onClose={() => setPick(null)} />}
             </div>
+            <p style={{ fontSize: 11.5, color: MUTED, margin: "2px 0 0", maxWidth: 740 }}>On-track children rest in the calm centre. A learning concern pulls a child to the right, an engagement concern to the left (attendance is its loudest evidence, not a separate issue), and a child weak in both sinks south, furthest of all. Distance is seriousness, colour is year group, and no child can be averaged back to the middle.</p>
           </>
         ) : <Empty onGo={() => setTab("up")} />)}
 
@@ -123,6 +122,7 @@ export default function Constellation() {
                   <button key={y} onClick={() => setUpYear(upYear === y ? null : y)} style={chip(upYear === y, DEEP)}>Y{y}</button>
                 ))}
               </div>
+              <input value={upNote} onChange={(e) => setUpNote(e.target.value)} placeholder="Describe these files, so the analysis knows what it is reading: e.g. Y10 end of year grades, all subjects, Summer 2026" style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(106,12,160,.22)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontFamily: "inherit", margin: "8px 0 2px", background: "#fff" }} />
               <label style={{ display: "block", border: `1.5px dashed rgba(106,12,160,.35)`, borderRadius: 14, padding: "26px 18px", textAlign: "center", cursor: "pointer", margin: "8px 0 6px", background: LILAC, color: DEEP, fontWeight: 600, fontSize: 13.5 }}>
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
@@ -151,7 +151,11 @@ export default function Constellation() {
                   <div style={{ ...kick, marginTop: 12 }}>{label}</div>
                   {entries.slice(0, 8).map((l, i) => (
                     <div key={i} style={{ borderTop: "1px solid rgba(106,12,160,.12)", padding: "9px 0", fontSize: 12.5 }}>
-                      <b>{l.file}</b> · read as <b style={{ color: DEEP }}>{l.kind}</b> · {l.matched}/{l.of} matched{l.held ? `, ${l.held} held` : ""} · {l.date}
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span><b>{l.file}</b> · read as <b style={{ color: DEEP }}>{l.kind}</b> · {l.matched}/{l.of} matched{l.held ? `, ${l.held} held` : ""} · {l.date}</span>
+                        <button onClick={() => { const roll = l.kind === "roll"; if (window.confirm(roll ? "Remove the roll? This clears every pupil from the spine; evidence files remain but nothing can attach until a roll is uploaded again." : "Remove this file and all the evidence it brought in?")) setState(removeUpload(state, l)); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 14, padding: 0, lineHeight: 1 }}>&times;</button>
+                      </div>
+                      {l.note && <div style={{ color: DEEP, fontSize: 11.5, marginTop: 2, fontStyle: "italic" }}>&ldquo;{l.note}&rdquo;</div>}
                       {l.assumptions?.length > 0 && <div style={{ color: MUTED, fontSize: 11.5, marginTop: 2 }}>{l.assumptions.join("; ")}</div>}
                     </div>
                   ))}
@@ -172,7 +176,7 @@ export default function Constellation() {
                   <b style={{ fontSize: 14, color: s.tone === "bad" ? "#B3261E" : s.tone === "warn" ? "#8a6d1c" : "#2F7A39" }}>{s.title}</b>
                   <p style={{ fontSize: 12.5, color: MUTED, margin: "3px 0 6px" }}>{s.detail}</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {s.upns.slice(0, 10).map((u) => <button key={u} onClick={() => { setPick(u); setYear(null); setTab("view"); }} style={{ border: "none", cursor: "pointer", background: LILAC, color: DEEP, borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>{computed[u].name.split(",")[0]}</button>)}
+                    {s.upns.slice(0, 10).map((u) => <button key={u} onClick={() => { setPick(u); setYear(null); setTab("view"); }} style={{ border: "none", cursor: "pointer", background: LILAC, color: DEEP, borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>{computed[u].name}</button>)}
                   </div>
                 </div>
               ))}
@@ -189,62 +193,57 @@ const YEARC = ["#6A0CA0", "#C6A035", "#2F7A39", "#B3532A", "#3E5F8A", "#A03E76",
 const chip = (on, c) => ({ border: "none", cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: on ? "#F4EEFA" : "#fff", color: on ? "#4B0875" : "#6F6580", boxShadow: "0 1px 2px rgba(34,18,51,.04), 0 8px 24px rgba(34,18,51,.06)", outline: on ? `1.5px solid ${c}` : "none" });
 const dotk = (c) => ({ display: "inline-block", width: 8, height: 8, borderRadius: 4, border: `2px solid ${c}`, background: "#fff", margin: "0 4px 0 8px", verticalAlign: "-1px" });
 
-const THEMES = [
-  ["Attendance", (p) => p.attendance],
-  ["Progress", (p) => p.progress],
-  ["Engagement", (p) => p.engagement],
-];
-function place(p) {
-  const scored = THEMES.map(([t, f], i) => [i, f(p)]).filter(([, v]) => v != null);
-  if (!scored.length) return { centre: true, none: true };
-  const [ti, v] = scored.reduce((a, b) => (b[1] < a[1] ? b : a));
-  if (v >= 62) return { centre: true };
-  return { ti, sev: (62 - v) / 62 };
+function place2(p) {
+  const l = p.progress, e = p.engagement;
+  if (l == null && e == null) return { none: true };
+  const ld = l == null ? 0 : Math.max(0, 62 - l) / 62;
+  const ed = e == null ? 0 : Math.max(0, 62 - e) / 62;
+  if (ld <= 0.02 && ed <= 0.02) return { centre: true };
+  let vx = (ld - ed) * 0.866, vy = (ld + ed) * 0.5;
+  let m = Math.hypot(vx, vy);
+  const worst = Math.max(ld, ed);
+  if (m < worst * 0.8) { const s = (worst * 0.8) / (m || 1); vx *= s; vy *= s; m = Math.hypot(vx, vy); } /* no compensation in the geometry */
+  if (m > 1) { vx /= m; vy /= m; m = 1; }
+  return { vx, vy, ld, ed, both: ld > 0.15 && ed > 0.15 };
 }
-function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
 
-function ThemeSky({ pupils, years, yearFilter, pick, onPick }) {
-  const W = 680, H = 470, cx = W / 2, cy = H / 2 + 8;
-  const GAP = 0.14, SPAN = (2 * Math.PI) / 3;
-  const start = (i) => -Math.PI / 2 + i * SPAN + GAP / 2;
+function Field({ pupils, years, yearFilter, pick, onPick }) {
+  const W = 1000, H = 600, cx = W / 2, cy = 252, R = 212;
   const yc = (y) => YEARC[years.indexOf(y) % YEARC.length];
-  const placed = pupils.map((p) => ({ p, at: place(p) }));
-  const counts = THEMES.map(([t], i) => {
-    const inS = placed.filter(({ at }) => at.ti === i);
-    return { t, n: inS.length, up: inS.filter(({ p }) => p.dir === "improving").length, down: inS.filter(({ p }) => p.dir === "declining").length };
-  });
+  const placed = pupils.map((p) => ({ p, at: place2(p) })).filter(({ at }) => !at.none);
+  const learnN = placed.filter(({ at }) => !at.centre && at.ld > at.ed + 0.08 && !at.both).length;
+  const engN = placed.filter(({ at }) => !at.centre && at.ed > at.ld + 0.08 && !at.both).length;
+  const bothN = placed.filter(({ at }) => at.both).length;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="The school against its issues: sectors are themes, dots are children coloured by year group">
-      {[70, 120, 170].map((r) => <circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke="rgba(106,12,160,.10)" strokeDasharray="1 6" strokeLinecap="round" />)}
-      {[0, 1, 2].map((i) => {
-        const a = -Math.PI / 2 + i * SPAN;
-        return <line key={i} x1={cx + 46 * Math.cos(a - GAP / 2)} y1={cy + 46 * Math.sin(a - GAP / 2)} x2={cx + 186 * Math.cos(a - GAP / 2)} y2={cy + 186 * Math.sin(a - GAP / 2)} stroke="rgba(106,12,160,.14)" />;
-      })}
-      <circle cx={cx} cy={cy} r="42" fill="#F4EEFA" opacity=".6" />
-      <text x={cx} y={cy + 3} textAnchor="middle" fontSize="10.5" fill="#6F6580">on track</text>
-      {counts.map((c, i) => {
-        const mid = -Math.PI / 2 + i * SPAN + SPAN / 2;
-        const lx = cx + 208 * Math.cos(mid), ly = cy + 205 * Math.sin(mid);
-        return (
-          <g key={c.t} textAnchor="middle">
-            <text x={lx} y={ly} fontFamily="Fraunces, serif" fontWeight="600" fontSize="15" fill="#221233">{c.t}</text>
-            <text x={lx} y={ly + 15} fontSize="10.5" fill="#6F6580">{c.n} pupil{c.n === 1 ? "" : "s"}{c.n ? ` · ${c.up} improving, ${c.down} declining` : ""}</text>
-          </g>
-        );
-      })}
-      {placed.map(({ p, at }, i) => {
-        if (at.none) return null;
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxHeight: "72vh" }} role="img" aria-label="The school field: learning pulls right, engagement pulls left, both pull south">
+      {[0.33, 0.66, 1].map((f) => <circle key={f} cx={cx} cy={cy} r={R * f} fill="none" stroke="rgba(106,12,160,.09)" strokeDasharray="1 7" strokeLinecap="round" />)}
+      <circle cx={cx} cy={cy} r="54" fill="#F4EEFA" opacity=".55" />
+      <text x={cx} y={cy + 3.5} textAnchor="middle" fontSize="11" fill={MUTED_}>on track</text>
+      <g textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fill="#221233">
+        <text x={cx + R * 0.93} y={cy + R * 0.56} fontSize="16">Learning</text>
+        <text x={cx + R * 0.93} y={cy + R * 0.56 + 16} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{learnN} pupils</text>
+        <text x={cx - R * 0.93} y={cy + R * 0.56} fontSize="16">Engagement</text>
+        <text x={cx - R * 0.93} y={cy + R * 0.56 + 16} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{engN} pupils</text>
+        <text x={cx} y={cy + R + 44} fontSize="16">Learning and engagement together</text>
+        <text x={cx} y={cy + R + 60} fontSize="10.5" fontFamily="Inter, sans-serif" fontWeight="400" fill={MUTED_}>{bothN} pupils · the children carrying both weights sit furthest of all</text>
+      </g>
+      {placed.map(({ p, at }) => {
         const dim = yearFilter != null && p.year !== yearFilter;
         let x, y;
-        if (at.centre) { const a = (hash(p.upn) % 360) * Math.PI / 180, r = 6 + (hash(p.upn) % 30); x = cx + r * Math.cos(a); y = cy + r * Math.sin(a); }
-        else { const a = start(at.ti) + (SPAN - GAP) * ((hash(p.upn) % 1000) / 1000); const r = 56 + at.sev * 122; x = cx + r * Math.cos(a); y = cy + r * Math.sin(a); }
+        if (at.centre) { const a = (hash(p.upn) % 360) * Math.PI / 180, r = 5 + (hash(p.upn) % 42); x = cx + r * Math.cos(a); y = cy + r * 0.78 * Math.sin(a); }
+        else {
+          const ja = ((hash(p.upn) % 100) / 100 - 0.5) * 0.16, jr = 0.93 + ((hash(p.upn + "r") % 100) / 100) * 0.14;
+          const ang = Math.atan2(at.vy, at.vx) + ja, mag = Math.min(1, Math.hypot(at.vx, at.vy) * jr);
+          x = cx + (60 + mag * (R - 60)) * Math.cos(ang); y = cy + (60 + mag * (R - 60)) * Math.sin(ang);
+        }
         const on = pick === p.upn;
         const stroke = p.dir === "improving" ? "#2F7A39" : p.dir === "declining" ? "#B3261E" : "#fff";
         return (
-          <g key={p.upn} onClick={() => !dim && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.09 : 1}>
-            {on && <circle cx={x} cy={y} r="14" fill="rgba(198,160,53,.28)" />}
-            <circle cx={x} cy={y} r={p.band === 2 ? 6.3 : 5} fill={yc(p.year)} stroke={stroke} strokeWidth="2" opacity={p.conf === "thin" ? 0.5 : 0.94} />
-            {p.capped && <circle cx={x} cy={y} r="9.5" fill="none" stroke="#B3261E" strokeWidth="1.1" strokeDasharray="2 3" />}
+          <g key={p.upn} onClick={() => !dim && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : 1}>
+            <title>{p.name} · Year {p.year}</title>
+            {on && <circle cx={x} cy={y} r="10" fill="rgba(198,160,53,.3)" />}
+            <circle cx={x} cy={y} r={p.band === 2 ? 4.1 : 3} fill={yc(p.year)} stroke={stroke} strokeWidth="1.1" opacity={p.conf === "thin" ? 0.5 : 0.92} />
+            {p.capped && <circle cx={x} cy={y} r="6.6" fill="none" stroke="#B3261E" strokeWidth="1" strokeDasharray="2 2.5" />}
           </g>
         );
       })}
@@ -254,57 +253,73 @@ function ThemeSky({ pupils, years, yearFilter, pick, onPick }) {
 const DIR_ = { improving: "#2F7A39", steady: "#C6A035", declining: "#B3261E" };
 const MUTED_ = "#6F6580";
 
-function Bar({ label, v, family }) {
+const WORD = (v) => (v == null ? null : v >= 75 ? "strong" : v >= 62 ? "secure" : v >= 40 ? "some concern" : "serious concern");
+function Meter({ label, v, family, sub }) {
   return (
-    <div style={{ marginBottom: 9 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5 }}><span>{label}</span><b style={{ fontVariantNumeric: "tabular-nums" }}>{v == null ? "no evidence yet" : v}</b></div>
-      <div style={{ height: 7, borderRadius: 999, background: "#F4EEFA", marginTop: 3 }}>
-        {v != null && <div style={{ height: "100%", width: `${v}%`, borderRadius: 999, background: family === "prov" ? "linear-gradient(90deg,#C6A035,#8a6d1c)" : "linear-gradient(90deg,#6A0CA0,#4B0875)" }} />}
+    <div style={{ marginBottom: sub ? 5 : 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: sub ? 11 : 12.5 }}>
+        <span style={{ color: sub ? MUTED_ : "#221233", fontWeight: sub ? 400 : 600 }}>{label}</span>
+        <span style={{ fontVariantNumeric: "tabular-nums", color: sub ? MUTED_ : "#221233" }}>{v == null ? "no evidence yet" : <><b>{WORD(v)}</b> · {v} / 100</>}</span>
+      </div>
+      <div style={{ height: sub ? 5 : 7, borderRadius: 999, background: "#F4EEFA", marginTop: 3 }}>
+        {v != null && <div style={{ height: "100%", width: `${v}%`, borderRadius: 999, background: family === "prov" ? "linear-gradient(90deg,#C6A035,#8a6d1c)" : v < 40 ? "linear-gradient(90deg,#B3261E,#8a1d17)" : "linear-gradient(90deg,#6A0CA0,#4B0875)" }} />}
       </div>
     </div>
   );
 }
 
-function PupilPanel({ p }) {
+function PupilCard({ p, onClose }) {
   return (
-    <div style={{ ...card, alignSelf: "start" }}>
-      <div style={kick}>{p.name} · Year {p.year}{p.reg ? ` · ${p.reg}` : ""}</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0 4px", flexWrap: "wrap" }}>
-        <span style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 21 }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</span>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: DIR_[p.dir] }}>{p.dir}</span>
-        <span style={{ fontSize: 11, color: MUTED_, background: "#F4EEFA", borderRadius: 999, padding: "3px 10px" }}>evidence: {p.conf} ({p.evCount})</span>
+    <div style={{ position: "absolute", top: 6, right: "max(16px, calc(50vw - 560px))", width: 350, maxHeight: "calc(72vh - 12px)", overflowY: "auto", background: "#fff", borderRadius: 20, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 24px 70px rgba(34,18,51,.18)", padding: "18px 20px" }}>
+      <button onClick={onClose} style={{ position: "absolute", top: 10, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
+      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600 }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.ppg ? " · PP" : ""}{p.sen ? " · SEN" : ""}</div>
+      <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 19, margin: "2px 0 4px" }}>{p.name}</div>
+      <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+        <b style={{ fontSize: 13.5 }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</b>
+        <span style={{ fontSize: 11, fontWeight: 700, color: DIR_[p.dir] }}>{p.dir}</span>
+        <span style={{ fontSize: 10.5, color: MUTED_, background: "#F4EEFA", borderRadius: 999, padding: "2px 9px" }}>evidence: {p.conf} ({p.evCount})</span>
       </div>
-      {p.capped && <p style={{ fontSize: 12, color: "#B3261E", margin: "2px 0 8px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
-      {p.priorQ && p.nowQ && <p style={{ fontSize: 12.5, color: MUTED_, margin: "2px 0 10px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
-      <div style={{ ...kick, marginTop: 8 }}>How the pupil is doing</div>
-      <Bar label="Progress" v={p.progress} /><Bar label="Attendance" v={p.attendance} /><Bar label="Engagement" v={p.engagement} />
-      <div style={{ ...kick, marginTop: 10 }}>What the school is doing</div>
-      <Bar label="Enrichment" v={p.enrichment} family="prov" /><Bar label="Interventions" v={p.interventions} family="prov" />
+      {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 6px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
+      {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 8px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
+      <p style={{ fontSize: 10.5, color: MUTED_, margin: "0 0 8px" }}>Every score runs to 100; 62 and above reads as on track.</p>
+      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "6px 0 5px" }}>How the pupil is doing</div>
+      <Meter label="Learning" v={p.progress} />
+      <Meter label="Engagement" v={p.engagement} />
+      {p.engParts && (p.engParts.attendance != null || p.engParts.conduct != null || p.engParts.participation != null) && (
+        <div style={{ margin: "-4px 0 8px 10px" }}>
+          <Meter sub label={p.nowAtt != null ? `Attendance (${p.nowAtt}% against ${p.expected}% expected)` : "Attendance"} v={p.engParts.attendance} />
+          <Meter sub label="Conduct and homework" v={p.engParts.conduct} />
+          <Meter sub label="Taking part" v={p.engParts.participation} />
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 5px" }}>What the school is doing</div>
+      <Meter label="Enrichment" v={p.enrichment} family="prov" />
+      <Meter label="Interventions" v={p.interventions} family="prov" />
       {p.subjects?.length > 1 && (
         <>
-          <div style={{ ...kick, marginTop: 10 }}>Subjects at the latest window · strongest to weakest, as percentile in the cohort</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "6px 0 2px" }}>
+          <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 5px" }}>Subjects · strongest to weakest, percentile in the cohort</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
             {p.subjects.slice(0, 12).map((x) => (
-              <span key={x.s} style={{ fontSize: 11.5, borderRadius: 999, padding: "4px 10px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA", color: "#221233" }}>{x.s} <b>{x.pct}</b></span>
+              <span key={x.s} style={{ fontSize: 10.5, borderRadius: 999, padding: "3px 9px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA" }}>{x.s} <b>{x.pct}</b></span>
             ))}
           </div>
         </>
       )}
       {p.wins?.length > 1 && (
         <>
-          <div style={{ ...kick, marginTop: 10 }}>Percentile across assessment windows</div>
-          <svg viewBox="0 0 300 70" width="100%">
-            <line x1="8" y1="60" x2="292" y2="60" stroke="rgba(106,12,160,.15)" />
+          <div style={{ fontSize: 10.5, letterSpacing: ".12em", textTransform: "uppercase", color: "#6A0CA0", fontWeight: 600, margin: "8px 0 2px" }}>Percentile across assessment windows</div>
+          <svg viewBox="0 0 300 64" width="100%">
+            <line x1="8" y1="56" x2="292" y2="56" stroke="rgba(106,12,160,.15)" />
             {p.perWin.map((v, i) => v != null && (
               <g key={i}>
-                <circle cx={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} cy={60 - v * 0.5} r="4" fill="#6A0CA0" />
-                {i > 0 && p.perWin[i - 1] != null && <line x1={16 + ((i - 1) * 270) / Math.max(1, p.perWin.length - 1)} y1={60 - p.perWin[i - 1] * 0.5} x2={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} y2={60 - v * 0.5} stroke="#6A0CA0" strokeWidth="2" />}
+                <circle cx={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} cy={56 - v * 0.46} r="3.4" fill="#6A0CA0" />
+                {i > 0 && p.perWin[i - 1] != null && <line x1={16 + ((i - 1) * 270) / Math.max(1, p.perWin.length - 1)} y1={56 - p.perWin[i - 1] * 0.46} x2={16 + (i * 270) / Math.max(1, p.perWin.length - 1)} y2={56 - v * 0.46} stroke="#6A0CA0" strokeWidth="2" />}
               </g>
             ))}
           </svg>
         </>
       )}
-      {p.nowAtt != null && <p style={{ fontSize: 12, color: MUTED_, margin: "6px 0 0" }}>Attendance {p.nowAtt}% against an expectation of {p.expected}%{p.trend ? `, moving ${p.trend > 0 ? "+" : ""}${Math.round(p.trend * 10) / 10} points` : ""}.{p.trips ? ` ${p.trips} enrichment event${p.trips > 1 ? "s" : ""} this year.` : ""}{p.ivs?.length ? ` In: ${p.ivs.join(", ")}.` : ""}</p>}
+      {p.trips > 0 || p.ivs?.length ? <p style={{ fontSize: 11.5, color: MUTED_, margin: "4px 0 0" }}>{p.trips ? `${p.trips} enrichment event${p.trips > 1 ? "s" : ""} this year. ` : ""}{p.ivs?.length ? `In: ${p.ivs.join(", ")}.` : ""}</p> : null}
     </div>
   );
 }

@@ -113,6 +113,7 @@ export function matchPupil(row, map, roll, aliases = {}, scopeYear = null) {
 /* ── ingest: one file → roll rows or evidence facts + a ledger entry ── */
 export function ingest(state, fileName, text, opts = {}) {
   const scopeYear = opts.year ?? null;
+  const note = (opts.note || "").trim().slice(0, 240) || null;
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0], rows.slice(1));
@@ -130,7 +131,7 @@ export function ingest(state, fileName, text, opts = {}) {
   const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
   const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
   const body = rows.slice(1);
-  const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [] };
+  const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [], note };
 
   if (kind === "roll") {
     const roll = [...state.roll];
@@ -205,6 +206,15 @@ const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[%\s]/g, ""))
 const pctFrom = (r, map) => { const s = num(r[map.sessions]), a = num(r[map.absent]); return s ? Math.round(1000 * (s - (a || 0)) / s) / 10 : null; };
 const today = () => new Date().toLocaleDateString("en-GB");
 
+/* an upload the user removes takes its evidence with it */
+export function removeUpload(state, led) {
+  const evidence = state.evidence.filter((e) => e.file !== led.file);
+  const review = state.review.filter((r) => r.file !== led.file);
+  const ledger = state.ledger.filter((l) => l !== led);
+  const roll = led.kind === "roll" ? [] : state.roll;
+  return { ...state, roll, evidence, review, ledger };
+}
+
 /* ── the measures ── */
 const pctile = (v, sorted) => { if (v == null || !sorted.length) return null; let i = 0; while (i < sorted.length && sorted[i] <= v) i++; return Math.round((100 * (i - 0.5)) / sorted.length); };
 const quintile = (p) => (p == null ? null : Math.min(5, Math.floor(p / 20) + 1));
@@ -248,11 +258,16 @@ export function computeAll(state) {
       const trend = cur.length >= 2 ? cur[cur.length - 1].pct - cur[0].pct : 0;
       const unauthShare = cur.length && cur[cur.length - 1].unauth != null && nowAtt < 100 ? cur[cur.length - 1].unauth : 0;
       const attendance = nowAtt == null ? null : clamp(0.5 * (50 + 6 * (nowAtt - expected)) + 0.3 * (50 + 8 * trend) + 0.2 * (50 - 4 * unauthShare) + (nowAtt >= 96 ? 12 : 0));
-      /* engagement: proxy, lower confidence */
+      /* engagement: attendance is its loudest evidence; conduct and participation sit beside it */
       const eng = mine.filter((e) => e.t === "engagement");
       const praise = sum(eng, "praise"), sanction = sum(eng, "sanction"), hw = avg(eng, "homework");
       const ratio = praise != null || sanction != null ? (praise || 0) / Math.max(1, (praise || 0) + (sanction || 0)) : null;
-      const engagement = ratio == null && hw == null ? null : clamp(0.55 * (ratio == null ? 50 : ratio * 100) + 0.45 * (hw == null ? 50 : hw));
+      const conduct = ratio == null && hw == null ? null : clamp(0.55 * (ratio == null ? 50 : ratio * 100) + 0.45 * (hw == null ? 50 : hw));
+      const anyEnrich = state.evidence.some((e) => e.t === "enrichment");
+      const participation = mine.filter((e) => e.t === "enrichment").length > 0 ? clamp(60 + Math.min(3, mine.filter((e) => e.t === "enrichment").length) * 10) : anyEnrich ? 25 : null;
+      const engFused = [[attendance, 0.6], [conduct, 0.25], [participation, 0.15]].filter(([v]) => v != null);
+      const engW = engFused.reduce((a, [, w]) => a + w, 0);
+      const engagement = engFused.length ? Math.round(engFused.reduce((a, [v, w]) => a + v * w, 0) / engW) : null;
       /* provision */
       const trips = mine.filter((e) => e.t === "enrichment").length;
       const enrichment = state.evidence.some((e) => e.t === "enrichment") ? (trips > 0 ? clamp(70 + Math.min(3, trips - 1) * 8) : 0) : null;
@@ -261,11 +276,11 @@ export function computeAll(state) {
       const dosageOk = ivs.some((e) => e.dosage == null || e.dosage > 0);
       const interventions = needs ? (ivs.length ? (dosageOk ? 78 : 35) : 0) : (ivs.length ? 85 : null);
       /* concern: outcomes only, then the rule that refuses to lose children */
-      const parts = [[progress, 0.4], [attendance, 0.4], [engagement, 0.2]].filter(([v]) => v != null);
+      const parts = [[progress, 0.5], [engagement, 0.5]].filter(([v]) => v != null);
       const wsum = parts.reduce((a, [, w]) => a + w, 0);
       let concern = parts.length ? Math.round(parts.reduce((a, [v, w]) => a + v * w, 0) / wsum) : null;
       let band = bandOf(concern);
-      const worstCore = Math.max(bandOf(attendance) ?? 0, bandOf(progress) ?? 0);
+      const worstCore = Math.max(bandOf(attendance ?? engagement) ?? 0, bandOf(progress) ?? 0);
       let capped = false;
       if (band != null && worstCore - band > 1) { band = worstCore - 1; capped = true; }
       const dir = (progress != null && dirP < -6) || trend < -1.5 ? "declining" : (dirP > 6 || trend > 1.5) ? "improving" : "steady";
@@ -274,7 +289,7 @@ export function computeAll(state) {
         .map((e) => ({ s: e.subject, pct: pctile(e.score, scoreSets[e.subject + "|" + lastWin].sorted) }))
         .filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct);
       const evCount = mine.length;
-      out[p.upn] = { ...p, year: Number(year), progress, attendance, engagement, enrichment, interventions,
+      out[p.upn] = { ...p, year: Number(year), progress, attendance, engagement, engParts: { attendance, conduct, participation }, enrichment, interventions,
         concern, band, capped, dir, priorQ: quintile(priorP), nowQ: quintile(curP), curP, priorP, perWin, wins,
         nowAtt, expected, trend, trips, subjects, ivs: ivs.map((e) => e.what), conf: evCount >= 6 ? "solid" : evCount >= 3 ? "forming" : "thin", evCount };
     }
