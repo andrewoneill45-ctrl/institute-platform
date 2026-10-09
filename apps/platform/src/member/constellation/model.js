@@ -280,7 +280,7 @@ export function computeAll(state) {
       const lastTwo = perWin.filter((x) => x != null).slice(-2);
       const dirP = lastTwo.length === 2 ? lastTwo[1] - lastTwo[0] : 0; /* one point never makes a direction */
       const gap = curP != null && priorP != null ? curP - priorP : null;
-      const progress = curP == null ? null : clamp(66 + 0.55 * (gap ?? 0) + 0.35 * dirP * (small ? 0.6 : 1));
+      const progress = curP == null ? null : clamp(70 + 0.9 * (gap ?? 0) + 0.5 * dirP * (small ? 0.6 : 1));
       /* attendance: level vs own prior 50 / trend 30 / pattern 20 */
       const att = mine.filter((e) => e.t === "attendance" && e.pct != null);
       const cur = att.filter((e) => e.when !== "prior");

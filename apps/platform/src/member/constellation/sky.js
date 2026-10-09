@@ -65,17 +65,20 @@ export function layoutShoal(pupils, years) {
       Strongest at twelve o'clock, clockwise in rank order; radius is the
       concern zone, so the spiral drifts outward as the year weakens and the
       furthest-behind child is the last point before the circle closes. ── */
+/* ── the mandala: the year ranked by performance, wound into an equal-area
+      spiral. Strongest at twelve o'clock, clockwise in rank order; radius
+      grows with rank so the circle's area belongs to the children, and the
+      zone rings are drawn where this year's own bands fall. ── */
 export function layoutMandala(pupils) {
   const ps = pupils.filter((p) => p.concern != null)
     .sort((a, b) => b.concern - a.concern || (a.upn < b.upn ? -1 : 1));
   const n = Math.max(1, ps.length);
+  const R0 = 64, R1 = R_RIM - 14;
+  const rAt = (t) => R0 + Math.sqrt(Math.max(0, Math.min(1, t))) * (R1 - R0);
   const byU = {}, labels = [];
-  const rOf = (c) => c >= 62 ? 30 + (100 - Math.min(100, c)) / 38 * (R_ON - 44)
-    : c >= 40 ? R_ON + 12 + (62 - c) / 22 * (R_WATCH - R_ON - 24)
-    : R_WATCH + 14 + (40 - Math.max(0, c)) / 40 * (R_RIM - R_WATCH - 26);
   ps.forEach((p, i) => {
     const ang = -Math.PI / 2 + ((i + 0.5) / n) * 2 * Math.PI;
-    const rad = rOf(p.concern) + (h01(p.upn) - 0.5) * 7;
+    const rad = rAt((i + 0.5) / n) + (h01(p.upn) - 0.5) * 9;
     const x = CX + rad * Math.cos(ang), y = CY + rad * Math.sin(ang);
     byU[p.upn] = { x, y, ang };
     if (p.band === 2) {
@@ -92,11 +95,14 @@ export function layoutMandala(pupils) {
     for (let i = 1; i < ls.length; i++) if (ls[i].ty - ls[i - 1].ty < 26) ls[i].ty = ls[i - 1].ty + 26;
   });
   const fit = labels.filter((L) => L.ty >= 18 && L.ty <= SKY_H - 10);
-  return { byU, labels: fit, hidden: labels.length - fit.length, sectorMeta: [],
-    counts: { n: ps.length,
-      calm: ps.filter((p) => p.band === 0).length,
-      watch: ps.filter((p) => p.band === 1).length,
-      serious: ps.filter((p) => p.band === 2).length } };
+  const calm = ps.filter((p) => p.band === 0).length;
+  const watch = ps.filter((p) => p.band === 1).length;
+  const serious = ps.filter((p) => p.band === 2).length;
+  const rings = [];
+  if (calm > 0 && calm < n) rings.push({ r: rAt(calm / n), tone: "watch" });
+  if (calm + watch > 0 && calm + watch < n && serious > 0) rings.push({ r: rAt((calm + watch) / n), tone: "serious" });
+  return { byU, labels: fit, hidden: labels.length - fit.length, rings, sectorMeta: [],
+    counts: { n: ps.length, calm, watch, serious } };
 }
 
 /* ── the coil: polar interpolation around the centre, every dot sweeping the

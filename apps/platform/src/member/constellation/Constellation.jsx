@@ -310,21 +310,22 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
       {mand && mandA > 0.01 && (
         <g opacity={mandA}>
           <circle cx={CX} cy={CY} r={R_RIM} fill="#ffffff" />
-          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(179,38,30,.3)" />
-          <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.42)" />
-          <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".45" />
-          <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
+          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(106,12,160,.14)" />
+          {mand.rings.map((rg) => (
+            <g key={rg.tone}>
+              <circle cx={CX} cy={CY} r={rg.r} fill="none" stroke={rg.tone === "watch" ? "rgba(198,160,53,.55)" : "rgba(179,38,30,.45)"} strokeDasharray="2 5" />
+              <text x={CX} y={CY - rg.r - 6} textAnchor="middle" fontSize="10" fill={rg.tone === "watch" ? "#8a6d1c" : "#B3261E"}>{rg.tone === "watch" ? "some concern beyond this ring" : "serious beyond this ring"}</text>
+            </g>
+          ))}
           <g fontSize="10" textAnchor="middle">
-            <text x={CX + 74} y={CY - R_RIM - 10} fill="#6F6580">strongest in the year &#8594;</text>
-            <text x={CX - 86} y={CY - R_RIM - 10} fill="#B3261E">&#8592; furthest behind</text>
-            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">on track</text>
-            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">some concern</text>
-            <text x={CX} y={CY - R_RIM + 16} fill="#B3261E">serious</text>
+            <text x={CX + 78} y={CY - R_RIM - 10} fill="#6F6580">strongest in the year &#8594;</text>
+            <text x={CX - 90} y={CY - R_RIM - 10} fill="#B3261E">&#8592; furthest behind</text>
           </g>
+          <circle cx={CX} cy={CY} r="52" fill="#F4EEFA" opacity=".7" />
+          <circle cx={CX} cy={CY} r="52" fill="none" stroke="rgba(106,12,160,.2)" />
           <g onClick={onBack} style={{ cursor: "pointer" }}>
-            <text x={CX} y={CY - 14} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="25" fill="#221233">Year {yearShown}</text>
-            <text x={CX} y={CY + 6} textAnchor="middle" fontSize="11.5" fill="#6F6580">{mand.counts.n} with evidence · {mand.counts.calm} on track</text>
-            <text x={CX} y={CY + 22} textAnchor="middle" fontSize="11.5" fill="#6F6580">{mand.counts.watch} some concern · {mand.counts.serious} serious, named on the rim</text>
+            <text x={CX} y={CY} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="19" fill="#221233">Year {yearShown}</text>
+            <text x={CX} y={CY + 16} textAnchor="middle" fontSize="9.5" fill="#6F6580">{mand.counts.n} in view</text>
           </g>
           {mand.hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{mand.hidden} more on the rim without room for a label: their dots and cards still open</text>}
           {mand.labels.map((L) => (
