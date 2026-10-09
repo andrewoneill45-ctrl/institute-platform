@@ -23,6 +23,7 @@ export function ensureMotionCss() {
   @keyframes asiDraw { to { stroke-dashoffset: 0; } }
   .asi-lift { transition: transform ${MOTION.settle}ms ${MOTION.ease}, box-shadow ${MOTION.settle}ms ${MOTION.ease}; }
   .asi-lift:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(34,18,51,.05), 0 26px 64px rgba(34,18,51,.13); }
+  @keyframes asiSpin { to { transform: rotate(360deg); } }
 }`;
   document.head.appendChild(s);
 }

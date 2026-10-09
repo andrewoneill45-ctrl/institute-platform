@@ -13,11 +13,58 @@ const shadow = "0 1px 2px rgba(34,18,51,.04), 0 18px 50px rgba(34,18,51,.09)";
 const card = { background: "#fff", borderRadius: 20, boxShadow: shadow, padding: "24px 26px" };
 
 const INSTRUMENTS = [
-  { to: "atlas", verb: "See", name: "Atlas", desc: "Every school in England on one map: search it in plain English, compare and profile. And ask Prism a question to get a canvas of living evidence with a briefing PDF at the end.", cta: "Open Atlas" },
-  { to: "lens", verb: "Know", name: "Lens", desc: "Your inspection room: SEF, evidence vault, Ofsted and Section 48 frameworks, and Ask: a critical friend who knows both schedules and reads your own documents.", cta: "Open Lens" },
-  { to: "orbit", verb: "Act", name: "Orbit", desc: "Strategy in motion: vision, objectives and strategies as one living plan, suggested from your Lens priorities and kept honest as the year turns.", cta: "Open Orbit" },
-  { to: "constellation", verb: "Live", name: "Constellation", desc: "Every child in view: upload years of the data you already hold, keyed by UPN, and watch the whole school resolve into year groups, groups and single pupils, with the children nothing currently reaches flagged first.", cta: "Open Constellation" },
+  { to: "atlas", verb: "See", name: "Atlas", accent: "#3E5F8A", desc: "Every school in England on one map: search it in plain English, compare and profile. And ask Prism a question to get a canvas of living evidence with a briefing PDF at the end.", cta: "Open Atlas" },
+  { to: "lens", verb: "Know", name: "Lens", accent: "#6A0CA0", desc: "Your inspection room: SEF, evidence vault, Ofsted and Section 48 frameworks, and Ask: a critical friend who knows both schedules and reads your own documents.", cta: "Open Lens" },
+  { to: "orbit", verb: "Act", name: "Orbit", accent: "#C6A035", desc: "Strategy in motion: vision, objectives and strategies as one living plan, suggested from your Lens priorities and kept honest as the year turns.", cta: "Open Orbit" },
+  { to: "constellation", verb: "Live", name: "Constellation", accent: "#4B0875", desc: "Every child in view: upload years of the data you already hold, keyed by UPN, and watch the whole school resolve into year groups, groups and single pupils, with the children nothing currently reaches flagged first.", cta: "Open Constellation" },
 ];
+
+/* each instrument's emblem: a small mark that is quietly alive */
+const RM = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function Emblem({ kind }) {
+  const P = "#6A0CA0", D = "#4B0875", G = "#C6A035";
+  if (kind === "atlas") {
+    const dots = [[36,7],[31,11],[40,12],[35,16],[29,20],[38,21],[33,26],[41,28],[28,31],[36,33],[44,34],[31,38],[39,40],[47,42],[53,44],[35,45],[57,49],[43,48],[51,52],[39,52],[47,57],[55,57],[43,61],[35,60],[50,63],[29,64],[23,69],[17,73],[11,76],[39,66]];
+    return (
+      <svg viewBox="0 0 72 80" width="44" height="49" aria-hidden="true" style={{ display: "block" }}>
+        {dots.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="2.1" fill={i % 5 === 2 ? "#3E5F8A" : i % 7 === 3 ? "#B3532A" : P} opacity="0.72" />)}
+        <circle cx="47" cy="57" r="3.2" fill={G}>
+          {!RM && <animate attributeName="r" values="2.6;3.8;2.6" dur="3.2s" repeatCount="indefinite" />}
+        </circle>
+      </svg>
+    );
+  }
+  if (kind === "lens") return (
+    <svg viewBox="0 0 80 80" width="46" height="46" aria-hidden="true" style={{ display: "block" }}>
+      <circle cx="40" cy="40" r="29" fill="none" stroke={P} strokeWidth="2.5" opacity=".9" />
+      <g style={!RM ? { transformOrigin: "40px 40px", animation: "asiSpin 26s linear infinite" } : undefined}>
+        <circle cx="40" cy="40" r="19" fill="none" stroke={G} strokeWidth="2" strokeDasharray="6 7" />
+      </g>
+      <circle cx="40" cy="40" r="6.5" fill={D} />
+    </svg>
+  );
+  if (kind === "orbit") return (
+    <svg viewBox="0 0 80 80" width="46" height="46" aria-hidden="true" style={{ display: "block" }}>
+      <ellipse cx="40" cy="40" rx="31" ry="14" fill="none" stroke={G} strokeWidth="2" transform="rotate(-18 40 40)" />
+      <circle cx="40" cy="40" r="8" fill={P} />
+      {!RM ? (
+        <circle r="3.3" fill={D}>
+          <animateMotion dur="9s" repeatCount="indefinite" path="M 10.5 49.6 a 31 14 -18 1 1 59 -19.2 a 31 14 -18 1 1 -59 19.2" />
+        </circle>
+      ) : <circle cx="69.5" cy="30.4" r="3.3" fill={D} />}
+    </svg>
+  );
+  return (
+    <svg viewBox="0 0 80 80" width="46" height="46" aria-hidden="true" style={{ display: "block" }}>
+      <path d="M16 54 L30 40 L46 46 L62 26" stroke="rgba(106,12,160,.3)" strokeWidth="1" fill="none" />
+      {[[16, 54, 2.6], [30, 40, 2.2], [46, 46, 2.8], [62, 26, 3.2], [54, 58, 2.2], [24, 22, 2.4]].map(([x, y, r], i) => (
+        <circle key={i} cx={x} cy={y} r={r} fill={i === 3 ? G : P}>
+          {!RM && i % 2 === 0 && <animate attributeName="opacity" values={i === 0 ? "1;.35;1" : ".4;1;.4"} dur={(3.4 + i * 0.6) + "s"} repeatCount="indefinite" />}
+        </circle>
+      ))}
+    </svg>
+  );
+}
 
 export default function Home() {
   const { user } = useAuth();
@@ -29,7 +76,10 @@ export default function Home() {
     let live = true;
     getDataset().then(({ raw: all }) => {
       if (!live) return;
-      const mine = user?.urn ? all.find((s) => Number(s.urn) === Number(user.urn)) : null;
+      /* find the school by URN, or by exact name when the account carries no URN */
+      const byUrn = user?.urn ? all.find((s) => Number(s.urn) === Number(user.urn)) : null;
+      const byName = !byUrn && user?.school ? all.find((s) => (s.name || "").trim().toLowerCase() === user.school.trim().toLowerCase()) : null;
+      const mine = byUrn || byName || null;
       setMe(mine || null);
       if (mine) {
         const peers = all.filter((s) => s.phase === mine.phase);
@@ -91,9 +141,14 @@ export default function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18, marginTop: 30 }}>
           {INSTRUMENTS.map((t, i) => (
             <Link key={t.to} to={t.to} className="asi-rise asi-lift" style={{ ...card, textDecoration: "none", display: "block", position: "relative", overflow: "hidden", "--asi-d": `${220 + i * 80}ms` }}>
-              <span style={{ position: "absolute", inset: "0 0 auto 0", height: 3, background: "linear-gradient(90deg,#6A0CA0,#C6A035)" }} />
-              <div style={{ fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginBottom: 8 }}>{t.verb}</div>
-              <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 21, color: "#221233", marginBottom: 8 }}>{t.name}</div>
+              <span style={{ position: "absolute", inset: "0 0 auto 0", height: 3, background: `linear-gradient(90deg,${t.accent},#C6A035)` }} />
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginBottom: 8 }}>{t.verb}</div>
+                  <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 21, color: "#221233" }}>{t.name}</div>
+                </div>
+                <Emblem kind={t.to} />
+              </div>
               <p style={{ fontSize: 13.5, color: "#6F6580", lineHeight: 1.55, margin: "0 0 16px" }}>{t.desc}</p>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "#4B0875" }}>{t.cta}</span>
             </Link>

@@ -652,3 +652,20 @@ nav.tabs{top:59px}
 .s48-chart{background:#FBFAF7;border-radius:12px;padding:10px 12px}
 .s48-chart-t{font-size:.78rem;margin-bottom:4px}
 .s48-chart-src{font-size:.68rem;opacity:.6;margin-top:2px}
+
+/* ── the arrival: the room settles, then the cards rise in order ── */
+@media (prefers-reduced-motion: no-preference) {
+  header.topbar { animation: lensSettle .55s cubic-bezier(.22,.9,.28,1) both; }
+  nav.tabs { animation: lensSettle .55s .07s cubic-bezier(.22,.9,.28,1) both; }
+  section.view.active .card { animation: lensRise .6s cubic-bezier(.22,.9,.28,1) both; }
+  section.view.active .card:nth-of-type(2) { animation-delay: .06s; }
+  section.view.active .card:nth-of-type(3) { animation-delay: .12s; }
+  section.view.active .card:nth-of-type(4) { animation-delay: .18s; }
+  section.view.active .card:nth-of-type(5) { animation-delay: .24s; }
+  section.view.active .card:nth-of-type(6) { animation-delay: .3s; }
+  section.view.active .card:nth-of-type(7) { animation-delay: .36s; }
+  section.view.active .card:nth-of-type(n+8) { animation-delay: .42s; }
+}
+@keyframes lensSettle { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes lensRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media print { header.topbar, nav.tabs, section.view.active .card { animation: none !important; opacity: 1 !important; transform: none !important; } }
