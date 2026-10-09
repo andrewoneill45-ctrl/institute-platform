@@ -134,7 +134,7 @@ function Constellation() {
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
                 ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle."
-                : "The year, ranked by performance and wound into a circle: strongest at the top, sweeping clockwise to the furthest behind, who sits on the rim just before the circle closes. Rings are the zones, colour is what pulls each child, and every serious child carries their name. Back, and the circle unrolls."}
+                : "Each ring is a zone: on track at the centre, serious at the rim where every child carries their name and reason. Within each ring the year sweeps clockwise from strongest to furthest behind; colour is what pulls each child. Back, and the circle unrolls."}
             </p>
           </>
           );
@@ -310,22 +310,18 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
       {mand && mandA > 0.01 && (
         <g opacity={mandA}>
           <circle cx={CX} cy={CY} r={R_RIM} fill="#ffffff" />
-          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(106,12,160,.14)" />
-          {mand.rings.map((rg) => (
-            <g key={rg.tone}>
-              <circle cx={CX} cy={CY} r={rg.r} fill="none" stroke={rg.tone === "watch" ? "rgba(198,160,53,.55)" : "rgba(179,38,30,.45)"} strokeDasharray="2 5" />
-              <text x={CX} y={CY - rg.r - 6} textAnchor="middle" fontSize="10" fill={rg.tone === "watch" ? "#8a6d1c" : "#B3261E"}>{rg.tone === "watch" ? "some concern beyond this ring" : "serious beyond this ring"}</text>
-            </g>
-          ))}
-          <g fontSize="10" textAnchor="middle">
-            <text x={CX + 78} y={CY - R_RIM - 10} fill="#6F6580">strongest in the year &#8594;</text>
-            <text x={CX - 90} y={CY - R_RIM - 10} fill="#B3261E">&#8592; furthest behind</text>
+          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(179,38,30,.3)" />
+          <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.45)" />
+          <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".4" />
+          <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
+          <g fontSize="10.5" textAnchor="middle">
+            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">on track · {mand.counts.calm}</text>
+            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">some concern · {mand.counts.watch}</text>
+            <text x={CX} y={CY - R_RIM - 10} fill="#B3261E">serious · {mand.counts.serious}, named</text>
           </g>
-          <circle cx={CX} cy={CY} r="52" fill="#F4EEFA" opacity=".7" />
-          <circle cx={CX} cy={CY} r="52" fill="none" stroke="rgba(106,12,160,.2)" />
           <g onClick={onBack} style={{ cursor: "pointer" }}>
-            <text x={CX} y={CY} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="19" fill="#221233">Year {yearShown}</text>
-            <text x={CX} y={CY + 16} textAnchor="middle" fontSize="9.5" fill="#6F6580">{mand.counts.n} in view</text>
+            <text x={CX} y={CY - 2} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown}</text>
+            <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{mand.counts.n} in view</text>
           </g>
           {mand.hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{mand.hidden} more on the rim without room for a label: their dots and cards still open</text>}
           {mand.labels.map((L) => (
