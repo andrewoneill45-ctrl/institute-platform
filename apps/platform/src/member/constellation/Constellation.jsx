@@ -3,8 +3,9 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, ingest, computeAll, findSignals, rowsToCsv, removeUpload, BANDS } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS } from "./model.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, coilPoint, easeInOut, pullOf } from "./sky.js";
+import { ensureMotionCss } from "../../lib/motion.jsx";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
 const DIR = { improving: "#2F7A39", steady: GOLD, declining: "#B3261E" };
@@ -38,6 +39,7 @@ function Constellation() {
   const [pick, setPick] = useState(null);
   const [group, setGroup] = useState(null);
 
+  useEffect(ensureMotionCss, []);
   const loadedFor = useRef(null);
   useEffect(() => {
     if (!user) return;
@@ -53,8 +55,10 @@ function Constellation() {
 
   const [upYear, setUpYear] = useState(null);
   const [upNote, setUpNote] = useState("");
+  const [slips, setSlips] = useState([]);
   async function onFiles(list) {
-    let s = state;
+    const add = [];
+    const errSlip = (fname, msg) => ({ id: "s" + Math.random().toString(36).slice(2, 9), fileName: fname, text: "", opts: {}, headers: [], autoMap: {}, autoKind: "unreadable", kind: "unreadable", fields: {}, fixes: {}, stats: { matched: 0, of: 0, held: 0, blank: 0, years: [] }, assumptions: [msg], remembered: null, replaces: false, fingerprint: null });
     for (const f of list) {
       if (/\.(xlsx|xls)$/i.test(f.name)) {
         await loadXLSX();
@@ -64,17 +68,31 @@ function Constellation() {
             const aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
             let hRow = 0;
             for (let i = 0; i < Math.min(5, aoa.length); i++) if (aoa[i].some((c) => /^upn$/i.test(String(c).trim()))) { hRow = i; break; }
-            if (aoa.length > hRow + 1) s = ingest(s, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear, note: upNote });
+            if (aoa.length > hRow + 1) add.push(inspect(state, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear, note: upNote }));
           }
         } catch (e) {
-          s = { ...s, ledger: [{ file: f.name, kind: "unreadable", matched: 0, of: 0, assumptions: ["could not open workbook: " + (e?.message || e)], date: new Date().toLocaleDateString("en-GB") }, ...s.ledger] };
+          add.push(errSlip(f.name, "could not open workbook: " + (e?.message || e)));
         }
-      } else s = ingest(s, f.name, await f.text(), { year: upYear, note: upNote });
+      } else add.push(inspect(state, f.name, await f.text(), { year: upYear, note: upNote }));
     }
-    setState({ ...s });
+    setSlips((cur) => [...cur, ...add]);
     setUpNote("");
     setUpYear(null);
   }
+  const fixSlip = (slip, fixes) => setSlips((cur) => cur.map((s) => (s.id === slip.id ? reinspect(state, s, fixes) : s)));
+  const commitOne = (slip) => {
+    const next = commitSlip(state, slip);
+    setState(next);
+    setSlips((cur) => cur.filter((s) => s.id !== slip.id).map((s) => (s.kind === "unreadable" ? s : reinspect(next, s, s.fixes))));
+  };
+  const discardOne = (slip) => setSlips((cur) => cur.filter((s) => s.id !== slip.id));
+  const commitAll = () => {
+    let st = state;
+    const ordered = [...slips].filter((s) => s.kind !== "unreadable").sort((a, b) => (a.kind === "roll" ? 0 : 1) - (b.kind === "roll" ? 0 : 1));
+    for (const sl of ordered) st = commitSlip(st, sl);
+    setState(st);
+    setSlips((cur) => cur.filter((s) => s.kind === "unreadable"));
+  };
   const resolve = (item, upn) => {
     const s = { ...state, review: state.review.filter((r) => r !== item) };
     if (upn) {
@@ -92,7 +110,7 @@ function Constellation() {
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#FBFAF7", color: INK, backgroundImage: "radial-gradient(760px 400px at 50% -70px, rgba(106,12,160,.07), transparent 70%)" }}>
       <div style={{ maxWidth: tab === "view" ? "none" : 1160, margin: "0 auto", padding: "26px 34px 70px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 14 }}>
+        <div className="asi-rise" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 14 }}>
           <div>
             <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 30, letterSpacing: "-.015em", margin: 0 }}>Constellation</h1>
             <p style={{ color: MUTED, fontSize: 13.5, margin: "4px 0 0" }}>Every child in view · {state.roll.length ? `${state.roll.length} pupils on roll` : "awaiting the roll"} · held on this device only, nothing leaves the browser</p>
@@ -111,7 +129,7 @@ function Constellation() {
           const scopePupils = pupils.filter((q) => (year == null || q.year === year) && inGroup(q));
           return (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap" }}>
+            <div className="asi-rise" style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap", "--asi-d": "60ms" }}>
               {year != null && (
                 <button onClick={() => { setYear(null); setPick(null); }} style={{ ...chip(true, DEEP), display: "inline-flex", alignItems: "center", gap: 6 }}>&#8249; Back to the school</button>
               )}
@@ -125,7 +143,7 @@ function Constellation() {
               </span>
             </div>
             <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", fsm: "FSM", eal: "EAL", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
-            <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+            <div className="asi-rise" style={{ display: "flex", gap: 20, alignItems: "flex-start", "--asi-d": "140ms" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
               </div>
@@ -142,12 +160,27 @@ function Constellation() {
 
         {/* ═══ UPLOADS ═══ */}
         {tab === "up" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20 }}>
+          <>
+          {slips.length > 0 && (
+            <div className="asi-rise" style={{ marginTop: 20, "--asi-d": "40ms" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={kick}>The reading slip &middot; nothing lands until you say so</div>
+                  <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 0" }}>{slips.length === 1 ? "One file waiting on your word" : `${slips.length} files waiting on your word`}</h3>
+                </div>
+                {slips.filter((s) => s.kind !== "unreadable").length > 1 && (
+                  <button onClick={commitAll} style={{ border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6A0CA0,#4B0875)", color: "#fff", borderRadius: 999, padding: "10px 20px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Read all {slips.filter((s) => s.kind !== "unreadable").length} in</button>
+                )}
+              </div>
+              {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} onFix={(fx) => fixSlip(sl, fx)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
+            </div>
+          )}
+          <div className="asi-rise" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20, "--asi-d": "110ms" }}>
             <div style={{ ...card }}>
               <div style={kick}>Upload anything</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 8px" }}>In-play: the children in the building now</h3>
               <p style={{ fontSize: 12.5, color: MUTED, margin: "0 0 6px" }}><b>This intake is for live pupils only.</b> Finished cohorts, historic results and inspection evidence belong in Lens's Section 48 vault; nothing moves between the two unless you move it.</p>
-              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year: each file only ever points at a pupil who already exists. CSV and Excel in this release, including year-group trackers with termly columns; Word and scans follow.</p>
+              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year. Every file is read back to you first as a <b>reading slip</b> &mdash; what the reader believes it is, which column means what, how many rows will land &mdash; and nothing is written until you say so. Correct a slip once and this device remembers the shape for next time. CSV and Excel in this release; Word and scans follow.</p>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "12px 0 2px" }}>
                 <span style={{ ...kick, marginRight: 4 }}>These files cover</span>
                 <button onClick={() => setUpYear(null)} style={chip(upYear == null, DEEP)}>Whole school</button>
@@ -160,7 +193,7 @@ function Constellation() {
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
-              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { if (window.confirm("Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone.")) { indexedDB.deleteDatabase("asi-constellation-" + sid); setState(blankState()); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>Start again on this device</button> · Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
+              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { if (window.confirm("Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)")) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); setState({ ...blankState(), dialects: d }); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>Start again on this device</button> · Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={kick}>Held for review · never guessed</div>
@@ -196,12 +229,13 @@ function Constellation() {
               )) : <p style={{ fontSize: 12.5, color: MUTED }}>Nothing yet. The ledger begins with your first file.</p>}
             </div>
           </div>
+          </>
         )}
 
         {/* ═══ INSIGHTS ═══ */}
         {tab === "ins" && (
           <div style={{ marginTop: 20 }}>
-            <div style={{ ...card, marginBottom: 18 }}>
+            <div className="asi-rise" style={{ ...card, marginBottom: 18, "--asi-d": "40ms" }}>
               <div style={kick}>The signal board</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 10px" }}>The groups an average would lose</h3>
               {signals.map((s, i) => (
@@ -214,7 +248,7 @@ function Constellation() {
                 </div>
               ))}
             </div>
-            {years.map((y) => <QuintileGrid key={y} year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} />)}
+            {years.map((y, i) => <div key={y} className="asi-rise" style={{ "--asi-d": `${130 + i * 70}ms` }}><QuintileGrid year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} /></div>)}
           </div>
         )}
       </div>
@@ -537,6 +571,73 @@ function Metrics({ pupils: all, label }) {
       {med((q) => q.progress) !== "\u2013" && <Fig v={med((q) => q.progress)} l="median learning" />}
       {med((q) => q.engagement) !== "\u2013" && <Fig v={med((q) => q.engagement)} l="median engagement" />}
       {pupils.some((q) => q.capped) && <Fig v={pupils.filter((q) => q.capped).length} l="held visible" c="#B3261E" />}
+    </div>
+  );
+}
+
+/* ── the reading slip card: the file read back before it lands ── */
+const sel = { border: "1px solid rgba(106,12,160,.25)", borderRadius: 8, padding: "5px 8px", fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#221233", maxWidth: 260 };
+function Slip({ slip, years, onFix, onCommit, onDiscard }) {
+  const unread = slip.kind === "unreadable";
+  const fx = slip.fixes || {};
+  const yr = fx.year ?? null;
+  const autoCol = (k) => (k === "att" ? (slip.autoMap.attPlus ?? slip.autoMap.att ?? null) : (slip.autoMap[k] ?? null));
+  const corrected = (k) => fx.fields && fx.fields[k] !== undefined && fx.fields[k] !== autoCol(k);
+  const chg = (k, v) => onFix({ ...fx, fields: { ...(fx.fields || {}), [k]: v } });
+  return (
+    <div style={{ ...card, marginTop: 12, padding: "18px 22px", borderLeft: `3px solid ${unread ? "#B3261E" : slip.remembered ? GOLD : PURPLE}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 600, fontSize: 14, wordBreak: "break-all" }}>{slip.fileName}</div>
+        {!unread && (
+          <div style={{ fontSize: 12.5, color: MUTED }}>
+            <b style={{ color: INK, fontFamily: "Fraunces, serif", fontSize: 17 }}>{slip.stats.matched}</b> of {slip.stats.of} rows will land
+            {slip.stats.blank ? ` · ${slip.stats.blank} blank set aside` : ""}{slip.stats.held ? ` · ${slip.stats.held} held` : ""}
+          </div>
+        )}
+      </div>
+      {slip.opts?.note && <div style={{ fontSize: 11.5, color: DEEP, fontStyle: "italic", margin: "4px 0 0" }}>&ldquo;{slip.opts.note}&rdquo;</div>}
+      {slip.remembered && <div style={{ fontSize: 12, color: "#8a6d1c", margin: "6px 0 0" }}>This shape is remembered from <b>{slip.remembered.file}</b> &mdash; the correction is already applied below.</div>}
+      {slip.replaces && <div style={{ fontSize: 12, color: MUTED, margin: "6px 0 0" }}>Replaces the earlier reading of this file. Nothing changes until you confirm.</div>}
+      {!unread && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "10px 0 2px", fontSize: 13 }}>
+          <span>The reader believes this is</span>
+          <select value={slip.kind} onChange={(e) => onFix({ ...fx, kind: e.target.value })} style={sel}>
+            {!KIND_CHOICES.includes(slip.kind) && <option value={slip.kind}>{KIND_LABELS[slip.kind] || slip.kind}</option>}
+            {KIND_CHOICES.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
+          </select>
+          <span>covering</span>
+          <select value={yr == null ? "" : yr} onChange={(e) => onFix({ ...fx, year: e.target.value === "" ? null : +e.target.value })} style={sel}>
+            <option value="">the whole school</option>
+            {(years.length ? years : [7, 8, 9, 10, 11]).map((y) => <option key={y} value={y}>Year {y} only</option>)}
+          </select>
+        </div>
+      )}
+      {!unread && Object.keys(slip.fields).length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "5px 12px", alignItems: "center", margin: "10px 0 2px", maxWidth: 560 }}>
+          {Object.entries(slip.fields).map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span style={{ fontSize: 12, color: MUTED }}>{FIELD_LABELS[k] || k}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <select value={v == null ? "" : v} onChange={(e) => chg(k, e.target.value === "" ? null : +e.target.value)} style={{ ...sel, color: v == null ? MUTED : INK }}>
+                  <option value="">&mdash; not in this file &mdash;</option>
+                  {v === -1 && <option value={-1}>surname + forename</option>}
+                  {slip.headers.map((h, i) => (h ? <option key={i} value={i}>{h}</option> : null))}
+                </select>
+                {corrected(k) && <span style={{ fontSize: 10, color: "#8a6d1c", fontWeight: 600, whiteSpace: "nowrap" }}>your word</span>}
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+      {slip.assumptions?.length > 0 && (
+        <div style={{ fontSize: 11.5, color: MUTED, margin: "8px 0 0", maxWidth: 680 }}>
+          {slip.assumptions.map((a, i) => <div key={i} style={{ margin: "2px 0" }}>&middot; {a}</div>)}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 10, marginTop: 13 }}>
+        {!unread && <button onClick={onCommit} style={{ border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6A0CA0,#4B0875)", color: "#fff", borderRadius: 999, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Read it in</button>}
+        <button onClick={onDiscard} style={{ border: "none", cursor: "pointer", background: "#fff", color: MUTED, borderRadius: 999, padding: "9px 16px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", boxShadow: shadow }}>Don&rsquo;t read this file</button>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ export default function MemberLayout() {
   const { user, signOut } = useAuth();  useEffect(() => { let stop = () => {}; if (user) syncDown(user).then(() => { stop = startSync(user); }); return () => stop(); }, [user?.id]);
 
   const p = useLocation().pathname;
-  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens");
+  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens") || p.includes("/constellation");
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <div className="member-top" style={{ flex: "none" }}><div className="container in">

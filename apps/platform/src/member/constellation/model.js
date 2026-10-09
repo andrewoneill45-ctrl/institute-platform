@@ -26,7 +26,7 @@ export async function saveState(schoolId, state) {
 export function rowsToCsv(aoa) {
   return aoa.map((r) => r.map((c) => '"' + String(c ?? "").replace(/"/g, '""') + '"').join(",")).join("\n");
 }
-export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {} });
+export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {}, dialects: {} });
 
 /* ── CSV: small, honest parser (quoted fields, CRLF) ── */
 export function parseCSV(text) {
@@ -112,8 +112,10 @@ export function matchPupil(row, map, roll, aliases = {}, scopeYear = null) {
   return null;
 }
 
-/* ── ingest: one file → roll rows or evidence facts + a ledger entry ── */
-export function ingest(state, fileName, text, opts = {}) {
+/* ── ingest: one file → roll rows or evidence facts + a ledger entry ──
+   `forced` is the reading slip's word: {kind, map, notes} overrides what the
+   reader would have decided, and the notes land in the ledger as provenance. */
+export function ingest(state, fileName, text, opts = {}, forced = null) {
   const prev = state.ledger.find((l) => l.file === fileName);
   if (prev) state = prev.kind === "roll" ? { ...state, ledger: state.ledger.filter((l) => l !== prev) } : removeUpload(state, prev);
   const scopeYear = opts.year ?? null;
@@ -121,6 +123,8 @@ export function ingest(state, fileName, text, opts = {}) {
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0], rows.slice(1));
+  if (forced && forced.map) Object.assign(map, forced.map);
+  if (forced && forced.notes && forced.notes.length) assumptions.push(...forced.notes);
   if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
   const idCols = new Set(Object.values(map));
   const numericish = (i) => rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[i]).replace(/[%\s]/g, "")))).length >= 3;
@@ -131,9 +135,9 @@ export function ingest(state, fileName, text, opts = {}) {
     const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !wideId.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
   }
-  let kind = classify(map);
-  if (kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
-  if (/attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "assessment" || kind === "unknown")) {
+  let kind = (forced && forced.kind) || classify(map);
+  if (!(forced && forced.kind) && kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
+  if (!(forced && forced.kind) && /attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "assessment" || kind === "unknown")) {
     const canAtt = map.att != null || map.attPlus != null || (map.sessions != null && map.absent != null);
     if (kind !== "unknown") kind = canAtt ? "attendance" : "unknown";
     assumptions.push(kind === "attendance"
@@ -242,6 +246,96 @@ export function removeUpload(state, led) {
   const ledger = state.ledger.filter((l) => l !== led);
   const roll = led.kind === "roll" ? [] : state.roll;
   return { ...state, roll, evidence, review, ledger };
+}
+
+/* ── the reading slip: every file is read back before a single number lands ──
+   inspect() runs the whole reader as a rehearsal — classification, column map,
+   matching, counts, every assumption — against a throwaway copy of the state,
+   and returns a slip instead of committing. The user corrects the slip;
+   commitSlip() writes it in through the self-same ingest path; and a corrected
+   shape is remembered on this device by its header fingerprint, so the next
+   export in that dialect arrives already understood. */
+export const KIND_LABELS = { roll: "the school roll", attendance: "attendance", tracker: "a tracker · termly assessments", assessment: "assessments", engagement: "conduct & homework", enrichment: "enrichment", intervention: "interventions", unknown: "not readable yet", unreadable: "unreadable" };
+export const KIND_CHOICES = ["roll", "attendance", "tracker", "assessment", "engagement", "enrichment", "intervention"];
+export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
+export const FIELDS_BY_KIND = {
+  roll: ["upn", "name", "year", "reg", "dob", "prior", "gender", "ppg", "fsm", "eal", "sen"],
+  attendance: ["upn", "name", "att", "unauth"],
+  tracker: ["upn", "name", "year", "prior"],
+  assessment: ["upn", "name", "subject", "score", "date"],
+  engagement: ["upn", "name", "praise", "sanction", "homework"],
+  enrichment: ["upn", "name"], intervention: ["upn", "name"],
+  unknown: ["upn", "name", "att", "unauth", "score"], unreadable: [],
+};
+export function fingerprintOf(headers) {
+  const s = headers.map((h) => String(h || "").trim().toLowerCase().replace(/\s+/g, " ")).join("␟");
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return "d" + h.toString(36) + "-" + headers.length;
+}
+const displayCol = (map, k) => (k === "att" ? (map.attPlus ?? map.att ?? null) : (map[k] ?? null));
+function forcedFrom(slip, fixes = {}) {
+  const f = { notes: [] };
+  if (fixes.kind && fixes.kind !== slip.autoKind) { f.kind = fixes.kind; f.notes.push(`read as ${KIND_LABELS[fixes.kind] || fixes.kind} on your word`); }
+  const m = {};
+  for (const [k, idx] of Object.entries(fixes.fields || {})) {
+    if (idx === displayCol(slip.autoMap, k)) continue; /* back to what the reader saw: no force */
+    if (k === "att") { m.att = idx; m.attPlus = idx; } else m[k] = idx;
+    f.notes.push(idx == null ? `${FIELD_LABELS[k] || k}: set aside on your word` : `${FIELD_LABELS[k] || k} read from “${slip.headers[idx] ?? "column " + (idx + 1)}” on your word`);
+  }
+  if (Object.keys(m).length) f.map = m;
+  if (slip.remembered && (f.map || f.kind)) f.notes.unshift(`this file’s shape was remembered from ${slip.remembered.file}`);
+  return f.kind || f.map ? f : null;
+}
+export function reinspect(state, slip, fixes = {}) {
+  const forced = forcedFrom(slip, fixes);
+  const year = fixes.year !== undefined ? fixes.year : slip.opts.year ?? null;
+  const dry = ingest(JSON.parse(JSON.stringify(state)), slip.fileName, slip.text, { ...slip.opts, year }, forced);
+  const led = dry.ledger[0] || {};
+  const kind = led.kind || "unreadable";
+  const fields = {};
+  (FIELDS_BY_KIND[kind] || FIELDS_BY_KIND.unknown).forEach((k) => {
+    fields[k] = fixes.fields && fixes.fields[k] !== undefined ? fixes.fields[k] : displayCol(slip.autoMap, k);
+  });
+  return { ...slip, kind, fields, fixes: { ...fixes, year }, stats: { matched: led.matched || 0, of: led.of || 0, held: led.held || 0, blank: led.blank || 0, years: led.years || [] }, assumptions: led.assumptions || [] };
+}
+export function inspect(state, fileName, text, opts = {}) {
+  const rows = parseCSV(text);
+  const id = "s" + Math.random().toString(36).slice(2, 9);
+  const headers = (rows[0] || []).map((h) => String(h || "").trim());
+  if (rows.length < 2) return { id, fileName, text, opts, headers, autoMap: {}, autoKind: "unreadable", kind: "unreadable", fields: {}, fixes: {}, stats: { matched: 0, of: 0, held: 0, blank: 0, years: [] }, assumptions: ["no rows found"], remembered: null, replaces: false, fingerprint: null };
+  const { map } = readHeaders(rows[0], rows.slice(1));
+  const fp = fingerprintOf(headers);
+  const mem = (state.dialects || {})[fp] || null;
+  const slip0 = { id, fileName, text, opts, headers, autoMap: map, autoKind: null, fingerprint: fp,
+    remembered: mem ? { file: mem.file, when: mem.when } : null,
+    replaces: state.ledger.some((l) => l.file === fileName) };
+  const auto = reinspect(state, slip0, {});
+  auto.autoKind = auto.kind;
+  if (!mem) return auto;
+  const fixes = {};
+  if (mem.kind && mem.kind !== auto.kind) fixes.kind = mem.kind;
+  const ff = {};
+  for (const [k, hname] of Object.entries(mem.fields || {})) {
+    const i = headers.findIndex((h) => h.toLowerCase() === String(hname).toLowerCase());
+    if (i >= 0 && i !== displayCol(map, k)) ff[k] = i;
+  }
+  if (Object.keys(ff).length) fixes.fields = ff;
+  if (!fixes.kind && !fixes.fields) return auto;
+  return { ...reinspect(state, { ...slip0, autoKind: auto.kind }, fixes), autoKind: auto.kind };
+}
+export function commitSlip(state, slip, fixes) {
+  const fx = fixes || slip.fixes || {};
+  const forced = forcedFrom(slip, fx);
+  const year = fx.year !== undefined ? fx.year : slip.opts.year ?? null;
+  const next = ingest(state, slip.fileName, slip.text, { ...slip.opts, year }, forced);
+  const dialects = { ...(state.dialects || {}) };
+  if (forced && slip.fingerprint) {
+    const byName = {};
+    for (const [k, idx] of Object.entries(fx.fields || {})) if (idx != null && idx >= 0 && idx !== displayCol(slip.autoMap, k)) byName[k] = slip.headers[idx];
+    const old = (state.dialects || {})[slip.fingerprint];
+    dialects[slip.fingerprint] = { kind: (next.ledger[0] && next.ledger[0].kind) || slip.kind, fields: { ...((old && old.fields) || {}), ...byName }, file: slip.fileName, when: today(), cols: slip.headers.length };
+  }
+  return { ...next, dialects };
 }
 
 /* ── the measures ── */
