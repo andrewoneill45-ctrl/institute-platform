@@ -286,10 +286,10 @@ const App = () => {
     if (REDUCE) { setDotsIn(true); return; }
     const map = mapRef.current && mapRef.current.getMap ? mapRef.current.getMap() : null;
     if (map) {
-      map.jumpTo({ zoom: 5.55, center: [-1.5, 53.2] });
-      map.easeTo({ zoom: 6, center: [-1.5, 52.8], duration: 1700, easing: (t) => 1 - Math.pow(1 - t, 3) });
+      map.jumpTo({ zoom: 5.3, center: [-1.5, 53.6] });
+      map.easeTo({ zoom: 6, center: [-1.5, 52.8], duration: 2700, easing: (t) => 1 - Math.pow(1 - t, 3) });
     }
-    setTimeout(() => setDotsIn(true), 150);
+    setTimeout(() => setDotsIn(true), 400);
   }, []);
 
   const handleMouseLeave = useCallback(() => { setHoveredSchool(null); setHoverPos(null); }, []);
@@ -309,7 +309,7 @@ const App = () => {
       <div style={{ textAlign: 'center' }}>
         <svg viewBox="0 0 100 100" width="44" height="44" style={{ marginBottom: 12 }} aria-hidden="true">
           <path d="M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z" fill="none" stroke="#6A0CA0" strokeWidth="7" strokeLinecap="round" strokeDasharray="300" strokeDashoffset="300">
-            <animate attributeName="stroke-dashoffset" from="300" to="0" dur="1.1s" fill="freeze" />
+            <animate attributeName="stroke-dashoffset" from="300" to="0" dur="1.8s" fill="freeze" />
           </path>
         </svg>
         <div style={{ fontFamily: 'Fraunces, serif', fontWeight: 600, fontSize: '2.1rem', letterSpacing: '-0.015em', color: '#221233', marginBottom: 6 }}>Atlas</div>
@@ -327,7 +327,7 @@ const App = () => {
           <Layer id="school-dots" type="circle" paint={{
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 8, 3, 10, 5, 14, 8],
             'circle-color': ['get', 'color'], 'circle-opacity': dotsIn ? 0.85 : 0,
-            'circle-opacity-transition': { duration: REDUCE ? 0 : 1100 },
+            'circle-opacity-transition': { duration: REDUCE ? 0 : 2000 },
             'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 0, 10, 0.5, 14, 1],
             'circle-stroke-color': 'rgba(255,255,255,0.6)',
           }} />

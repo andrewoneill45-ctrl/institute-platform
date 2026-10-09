@@ -114,7 +114,7 @@ export default function Home() {
             {greet}, {user?.school || "colleague"}.
           </h1>
         </Rise>
-        <Rise delay={90}>
+        <Rise delay={200}>
           <p style={{ color: "#6F6580", fontSize: 15, maxWidth: 560, margin: "12px 0 0", lineHeight: 1.55 }}>
             {me === undefined ? "Reading your school from the Institute dataset…"
               : me ? <>Your numbers below are read live from the same dataset every instrument shares{me.la ? <>, alongside every school in {me.la}</> : null}: joined, not judged.</>
@@ -125,7 +125,7 @@ export default function Home() {
         {me && stats?.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, margin: "28px 0 8px" }}>
             {stats.map(([label, val, delta], i) => (
-              <div key={label} className="asi-rise" style={{ ...card, padding: "18px 22px", "--asi-d": `${140 + i * 70}ms` }}>
+              <div key={label} className="asi-rise" style={{ ...card, padding: "18px 22px", "--asi-d": `${340 + i * 150}ms` }}>
                 <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 34, letterSpacing: "-.02em", color: "#221233", fontVariantNumeric: "tabular-nums" }}>{val}</div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#221233", marginTop: 4 }}>{label}</div>
                 {delta != null && (
@@ -140,7 +140,7 @@ export default function Home() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18, marginTop: 30 }}>
           {INSTRUMENTS.map((t, i) => (
-            <Link key={t.to} to={t.to} className="asi-rise asi-lift" style={{ ...card, textDecoration: "none", display: "block", position: "relative", overflow: "hidden", "--asi-d": `${220 + i * 80}ms` }}>
+            <Link key={t.to} to={t.to} className="asi-rise asi-lift" style={{ ...card, textDecoration: "none", display: "block", position: "relative", overflow: "hidden", "--asi-d": `${560 + i * 180}ms` }}>
               <span style={{ position: "absolute", inset: "0 0 auto 0", height: 3, background: `linear-gradient(90deg,${t.accent},#C6A035)` }} />
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
                 <div>
@@ -155,7 +155,7 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="asi-fade" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 40, color: "#6F6580", fontSize: 12.5, "--asi-d": "650ms" }}>
+        <div className="asi-fade" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 40, color: "#6F6580", fontSize: 12.5, "--asi-d": "1700ms" }}>
           <svg viewBox="0 0 100 100" width="16" height="16"><path d={Q} fill="none" stroke="#6A0CA0" strokeWidth="8" /></svg>
           The covenant holds in every room: your data is never published, never ranked, never shared.
         </div>

@@ -129,7 +129,7 @@ function Constellation() {
           const scopePupils = pupils.filter((q) => (year == null || q.year === year) && inGroup(q));
           return (
           <>
-            <div className="asi-rise" style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap", "--asi-d": "60ms" }}>
+            <div className="asi-rise" style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 10px", flexWrap: "wrap", "--asi-d": "140ms" }}>
               {year != null && (
                 <button onClick={() => { setYear(null); setPick(null); }} style={{ ...chip(true, DEEP), display: "inline-flex", alignItems: "center", gap: 6 }}>&#8249; Back to the school</button>
               )}
@@ -143,7 +143,7 @@ function Constellation() {
               </span>
             </div>
             <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", fsm: "FSM", eal: "EAL", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
-            <div className="asi-rise" style={{ display: "flex", gap: 20, alignItems: "flex-start", "--asi-d": "140ms" }}>
+            <div className="asi-rise" style={{ display: "flex", gap: 20, alignItems: "flex-start", "--asi-d": "320ms" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
               </div>
@@ -162,7 +162,7 @@ function Constellation() {
         {tab === "up" && (
           <>
           {slips.length > 0 && (
-            <div className="asi-rise" style={{ marginTop: 20, "--asi-d": "40ms" }}>
+            <div className="asi-rise" style={{ marginTop: 20, "--asi-d": "100ms" }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <div>
                   <div style={kick}>The reading slip &middot; nothing lands until you say so</div>
@@ -175,7 +175,7 @@ function Constellation() {
               {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} onFix={(fx) => fixSlip(sl, fx)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
             </div>
           )}
-          <div className="asi-rise" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20, "--asi-d": "110ms" }}>
+          <div className="asi-rise" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20, "--asi-d": "280ms" }}>
             <div style={{ ...card }}>
               <div style={kick}>Upload anything</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 8px" }}>In-play: the children in the building now</h3>
@@ -235,7 +235,7 @@ function Constellation() {
         {/* ═══ INSIGHTS ═══ */}
         {tab === "ins" && (
           <div style={{ marginTop: 20 }}>
-            <div className="asi-rise" style={{ ...card, marginBottom: 18, "--asi-d": "40ms" }}>
+            <div className="asi-rise" style={{ ...card, marginBottom: 18, "--asi-d": "100ms" }}>
               <div style={kick}>The signal board</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 10px" }}>The groups an average would lose</h3>
               {signals.map((s, i) => (
@@ -248,7 +248,7 @@ function Constellation() {
                 </div>
               ))}
             </div>
-            {years.map((y, i) => <div key={y} className="asi-rise" style={{ "--asi-d": `${130 + i * 70}ms` }}><QuintileGrid year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} /></div>)}
+            {years.map((y, i) => <div key={y} className="asi-rise" style={{ "--asi-d": `${260 + i * 150}ms` }}><QuintileGrid year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} /></div>)}
           </div>
         )}
       </div>

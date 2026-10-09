@@ -4,7 +4,8 @@
    Honours prefers-reduced-motion throughout: everything lands instantly there. */
 import React, { useEffect } from "react";
 
-export const MOTION = { arrive: 700, settle: 420, coil: 1550, ease: "cubic-bezier(.22,.9,.28,1)" };
+/* timed to Constellation's coil: arrivals are unhurried and travel far enough to be felt */
+export const MOTION = { arrive: 1250, settle: 620, coil: 1550, ease: "cubic-bezier(.22,.9,.28,1)" };
 export const QUATREFOIL = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
 
 let injected = false;
@@ -15,14 +16,14 @@ export function ensureMotionCss() {
   s.id = "asi-motion";
   s.textContent = `
 @media (prefers-reduced-motion: no-preference) {
-  .asi-rise { opacity: 0; transform: translateY(14px); animation: asiRise ${MOTION.arrive}ms ${MOTION.ease} forwards; animation-delay: var(--asi-d, 0ms); }
+  .asi-rise { opacity: 0; transform: translateY(26px); animation: asiRise ${MOTION.arrive}ms ${MOTION.ease} forwards; animation-delay: var(--asi-d, 0ms); }
   @keyframes asiRise { to { opacity: 1; transform: none; } }
-  .asi-fade { opacity: 0; animation: asiFade 900ms ease forwards; animation-delay: var(--asi-d, 0ms); }
+  .asi-fade { opacity: 0; animation: asiFade 1500ms ease forwards; animation-delay: var(--asi-d, 0ms); }
   @keyframes asiFade { to { opacity: 1; } }
-  .asi-draw { stroke-dasharray: 300; stroke-dashoffset: 300; animation: asiDraw 1100ms ${MOTION.ease} forwards; }
+  .asi-draw { stroke-dasharray: 300; stroke-dashoffset: 300; animation: asiDraw 1700ms ${MOTION.ease} forwards; }
   @keyframes asiDraw { to { stroke-dashoffset: 0; } }
   .asi-lift { transition: transform ${MOTION.settle}ms ${MOTION.ease}, box-shadow ${MOTION.settle}ms ${MOTION.ease}; }
-  .asi-lift:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(34,18,51,.05), 0 26px 64px rgba(34,18,51,.13); }
+  .asi-lift:hover { transform: translateY(-6px); box-shadow: 0 3px 6px rgba(34,18,51,.06), 0 34px 80px rgba(34,18,51,.17); }
   @keyframes asiSpin { to { transform: rotate(360deg); } }
 }`;
   document.head.appendChild(s);
