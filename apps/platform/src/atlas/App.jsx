@@ -12,6 +12,7 @@ import { parseSearchQuery, applyFilters } from './utils/searchParser';
 import { getDataset, datasetProgress } from '../lib/dataset.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.your_token_here';
+const REDUCE = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MAP_STYLES = { light: 'mapbox://styles/mapbox/light-v11', dark: 'mapbox://styles/mapbox/dark-v11', satellite: 'mapbox://styles/mapbox/satellite-streets-v12' };
 const PHASE_COLORS = { Primary: '#2672c0', Secondary: '#b91c4a', Special: '#5b3fa0', Nursery: '#64748b', 'All-through': '#0d7a42', '16 plus': '#64748b' };
 
@@ -133,6 +134,7 @@ const App = () => {
   const mapRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [loadNote, setLoadNote] = useState('');
+  const [dotsIn, setDotsIn] = useState(false);
   const [schoolsData, setSchoolsData] = useState([]);
   const [schoolsByUrn, setSchoolsByUrn] = useState({});
   const [showLanding, setShowLanding] = useState(false);
@@ -257,6 +259,7 @@ const App = () => {
   const handleMapClick = useCallback((event) => {
     if (!mapRef.current) return;
     const map = mapRef.current.getMap();
+    if (!map.getLayer('school-dots')) return; /* style still arriving */
     const features = map.queryRenderedFeatures(event.point, { layers: ['school-dots'] });
     if (features && features.length > 0) {
       const urn = String(features[0].properties.urn);
@@ -268,6 +271,7 @@ const App = () => {
   const handleMouseMove = useCallback((event) => {
     if (!mapRef.current) return;
     const map = mapRef.current.getMap();
+    if (!map.getLayer('school-dots')) return; /* style still arriving */
     const features = map.queryRenderedFeatures(event.point, { layers: ['school-dots'] });
     if (features && features.length > 0) {
       const urn = String(features[0].properties.urn);
@@ -276,6 +280,17 @@ const App = () => {
     }
     setHoveredSchool(null); setHoverPos(null); map.getCanvas().style.cursor = '';
   }, [schoolsByUrn]);
+
+  /* the arrival: England breathes into place and the dots bloom, once per visit */
+  const handleMapLoad = useCallback(() => {
+    if (REDUCE) { setDotsIn(true); return; }
+    const map = mapRef.current && mapRef.current.getMap ? mapRef.current.getMap() : null;
+    if (map) {
+      map.jumpTo({ zoom: 5.55, center: [-1.5, 53.2] });
+      map.easeTo({ zoom: 6, center: [-1.5, 52.8], duration: 1700, easing: (t) => 1 - Math.pow(1 - t, 3) });
+    }
+    setTimeout(() => setDotsIn(true), 150);
+  }, []);
 
   const handleMouseLeave = useCallback(() => { setHoveredSchool(null); setHoverPos(null); }, []);
   const handleAddCompare = useCallback((school) => { setCompareList(prev => { if (prev.find(s => s.urn === school.urn)) return prev; if (prev.length >= 3) return [...prev.slice(1), school]; return [...prev, school]; }); setSelectedSchool(null); }, []);
@@ -307,11 +322,12 @@ const App = () => {
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <Map ref={mapRef} initialViewState={{ longitude: -1.5, latitude: 52.8, zoom: 6 }}
         style={{ width: '100%', height: '100%' }} mapStyle={MAP_STYLES[mapStyle]} mapboxAccessToken={MAPBOX_TOKEN}
-        onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} onClick={handleMapClick}>
+        onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} onClick={handleMapClick} onLoad={handleMapLoad}>
         <Source id="schools" type="geojson" data={geojson}>
           <Layer id="school-dots" type="circle" paint={{
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 8, 3, 10, 5, 14, 8],
-            'circle-color': ['get', 'color'], 'circle-opacity': 0.85,
+            'circle-color': ['get', 'color'], 'circle-opacity': dotsIn ? 0.85 : 0,
+            'circle-opacity-transition': { duration: REDUCE ? 0 : 1100 },
             'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 0, 10, 0.5, 14, 1],
             'circle-stroke-color': 'rgba(255,255,255,0.6)',
           }} />
