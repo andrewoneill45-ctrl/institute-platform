@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth.jsx";
 import { Rise, ensureMotionCss } from "../lib/motion.jsx";
+import { getDataset } from "../lib/dataset.js";
 
 const Q = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
 const fmt = (v, d = 1) => (v == null ? "–" : Number(v).toFixed(d));
@@ -26,7 +27,7 @@ export default function Home() {
 
   useEffect(() => {
     let live = true;
-    fetch("/data/schools.json").then((r) => r.json()).then((all) => {
+    getDataset().then(({ raw: all }) => {
       if (!live) return;
       const mine = user?.urn ? all.find((s) => Number(s.urn) === Number(user.urn)) : null;
       setMe(mine || null);

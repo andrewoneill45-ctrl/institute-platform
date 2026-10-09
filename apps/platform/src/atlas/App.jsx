@@ -9,6 +9,7 @@ import ComparePanel from './components/ComparePanel';
 import SimilarSchoolsPanel from './components/SimilarSchoolsPanel';
 import StatsPanel from './components/StatsPanel';
 import { parseSearchQuery, applyFilters } from './utils/searchParser';
+import { getDataset, datasetProgress } from '../lib/dataset.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.your_token_here';
 const MAP_STYLES = { light: 'mapbox://styles/mapbox/light-v11', dark: 'mapbox://styles/mapbox/dark-v11', satellite: 'mapbox://styles/mapbox/satellite-streets-v12' };
@@ -131,6 +132,7 @@ const HM = ({ label, value, big, color }) => (
 const App = () => {
   const mapRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [loadNote, setLoadNote] = useState('');
   const [schoolsData, setSchoolsData] = useState([]);
   const [schoolsByUrn, setSchoolsByUrn] = useState({});
   const [showLanding, setShowLanding] = useState(false);
@@ -146,10 +148,11 @@ const App = () => {
   const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/data/schools.json').then(r => r.json()),
-      fetch('/data/ofsted.json').then(r => r.json()).catch(() => ({})),
-    ]).then(([raw, ofsted]) => {
+    const off = datasetProgress(({ received, phase }) => {
+      setLoadNote(phase === "parsing" ? "reading " + Math.round(received / 1048576) + " MB of England…"
+        : phase === "downloading" && received ? (received / 1048576).toFixed(1) + " MB of the dataset received…" : "");
+    });
+    getDataset().then(({ raw, ofsted }) => {
       initData(raw);
       // Merge Ofsted sub-judgements by URN
       const GRADE = { 1: 'Outstanding', 2: 'Good', 3: 'Requires improvement', 4: 'Inadequate', 0: 'Not judged' };
@@ -171,7 +174,11 @@ const App = () => {
       setSchoolsData(_schoolsData);
       setSchoolsByUrn(_schoolsByUrn);
       setLoading(false);
-    }).catch(err => { console.error('Failed to load data:', err); setLoading(false); });
+    }).catch(err => {
+      console.error('Failed to load data:', err);
+      setLoadNote('The dataset could not be loaded (' + (err && err.message ? err.message : err) + '). Check the connection and reload to try again.');
+    });
+    return off;
   }, []);
 
   const filtered = useMemo(() => activeFilters ? applyFilters(schoolsData, activeFilters) : schoolsData, [activeFilters, schoolsData]);
@@ -291,7 +298,7 @@ const App = () => {
           </path>
         </svg>
         <div style={{ fontFamily: 'Fraunces, serif', fontWeight: 600, fontSize: '2.1rem', letterSpacing: '-0.015em', color: '#221233', marginBottom: 6 }}>Atlas</div>
-        <div style={{ fontSize: '0.9rem', color: '#6F6580' }}>Every school in England, loading&hellip;</div>
+        <div style={{ fontSize: '0.9rem', color: '#6F6580', maxWidth: 420, margin: '0 auto' }}>{loadNote || 'Every school in England, loading…'}</div>
       </div>
     </div>
   );
