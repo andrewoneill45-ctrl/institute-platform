@@ -134,7 +134,7 @@ function Constellation() {
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
                 ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle."
-                : "The rings are the strip's zones, coiled: distance from the centre means what it always meant. The slices are the tutor groups; colour is what pulls each child; every serious child carries their name on the rim. Back, and the circle unrolls."}
+                : "The year, ranked by performance and wound into a circle: strongest at the top, sweeping clockwise to the furthest behind, who sits on the rim just before the circle closes. Rings are the zones, colour is what pulls each child, and every serious child carries their name. Back, and the circle unrolls."}
             </p>
           </>
           );
@@ -314,13 +314,13 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
           <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.42)" />
           <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".45" />
           <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
-          {mand.sectorMeta.map((s) => (
-            <g key={s.reg}>
-              <line x1={CX + 40 * Math.cos(s.a)} y1={CY + 40 * Math.sin(s.a)} x2={CX + (R_RIM + 6) * Math.cos(s.a)} y2={CY + (R_RIM + 6) * Math.sin(s.a)} stroke="rgba(106,12,160,.12)" />
-              <text x={s.lx} y={s.ly} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="15" fill="#221233">{s.reg}</text>
-              <text x={s.lx} y={s.ly + 15} textAnchor="middle" fontSize="10" fill={s.serious >= 4 ? "#B3261E" : "#6F6580"}>{s.serious} serious</text>
-            </g>
-          ))}
+          <g fontSize="10" textAnchor="middle">
+            <text x={CX + 74} y={CY - R_RIM - 10} fill="#6F6580">strongest in the year &#8594;</text>
+            <text x={CX - 86} y={CY - R_RIM - 10} fill="#B3261E">&#8592; furthest behind</text>
+            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">on track</text>
+            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">some concern</text>
+            <text x={CX} y={CY - R_RIM + 16} fill="#B3261E">serious</text>
+          </g>
           <g onClick={onBack} style={{ cursor: "pointer" }}>
             <text x={CX} y={CY - 14} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="25" fill="#221233">Year {yearShown}</text>
             <text x={CX} y={CY + 6} textAnchor="middle" fontSize="11.5" fill="#6F6580">{mand.counts.n} with evidence · {mand.counts.calm} on track</text>
