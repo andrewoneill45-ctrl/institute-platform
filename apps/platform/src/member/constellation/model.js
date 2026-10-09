@@ -114,6 +114,8 @@ export function matchPupil(row, map, roll, aliases = {}, scopeYear = null) {
 
 /* ── ingest: one file → roll rows or evidence facts + a ledger entry ── */
 export function ingest(state, fileName, text, opts = {}) {
+  const prev = state.ledger.find((l) => l.file === fileName);
+  if (prev) state = prev.kind === "roll" ? { ...state, ledger: state.ledger.filter((l) => l !== prev) } : removeUpload(state, prev);
   const scopeYear = opts.year ?? null;
   const note = (opts.note || "").trim().slice(0, 240) || null;
   const rows = parseCSV(text);
@@ -160,6 +162,11 @@ export function ingest(state, fileName, text, opts = {}) {
         gender: map.gender != null ? (/^(m|b)/i.test((r[map.gender] || "").trim()) ? "M" : /^(f|g)/i.test((r[map.gender] || "").trim()) ? "F" : null) : null,
       };
       p._nm = normName(p.name);
+      /* a column this file lacks, or a blank cell, can never erase what is known */
+      [["dob", map.dob], ["reg", map.reg], ["prior", map.prior], ["gender", map.gender], ["year", map.year]].forEach(([k, col]) => {
+        if (col == null || p[k] == null || p[k] === "") delete p[k];
+      });
+      [["ppg", map.ppg], ["fsm", map.fsm], ["eal", map.eal], ["sen", map.sen]].forEach(([k, col]) => { if (col == null) delete p[k]; });
       const i = roll.findIndex((x) => x.upn === upn);
       if (i >= 0) roll[i] = { ...roll[i], ...p }; else roll.push(p);
       led.matched++;
@@ -192,7 +199,7 @@ export function ingest(state, fileName, text, opts = {}) {
         const subj = wc.single ? subjOf(wc.h, subject) : subjOf(wc.h, subject);
         evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when });
       });
-      if (map.prior != null) { const pr = num(r[map.prior]); const p = roll.find((x) => x.upn === m.upn); if (pr != null && p && p.prior == null) { p.prior = pr; priorFilled++; } }
+      if (map.prior != null) { const pr = num(r[map.prior]); if (pr != null) { evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "prior", score: pr }); const p = roll.find((x) => x.upn === m.upn); if (p && p.prior == null) { p.prior = pr; priorFilled++; } } }
     });
     const winSet = [...new Set(windowCols.map((wc) => wc.single ? subject : (winOf(wc.h) || wc.h)))];
     led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
@@ -244,11 +251,14 @@ export const BANDS = ["On track", "Some concern", "Serious concern"];
 const bandOf = (s) => (s == null ? null : s >= 62 ? 0 : s >= 40 ? 1 : 2);
 
 export function computeAll(state) {
+  const priorEv = {};
+  state.evidence.forEach((e) => { if (e.t === "prior" && e.score != null) priorEv[e.upn] = e.score; });
+  const priorOf = (p) => (p.prior != null ? p.prior : priorEv[p.upn] ?? null);
   const byYear = {};
   state.roll.forEach((p) => { (byYear[p.year] = byYear[p.year] || []).push(p); });
   const out = {};
   for (const [year, cohort] of Object.entries(byYear)) {
-    const priorSorted = cohort.map((p) => p.prior).filter((v) => v != null).sort((a, b) => a - b);
+    const priorSorted = cohort.map(priorOf).filter((v) => v != null).sort((a, b) => a - b);
     const small = cohort.length < 30;
     /* assessment windows: within-cohort percentile per (subject, when), averaged per pupil */
     const ev = state.evidence;
@@ -266,11 +276,11 @@ export function computeAll(state) {
         return ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null;
       });
       const curP = [...perWin].reverse().find((x) => x != null) ?? null;
-      const priorP = pctile(p.prior, priorSorted);
+      const priorP = pctile(priorOf(p), priorSorted);
       const lastTwo = perWin.filter((x) => x != null).slice(-2);
       const dirP = lastTwo.length === 2 ? lastTwo[1] - lastTwo[0] : 0; /* one point never makes a direction */
       const gap = curP != null && priorP != null ? curP - priorP : null;
-      const progress = curP == null ? null : clamp(50 + 0.6 * (gap ?? 0) + 0.4 * dirP * (small ? 0.6 : 1));
+      const progress = curP == null ? null : clamp(66 + 0.55 * (gap ?? 0) + 0.35 * dirP * (small ? 0.6 : 1));
       /* attendance: level vs own prior 50 / trend 30 / pattern 20 */
       const att = mine.filter((e) => e.t === "attendance" && e.pct != null);
       const cur = att.filter((e) => e.when !== "prior");
@@ -279,7 +289,7 @@ export function computeAll(state) {
       const expected = priorAtt ?? 95;
       const trend = cur.length >= 2 ? cur[cur.length - 1].pct - cur[0].pct : 0;
       const unauthShare = cur.length && cur[cur.length - 1].unauth != null && nowAtt < 100 ? cur[cur.length - 1].unauth : 0;
-      const attendance = nowAtt == null ? null : clamp(0.5 * (50 + 6 * (nowAtt - expected)) + 0.3 * (50 + 8 * trend) + 0.2 * (50 - 4 * unauthShare) + (nowAtt >= 96 ? 12 : 0));
+      const attendance = nowAtt == null ? null : clamp(0.5 * (66 + 5 * (nowAtt - expected)) + 0.3 * (66 + 7 * trend) + 0.2 * (66 - 4 * unauthShare) + (nowAtt >= 96 ? 6 : 0));
       /* engagement: attendance is its loudest evidence; conduct and participation sit beside it */
       const eng = mine.filter((e) => e.t === "engagement");
       const praise = sum(eng, "praise"), sanction = sum(eng, "sanction"), hw = avg(eng, "homework");

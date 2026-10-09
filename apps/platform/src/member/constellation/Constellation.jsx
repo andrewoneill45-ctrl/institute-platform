@@ -524,7 +524,8 @@ function Fig({ v, l, c }) {
     </span>
   );
 }
-function Metrics({ pupils, label }) {
+function Metrics({ pupils: all, label }) {
+  const pupils = all.filter((q) => q.concern != null);
   const n = pupils.length;
   if (!n) return <p style={{ fontSize: 12.5, color: "#6F6580", margin: "4px 0 0" }}>{label}: no pupils with evidence yet in this view.</p>;
   const med = (f) => { const v = pupils.map(f).filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : "–"; };
