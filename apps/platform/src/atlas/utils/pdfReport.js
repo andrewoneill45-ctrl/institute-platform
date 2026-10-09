@@ -427,7 +427,7 @@ export async function exportSchoolPDF(school, allSchools, onProgress) {
     doc.setPage(i);
     doc.setDrawColor(225, 230, 240); doc.line(M, H - 12, W - M, H - 12);
     doc.setFontSize(5.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GREY);
-    doc.text('School Profiles · DfE Performance Data 2024/25 · AI-assisted analysis', M, H - 8);
+    doc.text('Atlas · the Institute · DfE Performance Data 2024/25', M, H - 8);
     doc.text('Page ' + i + ' of ' + tp, W - M, H - 8, { align: 'right' });
     doc.setFontSize(4.5); doc.setTextColor(180, 190, 200);
     doc.text('OFFICIAL - SENSITIVE', W / 2, H - 8, { align: 'center' });

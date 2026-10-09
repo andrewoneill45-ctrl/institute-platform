@@ -283,10 +283,15 @@ const App = () => {
   const ofstedOrder = ['Outstanding', 'Good', 'Requires improvement', 'Inadequate'];
 
   if (loading) return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', fontFamily: "'Source Sans 3', sans-serif" }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FBFAF7', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '2rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>School Profiles</div>
-        <div style={{ fontSize: '0.95rem', color: '#64748b' }}>Loading school data…</div>
+        <svg viewBox="0 0 100 100" width="44" height="44" style={{ marginBottom: 12 }} aria-hidden="true">
+          <path d="M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z" fill="none" stroke="#6A0CA0" strokeWidth="7" strokeLinecap="round" strokeDasharray="300" strokeDashoffset="300">
+            <animate attributeName="stroke-dashoffset" from="300" to="0" dur="1.1s" fill="freeze" />
+          </path>
+        </svg>
+        <div style={{ fontFamily: 'Fraunces, serif', fontWeight: 600, fontSize: '2.1rem', letterSpacing: '-0.015em', color: '#221233', marginBottom: 6 }}>Atlas</div>
+        <div style={{ fontSize: '0.9rem', color: '#6F6580' }}>Every school in England, loading&hellip;</div>
       </div>
     </div>
   );
