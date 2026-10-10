@@ -3,7 +3,7 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats } from "./model.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, coilPoint, easeInOut, pullOf } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
 
@@ -151,7 +151,7 @@ function Constellation() {
             </div>
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
-                ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle."
+                ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle; “stats ›” flips a strip over to the year’s own numbers, lined up so flipped years read as one table."
                 : "Each ring is a zone: on track at the centre, serious at the rim where every child carries their name and reason. Within each ring the year sweeps clockwise from strongest to furthest behind; colour is what pulls each child. Back, and the circle unrolls."}
             </p>
           </>
@@ -266,6 +266,16 @@ const swatch = (c) => ({ display: "inline-block", width: 9, height: 9, borderRad
 
 function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick }) {
   const shoal = useMemo(() => layoutShoal(pupils, years), [pupils, years]);
+  /* each strip can flip to its year's own numbers: squash, swap, settle */
+  const [flip, setFlip] = useState({});
+  const flipT = useRef({});
+  const toggleFlip = (y) => {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setFlip((f) => ({ ...f, [y]: { shown: !(f[y] && f[y].shown), squash: false } })); return; }
+    clearTimeout(flipT.current[y]);
+    setFlip((f) => ({ ...f, [y]: { shown: !!(f[y] && f[y].shown), squash: true } }));
+    flipT.current[y] = setTimeout(() => setFlip((f) => ({ ...f, [y]: { shown: !(f[y] && f[y].shown), squash: false } })), 560);
+  };
   const mands = useMemo(() => {
     const m = {};
     years.forEach((y) => { m[y] = layoutMandala(pupils.filter((p) => p.year === y)); });
@@ -323,20 +333,36 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
           <text x={shoal.gutter} y={30} fontSize="11" fontWeight="600" fill="#2F7A39">On track</text>
           <text x={shoal.zones.watch} y={30} fontSize="11" fontWeight="600" fill="#8a6d1c">Some concern</text>
           <text x={shoal.zones.serious} y={30} fontSize="11" fontWeight="600" fill="#B3261E">Serious</text>
-          {shoal.rows.map((r) => (
-            <g key={r.year} onClick={() => scene.mode === "school" && onOpenYear(r.year)} style={{ cursor: "pointer" }}>
-              <rect x={shoal.gutter - 4} y={r.y0} width={shoal.stripW + 8} height={r.h} rx="14" fill="#ffffff" />
-              <rect x={shoal.gutter - 4} y={r.y0} width={shoal.zones.watch - shoal.gutter + 4} height={r.h} rx="14" fill="#F2FBF4" />
-              <rect x={shoal.zones.watch} y={r.y0} width={shoal.zones.serious - shoal.zones.watch} height={r.h} fill="#FBF6E6" />
-              <rect x={shoal.zones.serious} y={r.y0} width={shoal.zones.right - shoal.zones.serious + 4} height={r.h} rx="14" fill="#FBEFED" />
-              <line x1={shoal.zones.watch} y1={r.y0 + 3} x2={shoal.zones.watch} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
-              <line x1={shoal.zones.serious} y1={r.y0 + 3} x2={shoal.zones.serious} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
-              <text x={shoal.gutter - 18} y={r.mid - 2} textAnchor="end" fontFamily="Fraunces, serif" fontWeight="600" fontSize="19" fill="#221233">Y{r.year}</text>
-              <text x={shoal.gutter - 18} y={r.mid + 14} textAnchor="end" fontSize="10.5" fill="#6F6580">{r.n} pupils</text>
-              <text x={shoal.zones.right + 12} y={r.mid - 2} fontSize="11" fill="#B3261E" fontWeight="600">{r.serious ? r.serious + " serious" : ""}</text>
-              <text x={shoal.zones.right + 12} y={r.mid + 13} fontSize="10.5" fill="#6F6580">{r.declining} declining</text>
+          {shoal.rows.map((r) => {
+            const fl = flip[r.year] || {};
+            return (
+            <g key={r.year}>
+              <text x={shoal.gutter - 18} y={r.mid - 8} textAnchor="end" fontFamily="Fraunces, serif" fontWeight="600" fontSize="19" fill="#221233">Y{r.year}</text>
+              <text x={shoal.gutter - 18} y={r.mid + 8} textAnchor="end" fontSize="10.5" fill="#6F6580">{r.n} pupils</text>
+              <text x={shoal.gutter - 18} y={r.mid + 25} textAnchor="end" fontSize="10.5" fontWeight="700" fill="#4B0875" style={{ cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); if (scene.mode === "school") toggleFlip(r.year); }}>
+                <title>{fl.shown ? "Back to the children" : "Flip this year to its numbers"}</title>
+                {fl.shown ? "‹ pupils" : "stats ›"}
+              </text>
+              <g style={{ transform: fl.squash ? "scaleY(0.04)" : "scaleY(1)", transition: "transform 540ms cubic-bezier(.45,0,.2,1)", transformBox: "fill-box", transformOrigin: "center" }}>
+                {!fl.shown ? (
+                  <g onClick={() => scene.mode === "school" && onOpenYear(r.year)} style={{ cursor: "pointer" }}>
+                    <rect x={shoal.gutter - 4} y={r.y0} width={shoal.stripW + 8} height={r.h} rx="14" fill="#ffffff" />
+                    <rect x={shoal.gutter - 4} y={r.y0} width={shoal.zones.watch - shoal.gutter + 4} height={r.h} rx="14" fill="#F2FBF4" />
+                    <rect x={shoal.zones.watch} y={r.y0} width={shoal.zones.serious - shoal.zones.watch} height={r.h} fill="#FBF6E6" />
+                    <rect x={shoal.zones.serious} y={r.y0} width={shoal.zones.right - shoal.zones.serious + 4} height={r.h} rx="14" fill="#FBEFED" />
+                    <line x1={shoal.zones.watch} y1={r.y0 + 3} x2={shoal.zones.watch} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
+                    <line x1={shoal.zones.serious} y1={r.y0 + 3} x2={shoal.zones.serious} y2={r.y0 + r.h - 3} stroke="rgba(106,12,160,.12)" />
+                    <text x={shoal.zones.right + 12} y={r.mid - 2} fontSize="11" fill="#B3261E" fontWeight="600">{r.serious ? r.serious + " serious" : ""}</text>
+                    <text x={shoal.zones.right + 12} y={r.mid + 13} fontSize="10.5" fill="#6F6580">{r.declining} declining</text>
+                  </g>
+                ) : (
+                  <StatsRow r={r} shoal={shoal} st={yearStats(pupils.filter((p) => p.year === r.year && inGroup(p)))} />
+                )}
+              </g>
             </g>
-          ))}
+            );
+          })}
         </g>
       )}
 
@@ -375,7 +401,7 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
         const inYear = yearShown != null && p.year === yearShown;
         const E = inYear && mand ? mand.byU[p.upn] : null;
         let x, y, inYearWorld = false, op = 1;
-        if (scene.mode === "school") { if (!S) return null; ({ x, y } = S); }
+        if (scene.mode === "school") { if (!S) return null; const fy = flip[p.year]; if (fy && (fy.shown || fy.squash)) return null; ({ x, y } = S); }
         else if (scene.mode === "year") {
           if (!inYear || !E) return null;
           ({ x, y } = E); inYearWorld = true;
@@ -407,6 +433,48 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
 }
 const DIR_ = { improving: "#2F7A39", steady: "#C6A035", declining: "#B3261E" };
 const MUTED_ = "#6F6580";
+
+/* ── the strip's flip side: the year's own numbers on one shared grid,
+      so flipped years read down the page as one table ── */
+const SCOLS = [
+  { k: "ehcp", cap: "EHCP", pct: true },
+  { k: "pp", cap: "Pupil Premium", pct: true },
+  { k: "ks2em", cap: "KS2 En+Ma" },
+  { k: "ks2read", cap: "KS2 reading" },
+  { k: "cats", cap: "CATs mean" },
+  { k: "p4", cap: "4+ En & Ma", pct: true, perf: true },
+  { k: "p5", cap: "5+ En & Ma", pct: true, perf: true },
+  { k: "p7", cap: "7+ En & Ma", pct: true, perf: true },
+];
+function StatsRow({ r, shoal, st }) {
+  const x0 = shoal.gutter - 4, x1 = SKY_W - 14;
+  const cw = (x1 - x0) / SCOLS.length;
+  const xd = x0 + 5 * cw; /* the line between context and performance */
+  const fmt = (c) => { const v = st[c.k]; return v == null ? "–" : c.pct ? v + "%" : v % 1 ? v.toFixed(1) : String(v); };
+  return (
+    <g>
+      <rect x={x0} y={r.y0} width={x1 - x0} height={r.h} rx="14" fill="#ffffff" />
+      <rect x={x0} y={r.y0} width={xd - x0} height={r.h} rx="14" fill="#F4EEFA" opacity=".35" />
+      <line x1={xd} y1={r.y0 + 6} x2={xd} y2={r.y0 + r.h - 6} stroke="rgba(106,12,160,.18)" />
+      <text x={x0 + 12} y={r.y0 + 15} fontSize="9" fontWeight="700" letterSpacing="1.3" fill="#6A0CA0">CONTEXT</text>
+      <text x={xd + 12} y={r.y0 + 15} fontSize="9" fontWeight="700" letterSpacing="1.3" fill="#8a6d1c">PERFORMANCE</text>
+      {st.basicsN === 0 && (
+        <text x={(xd + x1) / 2} y={r.mid + 5} textAnchor="middle" fontSize="11" fill={MUTED_} fontStyle="italic">predictions arrive with the first KS4 tracker</text>
+      )}
+      {SCOLS.map((c, i) => {
+        if (c.perf && st.basicsN === 0) return null;
+        const cx = x0 + (i + 0.5) * cw;
+        return (
+          <g key={c.k} className="asi-fade" style={{ "--asi-d": `${i * 70}ms` }}>
+            <text x={cx} y={r.mid - 10} textAnchor="middle" fontSize="9.5" fill={MUTED_}>{c.cap}</text>
+            <text x={cx} y={r.mid + 16} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill={st[c.k] == null ? "#CBB8DF" : c.perf ? "#4B0875" : "#221233"} style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(c)}</text>
+          </g>
+        );
+      })}
+      <text x={x1 - 10} y={r.y0 + r.h - 8} textAnchor="end" fontSize="8.5" fill={MUTED_} opacity=".8">{st.n} children in view{st.basicsN ? ` · basics from ${st.basicsN} with En+Ma predictions` : ""}</text>
+    </g>
+  );
+}
 
 const WORD = (v) => (v == null ? null : v >= 75 ? "strong" : v >= 62 ? "secure" : v >= 40 ? "some concern" : "serious concern");
 const SLAB = { fontSize: 11, fontWeight: 600, color: "#4B0875", margin: "12px 0 6px" };

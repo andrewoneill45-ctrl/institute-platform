@@ -50,7 +50,11 @@ const HEADS = {
   upn: /^(?!.*(former|previous|old))(.*\bupn\b|unique pupil.*)$/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
   forename: /forename|first ?name/i, surname: /surname|last ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
-  reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i, prior: /ks2|prior|baseline|cat4?|sats/i,
+  reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i,
+  ks2read: /ks2.*read(ing)?|read(ing)?.*(ks2|scaled)/i,
+  ks2em: /ks2.*(e ?& ?m|\bem\b|band|combined|eng?(lish)? ?(&|and|\+|\/) ?ma(ths)?)/i,
+  cats: /\bcats? ?-? ?mean\b|cat4 ?mean|mean ?cats?\b/i,
+  prior: /ks2|prior|baseline|cat4?|sats/i,
   attPlus: /% ?present ?\+ ?aea/i,
   att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct|% ?present$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /% ?unauth/i,
   subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
@@ -58,7 +62,7 @@ const HEADS = {
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
-  ppg: /ppg|pupil ?premium|\bpp\b|disadvantag/i, fsm: /fsm/i, eal: /\beal\b|english as ?(an )?additional/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
+  ppg: /ppg|pupil ?premium|\bpp\b|disadvantag/i, fsm: /fsm/i, eal: /\beal\b|english as ?(an )?additional/i, ehcp: /\behcp\b/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
 };
 export function readHeaders(headerRow, body) {
   const map = {}, assumptions = [];
@@ -151,6 +155,7 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
 
   if (kind === "roll") {
     const roll = [...state.roll];
+    const priorCol = map.prior ?? map.ks2em ?? map.cats; /* a specific baseline still anchors the quintiles */
     body.forEach((r) => {
       const upn = (r[map.upn] || "").trim().toUpperCase();
       if (!validUPN(upn)) { led.held++; (led.heldNames = led.heldNames || []).push(cellName(r, map) || "(no name)"); return; }
@@ -158,7 +163,11 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
         upn, name: cellName(r, map) || upn, dob: map.dob != null ? normDob(r[map.dob]) : "",
         year: map.year != null ? Number(String(r[map.year]).replace(/\D/g, "")) || null : null,
         reg: map.reg != null ? (r[map.reg] || "").trim() : "",
-        prior: map.prior != null ? num(r[map.prior]) : null,
+        prior: priorCol != null ? num(r[priorCol]) : null,
+        ks2em: map.ks2em != null ? num(r[map.ks2em]) : null,
+        ks2read: map.ks2read != null ? num(r[map.ks2read]) : null,
+        cats: map.cats != null ? num(r[map.cats]) : null,
+        ehcp: map.ehcp != null ? /^(y|t|1|e)/i.test((r[map.ehcp] || "").trim()) : map.sen != null ? /^e/i.test((r[map.sen] || "").trim()) : false,
         ppg: map.ppg != null ? /^(y|t|1)/i.test((r[map.ppg] || "").trim()) : false,
         fsm: map.fsm != null ? /^(y|t|1)/i.test((r[map.fsm] || "").trim()) : false,
         eal: map.eal != null ? /^(y|t|1)/i.test((r[map.eal] || "").trim()) : false,
@@ -167,10 +176,10 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
       };
       p._nm = normName(p.name);
       /* a column this file lacks, or a blank cell, can never erase what is known */
-      [["dob", map.dob], ["reg", map.reg], ["prior", map.prior], ["gender", map.gender], ["year", map.year]].forEach(([k, col]) => {
+      [["dob", map.dob], ["reg", map.reg], ["prior", priorCol], ["gender", map.gender], ["year", map.year], ["ks2em", map.ks2em], ["ks2read", map.ks2read], ["cats", map.cats]].forEach(([k, col]) => {
         if (col == null || p[k] == null || p[k] === "") delete p[k];
       });
-      [["ppg", map.ppg], ["fsm", map.fsm], ["eal", map.eal], ["sen", map.sen]].forEach(([k, col]) => { if (col == null) delete p[k]; });
+      [["ppg", map.ppg], ["fsm", map.fsm], ["eal", map.eal], ["sen", map.sen], ["ehcp", map.ehcp ?? map.sen]].forEach(([k, col]) => { if (col == null) delete p[k]; });
       const i = roll.findIndex((x) => x.upn === upn);
       if (i >= 0) roll[i] = { ...roll[i], ...p }; else roll.push(p);
       led.matched++;
@@ -203,7 +212,8 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
         const subj = wc.single ? subjOf(wc.h, subject) : subjOf(wc.h, subject);
         evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when });
       });
-      if (map.prior != null) { const pr = num(r[map.prior]); if (pr != null) { evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "prior", score: pr }); const p = roll.find((x) => x.upn === m.upn); if (p && p.prior == null) { p.prior = pr; priorFilled++; } } }
+      const priorCol = map.prior ?? map.ks2em ?? map.cats;
+      if (priorCol != null) { const pr = num(r[priorCol]); if (pr != null) { evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "prior", score: pr }); const p = roll.find((x) => x.upn === m.upn); if (p && p.prior == null) { p.prior = pr; priorFilled++; } } }
     });
     const winSet = [...new Set(windowCols.map((wc) => wc.single ? subject : (winOf(wc.h) || wc.h)))];
     led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
@@ -257,9 +267,9 @@ export function removeUpload(state, led) {
    export in that dialect arrives already understood. */
 export const KIND_LABELS = { roll: "the school roll", attendance: "attendance", tracker: "a tracker · termly assessments", assessment: "assessments", engagement: "conduct & homework", enrichment: "enrichment", intervention: "interventions", unknown: "not readable yet", unreadable: "unreadable" };
 export const KIND_CHOICES = ["roll", "attendance", "tracker", "assessment", "engagement", "enrichment", "intervention"];
-export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
+export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", ks2em: "KS2 En+Ma band", ks2read: "KS2 reading", cats: "CATs mean", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", ehcp: "EHCP", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
 export const FIELDS_BY_KIND = {
-  roll: ["upn", "name", "year", "reg", "dob", "prior", "gender", "ppg", "fsm", "eal", "sen"],
+  roll: ["upn", "name", "year", "reg", "dob", "prior", "ks2em", "ks2read", "cats", "gender", "ppg", "fsm", "eal", "sen", "ehcp"],
   attendance: ["upn", "name", "att", "unauth"],
   tracker: ["upn", "name", "year", "prior"],
   assessment: ["upn", "name", "subject", "score", "date"],
@@ -347,7 +357,7 @@ const bandOf = (s) => (s == null ? null : s >= 62 ? 0 : s >= 40 ? 1 : 2);
 export function computeAll(state) {
   const priorEv = {};
   state.evidence.forEach((e) => { if (e.t === "prior" && e.score != null) priorEv[e.upn] = e.score; });
-  const priorOf = (p) => (p.prior != null ? p.prior : priorEv[p.upn] ?? null);
+  const priorOf = (p) => (p.prior != null ? p.prior : priorEv[p.upn] ?? p.ks2em ?? p.cats ?? p.ks2read ?? null);
   const byYear = {};
   state.roll.forEach((p) => { (byYear[p.year] = byYear[p.year] || []).push(p); });
   const out = {};
@@ -437,6 +447,28 @@ export function computeAll(state) {
 const clamp = (v) => Math.max(0, Math.min(100, Math.round(v)));
 const sum = (es, k) => { const v = es.map((e) => e[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
 const avg = (es, k) => { const v = es.map((e) => e[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+
+/* ── the year's own numbers: context and performance for the shoal's flip side ──
+   Takes the computed pupils of one year (already filtered to any group in view).
+   Percentages are of the children present; averages of the values held; the
+   basics proportions use predicted grades (current grade where no prediction),
+   and only children carrying BOTH an English and a maths grade count. */
+export function yearStats(ps) {
+  const n = ps.length;
+  const pct = (k) => (n ? Math.round((100 * ps.filter((p) => p[k]).length) / n) : null);
+  const avg = (k) => { const v = ps.map((p) => p[k]).filter((x) => x != null); return v.length ? Math.round(10 * (v.reduce((a, b) => a + b, 0) / v.length)) / 10 : null; };
+  const enRe = /engl|^en\b/i, maRe = /math|^ma\b/i;
+  const basics = [];
+  ps.forEach((p) => {
+    if (!p.ks4 || !p.ks4.length) return;
+    const en = p.ks4.find((r) => enRe.test(r.s)), ma = p.ks4.find((r) => maRe.test(r.s));
+    const ge = en ? en.pred ?? en.now : null, gm = ma ? ma.pred ?? ma.now : null;
+    if (ge != null && gm != null) basics.push(Math.min(ge, gm));
+  });
+  const prop = (t) => (basics.length ? Math.round((100 * basics.filter((g) => g >= t).length) / basics.length) : null);
+  return { n, ehcp: pct("ehcp"), pp: pct("ppg"), ks2em: avg("ks2em"), ks2read: avg("ks2read"), cats: avg("cats"),
+    basicsN: basics.length, p4: prop(4), p5: prop(5), p7: prop(7) };
+}
 
 /* ── insights: the groups the averages would lose ── */
 export function findSignals(computed) {
