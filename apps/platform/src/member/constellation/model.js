@@ -52,9 +52,9 @@ const HEADS = {
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i,
   ks2read: /ks2.*read(ing)?|read(ing)?.*(ks2|scaled)/i,
-  ks2em: /ks2.*(e ?& ?m|\bem\b|band|combined|eng?(lish)? ?(&|and|\+|\/) ?ma(ths)?)/i,
+  ks2em: /ks2 ?(avg|average|score)\b|ks2.*(e ?& ?m|\bem\b|band\b|combined|eng?(lish)? ?(&|and|\+|\/) ?ma(ths)?)/i,
   cats: /\bcats? ?-? ?mean\b|cat4 ?mean|mean ?cats?\b/i,
-  prior: /ks2|prior|baseline|cat4?|sats/i,
+  prior: /^(?!.*(banding|source|estimat))(?=.*(ks2|prior|baseline|cat4|cats|sats)).*/i,
   attPlus: /% ?present ?\+ ?aea/i,
   att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct|% ?present$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /% ?unauth/i,
   subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
@@ -62,7 +62,7 @@ const HEADS = {
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
-  ppg: /ppg|pupil ?premium|\bpp\b|disadvantag/i, fsm: /fsm/i, eal: /\beal\b|english as ?(an )?additional/i, ehcp: /\behcp\b/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
+  ppg: /ppg|pupil ?premium|\bpp\b|disadvantag/i, fsm: /fsm/i, eal: /\beal\b|english as ?(an )?additional/i, ehcp: /\behcp\b|ehc ?plan/i, sen: /sen|ehcp/i, gender: /^(gender|sex)$/i,
 };
 export function readHeaders(headerRow, body) {
   const map = {}, assumptions = [];
@@ -127,6 +127,15 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   const rows = parseCSV(text);
   if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
   const { map, assumptions } = readHeaders(rows[0], rows.slice(1));
+  /* a numeric field mapped onto a column of words (KS2 Banding, Source…) is set aside */
+  ["prior", "ks2em", "ks2read", "cats"].forEach((k) => {
+    if (map[k] == null) return;
+    const vals = rows.slice(1, 13).map((r) => String(r[map[k]] ?? "").trim()).filter(Boolean);
+    if (vals.length >= 3 && vals.filter((v) => isFinite(parseFloat(v.replace(/[%\s]/g, "")))).length < vals.length / 2) {
+      assumptions.push(`“${String(rows[0][map[k]]).trim()}” holds words, not numbers: set aside`);
+      map[k] = null;
+    }
+  });
   if (forced && forced.map) Object.assign(map, forced.map);
   if (forced && forced.notes && forced.notes.length) assumptions.push(...forced.notes);
   if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
@@ -140,7 +149,9 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
   }
   let kind = (forced && forced.kind) || classify(map);
-  if (!(forced && forced.kind) && kind !== "roll" && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
+  /* real term columns outrank roll-ish identity: an export carrying DOB and termly
+     marks is a tracker that happens to introduce itself, not a roll */
+  if (!(forced && forced.kind) && windowCols.length >= 2 && (map.upn != null || map.name != null)) kind = "tracker";
   if (!(forced && forced.kind) && /attend|behaviou?r|conduct/i.test(fileName) && (kind === "tracker" || kind === "assessment" || kind === "unknown")) {
     const canAtt = map.att != null || map.attPlus != null || (map.sessions != null && map.absent != null);
     if (kind !== "unknown") kind = canAtt ? "attendance" : "unknown";
@@ -152,6 +163,20 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
   const body = rows.slice(1);
   const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [], note };
+
+  /* any matched file may quietly fill context gaps on the roll — EHCP, KS2, CATs,
+     PP ride along in trackers and histories; a gap is filled, a fact never overwritten */
+  let ctxFilled = 0;
+  const harvest = (p, r) => {
+    if (!p) return;
+    ["ks2em", "ks2read", "cats"].forEach((k) => { if (map[k] != null && p[k] == null) { const v = num(r[map[k]]); if (v != null) { p[k] = v; ctxFilled++; } } });
+    if (p.ehcp === undefined) {
+      if (map.ehcp != null && (r[map.ehcp] || "").trim()) { p.ehcp = /^(y|t|1|e)/i.test((r[map.ehcp] || "").trim()); ctxFilled++; }
+      else if (map.sen != null && (r[map.sen] || "").trim()) { p.ehcp = /^e/i.test((r[map.sen] || "").trim()); ctxFilled++; }
+    }
+    if (p.ppg === undefined && map.ppg != null && (r[map.ppg] || "").trim()) { p.ppg = /^(y|t|1)/i.test((r[map.ppg] || "").trim()); ctxFilled++; }
+  };
+  const ctxNote = () => (ctxFilled ? [`context gleaned from this file: ${ctxFilled} gaps filled (KS2 / CATs / EHCP / PP)`] : []);
 
   if (kind === "roll") {
     const roll = [...state.roll];
@@ -212,20 +237,23 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
         const subj = wc.single ? subjOf(wc.h, subject) : subjOf(wc.h, subject);
         evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when });
       });
+      harvest(roll.find((x) => x.upn === m.upn), r);
       const priorCol = map.prior ?? map.ks2em ?? map.cats;
       if (priorCol != null) { const pr = num(r[priorCol]); if (pr != null) { evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "prior", score: pr }); const p = roll.find((x) => x.upn === m.upn); if (p && p.prior == null) { p.prior = pr; priorFilled++; } } }
     });
     const winSet = [...new Set(windowCols.map((wc) => wc.single ? subject : (winOf(wc.h) || wc.h)))];
-    led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : [])];
+    led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : []), ...ctxNote()];
     const touched2 = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
     led.years = [...new Set(roll.filter((p) => touched2.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
     return { ...state, roll, evidence, review, ledger: [led, ...state.ledger] };
   }
+  const roll2 = state.roll.map((p) => ({ ...p }));
   body.forEach((r) => {
-    const m = matchPupil(r, map, state.roll, state.aliases, scopeYear);
+    const m = matchPupil(r, map, roll2, state.aliases, scopeYear);
     if (!m) { led.held++; return; }
     if (m.review) { led.held++; review.push({ file: fileName, kind, name: m.name, candidates: m.candidates, row: r, mapKeys: map }); return; }
     led.matched++;
+    harvest(roll2.find((x) => x.upn === m.upn), r);
     const base = { upn: m.upn, file: fileName, conf: m.conf, date: today() };
     if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName });
     if (kind === "attendance") {
@@ -241,9 +269,10 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   if (led.blank) led.assumptions = [...led.assumptions, `${led.blank} rows carried no attendance values and were skipped`];
   if (kind === "attendance" && led.held > 0) led.assumptions = [...led.assumptions, `${led.held} rows matched no pupil on the roll (leavers or other cohorts in the history): ignored`];
   if (scopeYear != null && led.held > led.matched) led.assumptions = [...led.assumptions, `most rows fell outside the Year ${scopeYear} scope chosen at upload: if this file covers the whole school, remove it and add it again with "Whole school" selected`];
+  led.assumptions = [...led.assumptions, ...ctxNote()];
   const touched = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
-  led.years = [...new Set(state.roll.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
-  return { ...state, evidence, review, ledger: [led, ...state.ledger] };
+  led.years = [...new Set(roll2.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
+  return { ...state, roll: roll2, evidence, review, ledger: [led, ...state.ledger] };
 }
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[%\s]/g, "")); return isFinite(n) ? n : null; };
 const pctFrom = (r, map) => { const s = num(r[map.sessions]), a = num(r[map.absent]); return s ? Math.round(1000 * (s - (a || 0)) / s) / 10 : null; };

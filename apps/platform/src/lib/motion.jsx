@@ -25,6 +25,8 @@ export function ensureMotionCss() {
   .asi-lift { transition: transform ${MOTION.settle}ms ${MOTION.ease}, box-shadow ${MOTION.settle}ms ${MOTION.ease}; }
   .asi-lift:hover { transform: translateY(-6px); box-shadow: 0 3px 6px rgba(34,18,51,.06), 0 34px 80px rgba(34,18,51,.17); }
   @keyframes asiSpin { to { transform: rotate(360deg); } }
+  @keyframes asiCardIn { from { opacity: 0; transform: translateX(76px) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes asiCardOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(76px) scale(.97); } }
 }`;
   document.head.appendChild(s);
 }

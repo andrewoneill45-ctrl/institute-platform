@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
 import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats } from "./model.js";
-import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, coilPoint, easeInOut, pullOf } from "./sky.js";
+import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
@@ -38,6 +38,8 @@ function Constellation() {
   const [year, setYear] = useState(null);
   const [pick, setPick] = useState(null);
   const [group, setGroup] = useState(null);
+  const [lens, setLens] = useState(null); /* the grade lens: null, 4, 5 or 7 */
+  useEffect(() => { setLens(null); }, [year]);
 
   useEffect(ensureMotionCss, []);
   const loadedFor = useRef(null);
@@ -136,23 +138,32 @@ function Constellation() {
               {[["pp", "Pupil Premium", hasPP], ["fsm", "FSM", hasFSM], ["sen", "SEN", hasSEN], ["eal", "EAL", hasEAL], ["m", "Boys", hasG], ["f", "Girls", hasG]].map(([k, l, show]) => show && (
                 <button key={k} onClick={() => setGroup(group === k ? null : k)} style={chip(group === k, GOLD)}>{l}</button>
               ))}
+              {year != null && (() => {
+                const yst = yearStats(pupils.filter((q) => q.year === year && inGroup(q)));
+                return yst.basicsN > 0 ? (
+                  <>
+                    <span style={{ fontSize: 11, color: MUTED, marginLeft: 10 }}>grade lens</span>
+                    {[4, 5, 7].map((b) => <button key={b} onClick={() => setLens(lens === b ? null : b)} style={chip(lens === b, GOLD)}>{b}+ En&amp;Ma</button>)}
+                  </>
+                ) : null;
+              })()}
               <span style={{ marginLeft: "auto", fontSize: 11.5, color: MUTED }}>
                 {year == null
                   ? <>dot: steady · <b style={{ color: "#2F7A39" }}>improving</b> · <b style={{ color: "#B3261E" }}>declining</b> · click a year to coil it</>
+                  : lens
+                  ? <>the {lens}+ bar: <i style={swatch("#2F7A39")} />secure above · <i style={swatch("#C6A035")} />at it · <i style={swatch("#B3261E")} />below · dimmed, no En+Ma prediction yet</>
                   : <>pulled by: <i style={swatch("#6A0CA0")} />learning · <i style={swatch("#C6A035")} />engagement · <i style={swatch("#B3261E")} />both · <i style={swatch("#CBB8DF")} />on track</>}
               </span>
             </div>
             <Metrics pupils={scopePupils} label={(year == null ? "Whole school" : "Year " + year) + (group ? " · " + { pp: "Pupil Premium", fsm: "FSM", eal: "EAL", sen: "SEN", m: "boys", f: "girls" }[group] : "")} />
-            <div className="asi-rise" style={{ display: "flex", gap: 20, alignItems: "flex-start", "--asi-d": "320ms" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Sky pupils={pupils} years={years} year={year} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
-              </div>
-              {chosen && <PupilCard p={chosen} onClose={() => setPick(null)} />}
+            <div className="asi-rise" style={{ position: "relative", "--asi-d": "320ms" }}>
+              <Sky pupils={pupils} years={years} year={year} lens={lens} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
+              {chosen && <PupilCard key={chosen.upn} p={chosen} onClose={() => setPick(null)} />}
             </div>
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
                 ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle; “stats ›” flips a strip over to the year’s own numbers, lined up so flipped years read as one table."
-                : "Each ring is a zone: on track at the centre, serious at the rim where every child carries their name and reason. Within each ring the year sweeps clockwise from strongest to furthest behind; colour is what pulls each child. Back, and the circle unrolls."}
+                : "The heart holds the year's on-track children, evenly spread; the rim carries every serious child's name and reason, and colour is what pulls each child. The grade lens re-reads the same circle against a bar in English and maths: secure above it at the heart, the margin ringed, below it named. Back, and the circle unrolls."}
             </p>
           </>
           );
@@ -264,7 +275,7 @@ const SHOALC = { steady: "#6A0CA0", improving: "#2F7A39", declining: "#B3261E" }
 const PULLC = { learning: "#6A0CA0", engagement: "#C6A035", both: "#B3261E" };
 const swatch = (c) => ({ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: c, margin: "0 4px 0 8px", verticalAlign: "-1px" });
 
-function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick }) {
+function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onPick }) {
   const shoal = useMemo(() => layoutShoal(pupils, years), [pupils, years]);
   /* each strip can flip to its year's own numbers: squash, swap, settle */
   const [flip, setFlip] = useState({});
@@ -281,6 +292,12 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
     years.forEach((y) => { m[y] = layoutMandala(pupils.filter((p) => p.year === y)); });
     return m;
   }, [pupils, years]);
+  const gmands = useMemo(() => {
+    if (!lens) return {};
+    const m = {};
+    years.forEach((y) => { m[y] = layoutGradeMandala(pupils.filter((p) => p.year === y && p.concern != null), lens); });
+    return m;
+  }, [pupils, years, lens]);
 
   /* scene lags the prop while the coil runs */
   const [scene, setScene] = useState(year == null ? { mode: "school" } : { mode: "year", year });
@@ -308,6 +325,37 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current.raf); };
   }, [year]);
 
+  /* the lens morph: every dot drifts to its new seat and settles, one motion */
+  const posRef = useRef(null);
+  const morphRaf = useRef(0);
+  const [, morphTick] = useState(0);
+  useEffect(() => {
+    if (scene.mode !== "year") { posRef.current = null; return; }
+    const mandY = mands[scene.year];
+    if (!mandY) return;
+    const gmY = lens ? gmands[scene.year] : null;
+    const tg = {};
+    Object.keys(mandY.byU).forEach((u) => { tg[u] = (gmY && gmY.byU[u]) || mandY.byU[u]; });
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || !posRef.current) { posRef.current = { ...tg }; morphTick((n) => n + 1); return; }
+    cancelAnimationFrame(morphRaf.current);
+    const step = () => {
+      const cur = posRef.current;
+      let moving = false;
+      for (const u in tg) {
+        const c = cur[u] || tg[u];
+        const nx = c.x + (tg[u].x - c.x) * 0.072, ny = c.y + (tg[u].y - c.y) * 0.072;
+        if (Math.abs(tg[u].x - nx) > 0.35 || Math.abs(tg[u].y - ny) > 0.35) moving = true;
+        cur[u] = { x: nx, y: ny, ang: tg[u].ang };
+      }
+      morphTick((n) => n + 1);
+      if (moving) morphRaf.current = requestAnimationFrame(step);
+      else { posRef.current = { ...tg }; morphTick((n) => n + 1); }
+    };
+    morphRaf.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(morphRaf.current);
+  }, [lens, scene.mode, scene.year, mands, gmands]);
+
   const coiling = scene.mode === "coil";
   const yearShown = scene.mode === "year" ? scene.year : coiling ? scene.year : null;
   const mand = yearShown != null ? mands[yearShown] : null;
@@ -319,12 +367,17 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
 
   const fillFor = (p, inYearWorld) => {
     if (!inYearWorld) return SHOALC[p.dir] || SHOALC.steady;
+    if (lens) {
+      const gg = gradesOf(p);
+      if (!gg) return "#CBB8DF";
+      return gg.g >= lens + 1 ? "#2F7A39" : gg.g >= lens ? "#C6A035" : "#B3261E";
+    }
     const pu = pullOf(p);
     return pu ? PULLC[pu] : "#CBB8DF";
   };
 
   return (
-    <svg viewBox={`0 0 ${SKY_W} ${SKY_H}`} width="100%" style={{ display: "block", maxHeight: "74vh" }} role="img"
+    <svg viewBox={`0 0 ${SKY_W} ${SKY_H}`} width="100%" style={{ display: "block", maxHeight: "82vh", margin: "0 auto" }} role="img"
       aria-label={yearShown != null ? `Year ${yearShown}, coiled: rings are concern, slices are tutor groups` : "The school: one strip per year group, each dot a child"}>
 
       {/* shoal chrome */}
@@ -374,17 +427,20 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
           <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.45)" />
           <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".4" />
           <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
+          {(() => { const gm = lens ? gmands[yearShown] : null; return (
           <g fontSize="10.5" textAnchor="middle">
-            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">on track · {mand.counts.calm}</text>
-            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">some concern · {mand.counts.watch}</text>
-            <text x={CX} y={CY - R_RIM - 10} fill="#B3261E">serious · {mand.counts.serious}, named</text>
-          </g>
+            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">{gm ? `secure above the bar · ${gm.counts.sec}` : `on track · ${mand.counts.calm}`}</text>
+            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">{gm ? `at ${lens} exactly · ${gm.counts.at}` : `some concern · ${mand.counts.watch}`}</text>
+            <text x={CX} y={CY - R_RIM - 10} fill="#B3261E">{gm ? `below the bar · ${gm.counts.below}, named` : `serious · ${mand.counts.serious}, named`}</text>
+            {gm && gm.counts.out > 0 && <text x={CX} y={SKY_H - 30} fill="#6F6580" fontSize="10">{gm.counts.out} without an En+Ma prediction keep their concern seats, dimmed</text>}
+          </g> ); })()}
           <g onClick={onBack} style={{ cursor: "pointer" }}>
+            <circle cx={CX} cy={CY} r="42" fill="#ffffff" opacity=".85" />
             <text x={CX} y={CY - 2} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown}</text>
-            <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{mand.counts.n} in view</text>
+            <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{lens ? `the ${lens}+ lens · En & Ma` : `${mand.counts.n} in view`}</text>
           </g>
-          {mand.hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{mand.hidden} more on the rim without room for a label: their dots and cards still open</text>}
-          {mand.labels.map((L) => (
+          {(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden} more on the rim without room for a label: their dots and cards still open</text>}
+          {(lens && gmands[yearShown] ? gmands[yearShown].labels : mand.labels).map((L) => (
             <g key={L.upn} onClick={() => onPick(L.upn)} style={{ cursor: "pointer" }}>
               <line x1={L.x1} y1={L.y1} x2={L.x2} y2={L.y2} stroke="rgba(34,18,51,.25)" strokeWidth="0.8" />
               <text x={L.tx} y={L.ty} textAnchor={L.anchor} fontSize="11.5" fontWeight="600" fill="#221233">{L.name}</text>
@@ -404,7 +460,8 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
         if (scene.mode === "school") { if (!S) return null; const fy = flip[p.year]; if (fy && (fy.shown || fy.squash)) return null; ({ x, y } = S); }
         else if (scene.mode === "year") {
           if (!inYear || !E) return null;
-          ({ x, y } = E); inYearWorld = true;
+          const P = (posRef.current && posRef.current[p.upn]) || E;
+          x = P.x; y = P.y; inYearWorld = true;
         } else { /* coiling: a wave, the serious end peeling away first */
           if (inYear && S && E) {
             const along = Math.max(0, Math.min(1, (S.x - shoal.gutter) / shoal.stripW)); /* 1 = serious end */
@@ -416,11 +473,12 @@ function Sky({ pupils, years, year, onOpenYear, onBack, inGroup, pick, onPick })
           else return null;
         }
         const dim = !inGroup(p);
+        const ghost = inYearWorld && lens && !gradesOf(p); /* no En+Ma prediction under the lens */
         const on = pick === p.upn;
         const serious = p.band === 2;
         const r = inYearWorld ? (serious ? 4.4 : 3.2) : (serious ? 3.6 : 2.7);
         return (
-          <g key={p.upn} onClick={() => !dim && scene.mode !== "coil" && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : op}>
+          <g key={p.upn} onClick={() => !dim && scene.mode !== "coil" && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : ghost ? 0.15 : op}>
             <title>{p.name} · Year {p.year}</title>
             {on && <circle cx={x} cy={y} r={r + 6.5} fill="rgba(198,160,53,.32)" />}
             <circle cx={x} cy={y} r={r} fill={fillFor(p, inYearWorld)} stroke={inYearWorld && p.dir === "declining" ? "#B3261E" : inYearWorld && p.dir === "improving" ? "#2F7A39" : "#FBFAF7"} strokeWidth={inYearWorld && p.dir !== "steady" ? 1.1 : 0.7} opacity={p.conf === "thin" ? 0.55 : 0.95} />
@@ -525,13 +583,25 @@ function GradeTable({ rows }) {
 }
 
 function PupilCard({ p, onClose }) {
-  const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : "#B3261E";
+  const [out, setOut] = useState(false);
+  const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : p.band === 2 ? "#B3261E" : "#6F6580";
+  const bandD = p.band === 0 ? "#1E5A28" : p.band === 1 ? "#6b540e" : p.band === 2 ? "#7e150f" : "#4a4456";
+  const close = () => { if (out) return; setOut(true); setTimeout(onClose, 500); };
   return (
-    <div style={{ position: "sticky", top: 14, flexShrink: 0, width: 356, maxHeight: "calc(100vh - 28px)", overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.08), 0 26px 72px rgba(34,18,51,.2)", padding: "16px 20px 18px", borderTop: `3px solid ${bandC}` }}>
-      <button onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 9, right: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: MUTED_ }}>&times;</button>
-      <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15, paddingRight: 16 }}>{p.name}</div>
-      <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.fsm && !p.ppg ? " · FSM" : ""}{p.sen ? " · SEN" : ""}{p.eal ? " · EAL" : ""}</div>
-      <p style={{ fontSize: 13, margin: "0 0 4px" }}><b style={{ color: bandC }}>{p.band != null ? BANDS[p.band] : "Awaiting evidence"}</b>{p.dir !== "steady" ? <> and <b style={{ color: DIR_[p.dir] }}>{p.dir}</b></> : ", holding steady"} · evidence {p.conf} ({p.evCount})</p>
+    <div style={{ position: "absolute", top: 14, right: 18, bottom: 14, width: 374, overflowY: "auto", background: "#fff", borderRadius: 18, boxShadow: "0 2px 6px rgba(34,18,51,.1), 0 32px 90px rgba(34,18,51,.28)", padding: "0 20px 18px", zIndex: 5,
+      animation: out ? "asiCardOut 500ms cubic-bezier(.5,0,.6,1) forwards" : "asiCardIn 700ms cubic-bezier(.22,.9,.28,1) both" }}>
+      <div style={{ margin: "0 -20px 12px", padding: "13px 18px 12px", background: `linear-gradient(135deg, ${bandC}, ${bandD})`, color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 2 }}>
+        <div>
+          <div style={{ fontSize: 10.5, letterSpacing: ".14em", fontWeight: 700, opacity: 0.92 }}>{p.band != null ? BANDS[p.band].toUpperCase() : "AWAITING EVIDENCE"}</div>
+          <div style={{ fontSize: 11.5, opacity: 0.92, marginTop: 2 }}>{p.dir === "steady" ? "holding steady" : p.dir}{p.capped ? " · held visible by the rule" : ""} &middot; evidence {p.conf} ({p.evCount})</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {p.concern != null && <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 29, lineHeight: 1 }}>{p.concern}<span style={{ fontSize: 11, opacity: 0.75 }}> /100</span></div>}
+          <button onClick={close} aria-label="Close" style={{ border: "none", background: "rgba(255,255,255,.2)", color: "#fff", cursor: "pointer", fontSize: 14, borderRadius: 999, width: 26, height: 26, lineHeight: "24px", padding: 0, fontFamily: "inherit" }}>&times;</button>
+        </div>
+      </div>
+      <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 20, lineHeight: 1.15 }}>{p.name}</div>
+      <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.fsm && !p.ppg ? " · FSM" : ""}{p.ehcp ? " · EHCP" : p.sen ? " · SEN" : ""}{p.eal ? " · EAL" : ""}</div>
       {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 4px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
       {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 2px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
       {p.ks4 ? <GradeTable rows={p.ks4} /> : p.subjects?.length > 1 && (
