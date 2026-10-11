@@ -568,9 +568,6 @@ export default function Home() {
           </div>
           <div style={{ display: "flex", gap: 22, fontSize: 12.5, flexWrap: "wrap" }}>
             <Link className="quiet" style={{ color: MUTED, fontWeight: 400 }} to="/insights">Insights</Link>
-            <Link className="quiet" style={{ color: MUTED, fontWeight: 400 }} to="/positions">Positions</Link>
-            <Link className="quiet" style={{ color: MUTED, fontWeight: 400 }} to="/system">State of the System</Link>
-            <Link className="quiet" style={{ color: MUTED, fontWeight: 400 }} to="/summit">The Summit</Link>
             <Link className="quiet" style={{ color: MUTED, fontWeight: 400 }} to="/signin">Member sign in</Link>
           </div>
           <span style={{ flex: 1 }} />

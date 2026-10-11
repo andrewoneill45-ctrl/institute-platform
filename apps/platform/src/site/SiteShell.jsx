@@ -9,10 +9,6 @@ export function SiteNav() {
       <Link to="/" style={{ textDecoration: "none" }}><Wordmark size={24} /></Link>
       <span className="spacer" />
       <NavLink to="/insights" style={l}>Insights</NavLink>
-      <NavLink to="/fellowship" style={l}>About</NavLink>
-      <NavLink to="/positions" style={l}>Positions</NavLink>
-      <NavLink to="/system" style={l}>State of the System</NavLink>
-      <NavLink to="/summit" style={l}>The Summit</NavLink>
       <Link to="/signin" className="btn line" style={{ padding: "9px 20px", fontSize: 12.5 }}>Member sign in</Link>
     </div></nav>
   );
