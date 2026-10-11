@@ -116,33 +116,108 @@ const REGIONS = [
   [7.35, 9.05, 0.7, 17], [8.5, 9.8, 0.75, 8], [6.9, 10.35, 0.85, 9], [5.4, 10.15, 0.95, 9],
   [4.2, 10.8, 0.75, 7], [3.2, 11.4, 0.65, 6], [2.15, 12.2, 0.55, 5],
 ];
-function NightEngland() {
-  let seed = 53;
+/* ── the centrepiece: one field of light, four instruments ──
+   180 dots play all four parts in a 24-second loop: England (Atlas), the iris
+   (Lens), the orbits (Orbit), the mandala (Constellation), and home again.
+   Pure SMIL, so it runs forever with no script; reduced motion gets the
+   mandala, still. */
+function InstrumentJourney() {
+  const cx = 550, cyc = 258;
+  const N = 180;
+  let seed = 61;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-  const SX = 33, SY = 31, OX = 385, OY = 10;
-  const dots = [];
-  REGIONS.forEach((rg, ri) => {
+  const GA = Math.PI * (3 - Math.sqrt(5));
+  const pt = (r, a) => ({ x: cx + r * Math.cos(a), y: cyc + r * Math.sin(a) });
+
+  /* act one: England */
+  const E = [], cE = [];
+  REGIONS.forEach((rg) => {
     for (let i = 0; i < rg[3]; i++) {
       const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * rg[2], c = rnd();
-      dots.push({ x: ((rg[0] + rr * Math.cos(a)) * SX + OX).toFixed(1), y: ((rg[1] + rr * Math.sin(a) * 0.92) * SY + OY).toFixed(1),
-        r: (1.8 + rnd() * 1.7).toFixed(1), c: c < 0.78 ? "#CBB8DF" : c < 0.92 ? "#E3C65B" : "#FBFAF7",
-        o: (0.55 + rnd() * 0.35).toFixed(2), b: ((ri * 90 + i * 10) / 1000).toFixed(2), tw: rnd() < 0.16, dur: (4 + rnd() * 3).toFixed(1) });
+      E.push({ x: (rg[0] + rr * Math.cos(a)) * 27 + 405, y: (rg[1] + rr * Math.sin(a) * 0.92) * 27 + 52 });
+      cE.push(c < 0.78 ? "#CBB8DF" : c < 0.92 ? "#E3C65B" : "#FBFAF7");
     }
   });
-  const lon = { x: (7.35 * SX + OX).toFixed(1), y: (9.05 * SY + OY).toFixed(1) };
+  while (E.length > N) { E.pop(); cE.pop(); }
+
+  /* act two: the iris — three rings, focused */
+  const L = [], cL = [];
+  [[64, 40, "#FBFAF7"], [126, 60, "#E3C65B"], [188, 80, "#CBB8DF"]].forEach(([r, n, col], ri) => {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (i / n) * Math.PI * 2 + ri * 0.35;
+      const p = pt(r + (rnd() - 0.5) * 7, a);
+      L.push(p); cL.push(col);
+    }
+  });
+
+  /* act three: the orbits — a core and two tilted ellipses in motion's shape */
+  const O = [], cO = [];
+  const rot = (-18 * Math.PI) / 180;
+  const ell = (rx, ry, a) => ({ x: cx + rx * Math.cos(a) * Math.cos(rot) - ry * Math.sin(a) * Math.sin(rot), y: cyc + rx * Math.cos(a) * Math.sin(rot) + ry * Math.sin(a) * Math.cos(rot) });
+  for (let i = 0; i < 20; i++) { const p = pt(6 + 22 * Math.sqrt((i + 0.5) / 20), -Math.PI / 2 + i * GA); O.push(p); cO.push("#FBFAF7"); }
+  for (let i = 0; i < 70; i++) { O.push(ell(150, 46, (i / 70) * Math.PI * 2)); cO.push("#CBB8DF"); }
+  for (let i = 0; i < 90; i++) { O.push(ell(238, 74, (i / 90) * Math.PI * 2)); cO.push("#E3C65B"); }
+
+  /* act four: the mandala — heart, watch, rim */
+  const M = [], cM = [];
+  for (let i = 0; i < 70; i++) { M.push(pt(16 + 76 * Math.sqrt((i + 0.5) / 70), -Math.PI / 2 + i * GA)); cM.push("#CBB8DF"); }
+  for (let i = 0; i < 70; i++) { M.push(pt(146 + (rnd() - 0.5) * 30, -Math.PI / 2 + ((i + 0.5) / 70) * Math.PI * 2)); cM.push("#E3C65B"); }
+  for (let i = 0; i < 40; i++) { M.push(pt(210 + (rnd() - 0.5) * 14, -Math.PI / 2 + ((i + 0.5) / 40) * Math.PI * 2)); cM.push("#E0776F"); }
+
+  const KT = "0;0.16;0.24;0.40;0.48;0.64;0.72;0.88;1";
+  const KS = Array(8).fill(".4 0 .2 1").join(";");
+  const DUR = "24s";
+  const f = (v) => v.toFixed(1);
+  const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const seq = (a, b, c, d) => [a, a, b, b, c, c, d, d, a].join(";");
+
+  const phases = [
+    { n: "Atlas", t: "every school in England", title: "Every school in England." },
+    { n: "Lens", t: "focused on your school", title: "Then your school." },
+    { n: "Orbit", t: "a plan in motion", title: "Then the plan." },
+    { n: "Constellation", t: "resolved into children", title: "Then every child." },
+  ];
+  const labOp = (k) => ["1;1;.3;.3;.3;.3;.3;.3;1", ".3;.3;1;1;.3;.3;.3;.3;.3", ".3;.3;.3;.3;1;1;.3;.3;.3", ".3;.3;.3;.3;.3;.3;1;1;.3"][k];
+  const titleOp = (k) => ["1;1;0;0;0;0;0;0;1", "0;0;1;1;0;0;0;0;0", "0;0;0;0;1;1;0;0;0", "0;0;0;0;0;0;1;1;0"][k];
+
   return (
-    <svg viewBox="0 0 1100 430" width="100%" style={{ display: "block", maxWidth: 1100, margin: "0 auto" }} role="img"
-      aria-label="Atlas: every school in England as a field of light on a night ground">
-      {dots.map((d, i) => (
-        <circle key={i} cx={d.x} cy={d.y} r={d.r} fill={d.c} opacity={d.o}>
-          {d.tw
-            ? <animate attributeName="opacity" values={`${d.o};0.15;${d.o}`} dur={d.dur + "s"} begin={d.b + "s"} repeatCount="indefinite" />
-            : <animate attributeName="opacity" from="0" to={d.o} begin={d.b + "s"} dur="0.7s" fill="freeze" />}
-        </circle>
+    <svg viewBox="0 0 1100 656" width="100%" style={{ display: "block", maxWidth: 1100, margin: "0 auto" }} role="img"
+      aria-label="One field of dots becomes each instrument in turn, the title narrating: every school in England, then your school, then the plan, then every child">
+      {phases.map((p, k) => (
+        <text key={"t" + p.n} x="550" y="62" textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="54"
+          letterSpacing="-1" fill="#FBFAF7" opacity={reduce ? (k === 3 ? 1 : 0) : 0}>
+          {p.title}
+          {!reduce && <animate attributeName="opacity" values={titleOp(k)} keyTimes={KT} dur={DUR} repeatCount="indefinite" />}
+        </text>
       ))}
-      <circle cx={lon.x} cy={lon.y} r="5" fill="#E3C65B">
-        <animate attributeName="r" values="4.2;6.2;4.2" dur="3.4s" begin="2.4s" repeatCount="indefinite" />
-      </circle>
+      <g transform="translate(0, 96)">
+      {Array.from({ length: N }).map((_, i) => {
+        const r = (1.9 + (i % 7) * 0.22).toFixed(1);
+        if (reduce) return <circle key={i} cx={f(M[i].x)} cy={f(M[i].y)} r={r} fill={cM[i]} opacity="0.85" />;
+        return (
+          <circle key={i} cx={f(E[i].x)} cy={f(E[i].y)} r={r} fill={cE[i]} opacity="0.85">
+            <animate attributeName="cx" values={seq(f(E[i].x), f(L[i].x), f(O[i].x), f(M[i].x))} keyTimes={KT} calcMode="spline" keySplines={KS} dur={DUR} repeatCount="indefinite" />
+            <animate attributeName="cy" values={seq(f(E[i].y), f(L[i].y), f(O[i].y), f(M[i].y))} keyTimes={KT} calcMode="spline" keySplines={KS} dur={DUR} repeatCount="indefinite" />
+            <animate attributeName="fill" values={seq(cE[i], cL[i], cO[i], cM[i])} keyTimes={KT} dur={DUR} repeatCount="indefinite" />
+          </circle>
+        );
+      })}
+      {phases.map((p, k) => {
+        const x = 550 + (k - 1.5) * 190;
+        return (
+          <g key={p.n} opacity={reduce ? (k === 3 ? 1 : 0.3) : undefined}>
+            <text x={x} y="528" textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="16" fill="#E3C65B">
+              {p.n}
+              {!reduce && <animate attributeName="opacity" values={labOp(k)} keyTimes={KT} dur={DUR} repeatCount="indefinite" />}
+            </text>
+            <text x={x} y="546" textAnchor="middle" fontSize="10" fill="rgba(251,250,247,.55)">
+              {p.t}
+              {!reduce && <animate attributeName="opacity" values={labOp(k)} keyTimes={KT} dur={DUR} repeatCount="indefinite" />}
+            </text>
+          </g>
+        );
+      })}
+      </g>
     </svg>
   );
 }
@@ -179,7 +254,27 @@ export default function Home() {
     const els = document.querySelectorAll(".ed [data-reveal]");
     const ob = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); ob.unobserve(e.target); } }), { threshold: 0.15 });
     els.forEach((el) => ob.observe(el));
-    return () => ob.disconnect();
+    /* the glide down to Register: unhurried, on the house ease */
+    const glide = (e) => {
+      const a = e.target.closest && e.target.closest('a[href="#register"]');
+      if (!a) return;
+      const el = document.getElementById("register");
+      if (!el) return;
+      e.preventDefault();
+      const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const y1 = el.getBoundingClientRect().top + window.scrollY - 24;
+      if (reduce) { window.scrollTo(0, y1); return; }
+      const y0 = window.scrollY, t0 = performance.now(), D = 1700;
+      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      const step = (now) => {
+        const k = Math.min(1, (now - t0) / D);
+        window.scrollTo(0, y0 + (y1 - y0) * ease(k));
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    document.addEventListener("click", glide);
+    return () => { ob.disconnect(); document.removeEventListener("click", glide); };
   }, []);
 
   async function register(e) {
@@ -289,6 +384,17 @@ export default function Home() {
         </div>
       </div></section>
 
+      {/* ── the centrepiece: one field of light, four instruments ── */}
+      <section id="journey" style={{ marginTop: 110, background: "#1A1030", color: PAPER, padding: "88px 28px 44px", textAlign: "center" }}>
+        <div data-reveal>
+          <div className="kick" style={{ color: "#E3C65B", marginBottom: 10 }}>SEE &middot; KNOW &middot; ACT &middot; LIVE</div>
+        </div>
+        <InstrumentJourney />
+        <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 600 }}>
+          <a href="#register" style={{ color: "#E3C65B", textDecoration: "none" }}>Register interest &rarr;</a>
+        </div>
+      </section>
+
       {/* ── the instruments ── */}
       <section style={{ padding: "110px 0 0" }}><div className="wrap">
         <div data-reveal style={{ textAlign: "center" }}>
@@ -359,24 +465,6 @@ export default function Home() {
           </div>
         </div>
       </div></section>
-
-      {/* ── the dark moment: Atlas by night ── */}
-      <section style={{ marginTop: 110, background: "#1A1030", color: PAPER, padding: "92px 28px 56px", textAlign: "center" }}>
-        <div data-reveal>
-          <div className="kick" style={{ color: "#E3C65B" }}>ATLAS</div>
-          <h2 style={{ fontSize: "clamp(38px, 5.2vw, 76px)", lineHeight: 1.05, margin: "18px 0 0" }}>
-            Every school in England, <span style={{ opacity: 0.5 }}>one map.</span>
-          </h2>
-          <p style={{ margin: "20px auto 0", maxWidth: 600, fontSize: 15.5, lineHeight: 1.65, color: "rgba(251,250,247,.66)" }}>
-            Results, intake, inclusion and trajectory for 26,553 schools, benchmarked against the schools most
-            like yours, searchable in plain English.
-          </p>
-          <div style={{ marginTop: 22, fontSize: 13.5, fontWeight: 600 }}>
-            <a href="#register" style={{ color: "#E3C65B", textDecoration: "none" }}>Register interest &rarr;</a>
-          </div>
-        </div>
-        <div style={{ marginTop: 30 }}><NightEngland /></div>
-      </section>
 
       {/* ── five things ── */}
       <section style={{ padding: "110px 0 0" }}><div className="wrap">
