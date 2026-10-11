@@ -300,8 +300,7 @@ export default function Home() {
       <SiteNav />
 
       {/* ── the hero: the mandala as the front door ── */}
-      <header style={{ textAlign: "center", padding: "72px 28px 0", overflow: "hidden" }}>
-        <div className="kick" style={{ marginBottom: 22 }}>THE ALL SAINTS INSTITUTE</div>
+      <header style={{ textAlign: "center", padding: "84px 28px 0", overflow: "hidden" }}>
         <h1 style={{ fontSize: "clamp(44px, 6.4vw, 92px)", lineHeight: 1.02 }}>
           Where England&rsquo;s school<br />leaders <span className="dim">come to think.</span>
         </h1>

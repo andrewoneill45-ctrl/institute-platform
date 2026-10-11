@@ -6,7 +6,7 @@ export function SiteNav() {
   const l = ({ isActive }) => ({ color: isActive ? "var(--purple-700)" : undefined });
   return (
     <nav className="nav"><div className="container nav-in">
-      <Link to="/" style={{ textDecoration: "none" }}><Wordmark size={24} /></Link>
+      <Link to="/" style={{ textDecoration: "none" }}><Wordmark size={38} /></Link>
       <span className="spacer" />
       <NavLink to="/insights" style={l}>Insights</NavLink>
       <Link to="/signin" className="btn line" style={{ padding: "9px 20px", fontSize: 12.5 }}>Member sign in</Link>
