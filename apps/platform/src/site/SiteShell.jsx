@@ -9,7 +9,7 @@ export function SiteNav() {
       <Link to="/" style={{ textDecoration: "none" }}><Wordmark size={24} /></Link>
       <span className="spacer" />
       <NavLink to="/insights" style={l}>Insights</NavLink>
-      <NavLink to="/fellowship" style={l}>The Fellowship</NavLink>
+      <NavLink to="/fellowship" style={l}>About</NavLink>
       <NavLink to="/positions" style={l}>Positions</NavLink>
       <NavLink to="/system" style={l}>State of the System</NavLink>
       <NavLink to="/summit" style={l}>The Summit</NavLink>

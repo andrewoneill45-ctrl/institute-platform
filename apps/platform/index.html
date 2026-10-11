@@ -9,6 +9,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Netlify Forms registration: parsed at deploy time so the SPA's fetch-submits land in the dashboard -->
+  <form name="register-interest" netlify netlify-honeypot="bot-field" hidden>
+    <input type="email" name="email" />
+    <input name="bot-field" />
+  </form>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
