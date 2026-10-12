@@ -6,6 +6,8 @@ import "./dynamic.css";
    Average Attainment 8 step change across 2019, 2024 and 2025, against the latest Progress 8.
    Only Dynamic Schools are ever named; the other quadrants are unnamed dots and counts. */
 
+/* the page opens on All Saints Catholic College; falls back to a strong example if it ever leaves the quadrant */
+const HOME_URN = "100503";
 const sign = (v, d = 1) => (v == null ? "n/a" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d));
 const fmt = (v, d = 1, suf = "") => (v == null ? "n/a" : v.toFixed(d) + suf);
 const shortType = (t) => (t || "").replace(/ school| converter| sponsor led/gi, "").replace("Voluntary aided", "VA").replace("Voluntary controlled", "VC");
@@ -64,7 +66,7 @@ export default function DynamicSchools() {
 
   useEffect(() => { fetch("/data/dynamic.json").then((r) => r.json()).then((raw) => setData(prepare(raw))); }, []);
 
-  const first = useMemo(() => data && (data.dyn.find((s) => (s.fsm || 0) >= 40 && (s.pupils || 0) >= 500 && s.x < data.M.xmax * 0.7 && s.y < data.M.ymax * 0.7) || data.dyn[0]), [data]);
+  const first = useMemo(() => data && (data.dyn.find((s) => s.urn === HOME_URN) || data.dyn.find((s) => (s.fsm || 0) >= 40 && (s.pupils || 0) >= 500 && s.x < data.M.xmax * 0.7 && s.y < data.M.ymax * 0.7) || data.dyn[0]), [data]);
   useEffect(() => {
     if (!data || !canvasRef.current) return;
     const eng = createEngine(canvasRef.current, data, {
