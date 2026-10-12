@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Wordmark, Kick } from "@asi/design-system";
+import DynamicSchools from "./dynamic/DynamicSchools.jsx";
+import "../lib/motion.jsx";
 
 /* System Insights: the national dashboard, ported from the platform prototype.
    Charts are built as SVG strings from the published-data files in /data. */
@@ -51,8 +53,23 @@ function scatter(pts, o) {
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">${s}</svg>`;
 }
 
+const VIEWS = {
+  system: { kick: "System insights · published DfE data · 17,465 state schools", h: "What the whole system is saying" },
+  dynamic: { kick: "Dynamic schools · published DfE data · 2,724 state secondaries", h: "Which schools are moving" },
+};
+const viewFromHash = () => (typeof window !== "undefined" && window.location.hash === "#dynamic" ? "dynamic" : "system");
+
 export default function Insights() {
   const [d, setD] = useState(null);
+  const [view, setView] = useState(viewFromHash);
+  useEffect(() => {
+    const h = () => setView(viewFromHash());
+    window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h);
+  }, []);
+  const choose = (v) => {
+    setView(v);
+    window.history.replaceState(null, "", v === "dynamic" ? "#dynamic" : window.location.pathname);
+  };
   useEffect(() => {
     Promise.all([
       fetch("/data/index_data.json").then((r) => r.json()),
@@ -61,9 +78,9 @@ export default function Insights() {
     ]).then(([DATA, INS, PRI]) => setD({ DATA, INS, PRI }));
   }, []);
 
-  if (!d) return <div className="container" style={{ padding: "80px 32px", color: "var(--muted)" }}>Reading the system…</div>;
-  const { DATA, INS, PRI } = d;
-  const S = INS.sec, P = INS.pri, Q = INS.quad;
+  const ready = !!d;
+  const { DATA, INS, PRI } = d || {};
+  const S = INS?.sec, P = INS?.pri, Q = INS?.quad;
   const html = (s) => ({ __html: s });
 
   return (
@@ -76,9 +93,16 @@ export default function Insights() {
       </div></nav>
 
       <div className="container" style={{ padding: "56px 32px 90px" }}>
-        <Kick>System insights · published DfE data · 17,465 state schools</Kick>
-        <h1 style={{ fontSize: 44, margin: "12px 0 8px" }}>What the whole system is saying</h1>
+        <Kick>{VIEWS[view].kick}</Kick>
+        <h1 style={{ fontSize: 44, margin: "12px 0 14px" }}>{VIEWS[view].h}</h1>
+        <div className="ins-switch" role="tablist" aria-label="Insights">
+          <button role="tab" aria-selected={view === "system"} className={view === "system" ? "on" : ""} onClick={() => choose("system")}>The system</button>
+          <button role="tab" aria-selected={view === "dynamic"} className={view === "dynamic" ? "on" : ""} onClick={() => choose("dynamic")}>Dynamic schools</button>
+        </div>
 
+        {view === "dynamic" && <div className="asi-fade" key="dyn" style={{ marginTop: 8 }}><DynamicSchools /></div>}
+        {view === "system" && !ready && <p style={{ padding: "60px 0", color: "var(--muted)" }}>Reading the system…</p>}
+        {view === "system" && ready && <div className="asi-fade" key="sys">
         <div className="fieldwall">
           <p className="fw-kick">England's state schools, in numbers</p>
           <h2 className="fw-h">Every school in England, <em>on one line.</em></h2>
@@ -157,6 +181,7 @@ export default function Insights() {
             <p className="src">Each point is one school scored against all of England on the published weights. n={Q.n.toLocaleString("en-GB")}. Gold points: both 60 or above.</p>
           </div>
         </div>
+        </div>}
       </div>
     </>
   );
