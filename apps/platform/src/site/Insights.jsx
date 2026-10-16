@@ -55,7 +55,7 @@ function scatter(pts, o) {
 
 const VIEWS = {
   system: { kick: "System insights · published DfE data · 17,465 state schools", h: "What the whole system is saying" },
-  dynamic: { kick: "Dynamic schools · published DfE data · 2,724 state secondaries", h: "Which schools are moving" },
+  dynamic: { kick: "Dynamic schools · published DfE data, 2025/26 provisional · 3,182 state secondaries", h: "Which schools are moving" },
 };
 const viewFromHash = () => (typeof window !== "undefined" && window.location.hash === "#dynamic" ? "dynamic" : "system");
 

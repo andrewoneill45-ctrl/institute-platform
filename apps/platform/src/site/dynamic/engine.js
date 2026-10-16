@@ -1,5 +1,5 @@
 /* Dynamic Schools: the canvas engine.
-   Quadrant view: average Attainment 8 step change (2019 → 2024 → 2025) across, Progress 8 up.
+   Quadrant view: average Attainment 8 step change over the latest three results years across, Progress 8 up.
    The Dynamic Schools quadrant (top right) takes most of the canvas; the other three are
    compressed toward the edges. Map view: the same dots glide to their place in England.
    Only Dynamic Schools can be hovered or chosen; every other school stays an unnamed dot. */
@@ -15,7 +15,7 @@ export function prepare(raw) {
   const toX = (lon) => (lon - LON0) * KX, toY = (lat) => (lat - LAT0) * KY;
   const dyn = raw.D.map((r, i) => {
     const o = { q: "R", rank: i + 1 }; F.forEach((k, j) => (o[k] = r[j]));
-    o.s1 = o.a24 - o.a19; o.s2 = o.a25 - o.a24; o.x = (o.s1 + o.s2) / 2; o.y = o.p8; o.d19 = o.a25 - o.a19;
+    o.s1 = o.a2 - o.a1; o.s2 = o.a3 - o.a2; o.x = (o.s1 + o.s2) / 2; o.y = o.p8; o.dTot = o.a3 - o.a1;
     o.X = toX(o.lon); o.Y = toY(o.lat); return o;
   });
   const others = raw.O.map(([q, x, y, lat, lon, fsm]) => ({ q, x, y, fsm, X: toX(lon), Y: toY(lat) }));
@@ -130,7 +130,7 @@ export function createEngine(canvas, data, { onSelect, onHover } = {}) {
       const v = i / 2, x = qx(v), major = i < 0 ? i % 4 === 0 : i % 2 === 0;
       g.beginPath(); g.moveTo(x, by); g.lineTo(x, by + (major ? 9 : 5)); g.stroke();
       if (major) { g.fillStyle = v === 0 ? PURPLE : INK; g.fillText(v === 0 ? "0" : sign(v, 0), x, by + 21); } }
-    g.fillStyle = MUTED; g.font = `600 9.5px ${SANS}`; g.textAlign = "left"; g.fillText("AVERAGE ATTAINMENT 8 CHANGE PER STEP · 2019 → 2024 → 2025", plot.l, by + 37);
+    g.fillStyle = MUTED; g.font = `600 9.5px ${SANS}`; g.textAlign = "left"; g.fillText("AVERAGE ATTAINMENT 8 CHANGE PER STEP · " + M.years.join(" → "), plot.l, by + 37);
     g.textAlign = "right"; g.font = `9.5px ${SANS}`; g.fillText("scale compressed left of 0 and below 0", plot.r, by + 37);
     g.restore();
   }
