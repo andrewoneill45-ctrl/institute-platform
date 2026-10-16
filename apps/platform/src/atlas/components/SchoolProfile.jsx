@@ -281,6 +281,7 @@ const SchoolProfile = ({ school, allSchools, onClose, onCompare }) => {
             {s.p8_prev != null && <Headline label="P8 (2024)" value={(s.p8_prev > 0 ? '+' : '') + s.p8_prev.toFixed(2)} decile={ctx.p8PrevDecile} />}
             {s.basics_94 != null && <Headline label="4+ Eng & Ma" value={s.basics_94 + '%'} decile={ctx.b94Decile} prev={s.b94_prev} />}
             {s.basics_95 != null && <Headline label="5+ Eng & Ma" value={s.basics_95 + '%'} decile={ctx.b95Decile} prev={s.b95_prev} />}
+            <div style={{ gridColumn: '1 / -1', fontSize: 10.5, opacity: 0.55, marginTop: 2 }}>2025/26 provisional · arrows against 2024/25 · P8 is 2023/24, the last published</div>
           </div>
         )}
         {isPrimary && s.ks2_rwm_exp != null && (
