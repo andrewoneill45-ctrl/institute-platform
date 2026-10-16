@@ -14,8 +14,9 @@ const shortType = (t) => (t || "").replace(/ school| converter| sponsor led/gi, 
 const ordinal = (n) => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
 
 function Trajectory({ s, med, years }) {
-  const W = 300, H = 132, xs = [34, 148, 262];
-  const vals = [s.a1, s.a2, s.a3], meds = [med.a1, med.a2, med.a3];
+  /* 2019 sits apart, across the pandemic gap; the recent years run one a year */
+  const W = 300, H = 140, xs = years.map((y, i) => (i === 0 ? 30 : 150 + (i - 1) * ((272 - 150) / Math.max(1, years.length - 2))));
+  const vals = s.a, meds = med.a;
   const lo = Math.min(...vals, ...meds) - 3, hi = Math.max(...vals, ...meds) + 3;
   const y = (v) => 10 + (1 - (v - lo) / (hi - lo)) * (H - 34);
   const step = hi - lo > 16 ? 5 : 2, grid = [];
@@ -23,18 +24,19 @@ function Trajectory({ s, med, years }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="ds-traj" role="img" aria-label={`Attainment 8: ${vals.join(", ")} in ${years.join(", ")}`}>
       {grid.map((v) => <g key={v}><line x1="0" x2={W} y1={y(v)} y2={y(v)} stroke="rgba(106,12,160,.08)" /><text x="2" y={y(v) - 3} className="ax">{v}</text></g>)}
+      <rect x={xs[0] + 18} y="4" width={xs[1] - xs[0] - 36} height={H - 30} fill="rgba(106,12,160,.05)" />
+      <text x={(xs[0] + xs[1]) / 2} y="16" textAnchor="middle" className="ax">pandemic years</text>
       <polyline points={xs.map((x, i) => `${x},${y(meds[i])}`).join(" ")} fill="none" stroke="#A79FB5" strokeWidth="1.3" strokeDasharray="4 3" />
-      <line x1={xs[0]} y1={y(vals[0])} x2={xs[1]} y2={y(vals[1])} stroke={s.s1 >= 0 ? "#6A0CA0" : "#221233"} strokeWidth="2.4" />
-      <line x1={xs[1]} y1={y(vals[1])} x2={xs[2]} y2={y(vals[2])} stroke={s.s2 >= 0 ? "#6A0CA0" : "#221233"} strokeWidth="2.4" />
-      {vals.map((v, i) => <g key={i}><circle cx={xs[i]} cy={y(v)} r="3.6" fill={i === 2 ? "#C6A035" : "#221233"} />
-        <text x={xs[i]} y={y(v) + (i === 1 && vals[1] > vals[2] ? 15 : -8)} textAnchor="middle" className="v">{v.toFixed(1)}</text></g>)}
+      {vals.slice(1).map((v, i) => <line key={i} x1={xs[i]} y1={y(vals[i])} x2={xs[i + 1]} y2={y(v)} stroke={v >= vals[i] ? "#6A0CA0" : "#221233"} strokeWidth="2.4" strokeDasharray={i === 0 ? "5 4" : undefined} />)}
+      {vals.map((v, i) => <g key={i}><circle cx={xs[i]} cy={y(v)} r="3.6" fill={i === vals.length - 1 ? "#C6A035" : "#221233"} />
+        <text x={xs[i]} y={y(v) + (i > 0 && i < vals.length - 1 && !(v > vals[i + 1] && v > vals[i - 1]) ? 15 : -8)} textAnchor="middle" className="v">{v.toFixed(1)}</text></g>)}
       {years.map((t, i) => <text key={t} x={xs[i]} y={H - 4} textAnchor="middle" className="ax">{t}</text>)}
     </svg>
   );
 }
 
 function Distribution({ all, sel, M }) {
-  const W = 300, H = 74, lo = -M.xmax, hi = M.xmax, bw = 0.5;
+  const W = 300, H = 74, lo = -M.xmax, hi = M.xmax, bw = M.xmax / 12;
   const bins = useMemo(() => { const b = new Array(Math.round((hi - lo) / bw) + 1).fill(0); all.forEach((s) => b[Math.round((Math.max(lo, Math.min(hi, s.x)) - lo) / bw)]++); return b; }, [all]);
   const mx = Math.max(...bins), X = (v) => ((v - lo) / (hi - lo)) * (W - 2) + 1, Y = (c) => H - 14 - (c / mx) * (H - 22);
   const d = `M${X(lo)},${H - 14} ` + bins.map((c, i) => `L${X(lo + i * bw)},${Y(c)}`).join(" ") + ` L${X(hi)},${H - 14} Z`;
@@ -46,7 +48,7 @@ function Distribution({ all, sel, M }) {
       <path d={d} fill="rgba(106,12,160,.32)" clipPath="url(#dsRight)" />
       <line x1={X(0)} x2={X(0)} y1="2" y2={H - 14} stroke="#221233" />
       <line x1={X(sv)} x2={X(sv)} y1="0" y2={H - 14} stroke="#C6A035" strokeWidth="2" /><circle cx={X(sv)} cy="3" r="3" fill="#C6A035" />
-      {[-6, -4, -2, 0, 2, 4, 6].filter((v) => v >= lo && v <= hi).map((v) => <text key={v} x={X(v)} y={H - 2} textAnchor="middle" className="ax">{v > 0 ? "+" + v : v === 0 ? "0" : "−" + Math.abs(v)}</text>)}
+      {[-1, -0.5, 0, 0.5, 1].map((f) => f * hi).map((v) => <text key={v} x={X(v)} y={H - 2} textAnchor="middle" className="ax">{v === 0 ? "0" : sign(v, Number.isInteger(v) ? 0 : 1)}</text>)}
     </svg>
   );
 }
@@ -96,9 +98,10 @@ export default function DynamicSchools() {
     if (!data) return [];
     const out = [], big = (s) => (s.pupils || 0) >= 500;
     for (const s of data.dyn) {
-      if (s.s2 >= 6 && big(s)) out.push({ s, tag: "Surge", val: sign(s.s2), rank: s.s2, label: "Attainment 8 up in a single year" });
+      if (s.sLast >= 6 && big(s)) out.push({ s, tag: "Surge", val: sign(s.sLast), rank: s.sLast, label: "Attainment 8 up in a single year" });
       if ((s.fsm || 0) >= 40 && s.y >= 0.5) out.push({ s, tag: "Against the odds", val: sign(s.y, 2), rank: s.y * 8, label: `Progress 8 at ${Math.round(s.fsm)}% disadvantage` });
-      if (s.s1 < 0 && s.dTot >= 1 && big(s)) out.push({ s, tag: "Turned", val: sign(s.s2), rank: s.s2 * 0.8, label: `fell in ${data.M.years[1]}, now back above ${data.M.years[0]}` });
+      if (s.dPre >= 5 && big(s)) out.push({ s, tag: "Beyond 2019", val: sign(s.dPre), rank: s.dPre * 0.7, label: "now well above its pre-pandemic results" });
+      if (s.sPrev < 0 && s.sLast >= 2 && big(s)) out.push({ s, tag: "Turned", val: sign(s.sLast), rank: s.sLast * 0.8, label: `fell in ${data.M.years.at(-2)}, climbed again in ${data.M.years.at(-1)}` });
     }
     return out.sort((a, b) => b.rank - a.rank);
   }, [data]);
@@ -123,7 +126,7 @@ export default function DynamicSchools() {
       <div className="fieldwall ds-intro">
         <p className="fw-kick">Dynamic schools · three years of results</p>
         <h2 className="fw-h">The schools that are <em>moving.</em></h2>
-        <p className="fw-sub">Every state secondary with Attainment 8 for {M.years[0]}, {M.years[1]} and {M.years[2]} (the last still provisional), placed by how its results have moved across those three years and by the progress its pupils make. The top right is where improvement and added value meet.</p>
+        <p className="fw-sub">Every state secondary with Attainment 8 before the pandemic ({M.years[0]}) and in each of the last three years ({M.years.slice(1).join(", ")}, the last still provisional), placed by the trend through those results and by the progress its pupils make. The top right is where improvement and added value meet.</p>
         <div className="fw-marg ds-marg">
           <div><b>{C.R}</b><span>dynamic schools: rising results and positive progress</span></div>
           <div><b>{C.S}</b><span>strong and steady: positive progress, results flat or falling</span></div>
@@ -164,7 +167,7 @@ export default function DynamicSchools() {
             {tip && (
               <div className="ds-tip" style={{ left: Math.max(6, Math.min(tip.x + 14, (canvasRef.current?.clientWidth || 600) - 270)), top: Math.max(6, tip.y - 70) }}>
                 <b>{tip.s.name}</b><span>{tip.s.la}</span>
-                <em>Attainment 8 {sign(tip.s.x)} a step · Progress 8 {sign(tip.s.y, 2)}</em>
+                <em>Attainment 8 {sign(tip.s.x, 2)} a year · Progress 8 {sign(tip.s.y, 2)}</em>
               </div>
             )}
             <button className="ds-sidetoggle" onClick={() => setSide((v) => !v)} aria-label={side ? "Hide the panel" : "Show the panel"} title={side ? "Hide the panel" : "Show the panel"}>
@@ -181,8 +184,8 @@ export default function DynamicSchools() {
               <div className="ds-gauge" aria-label={`Momentum: ${ordinal(sel.pct)} percentile nationally`}>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < gauge ? (i === gauge - 1 ? "f g" : "f") : ""} />)}</div>
               <p className="ds-gl"><span>Momentum</span><b>{ordinal(sel.pct)} percentile</b></p>
               <dl className="ds-kv">
-                <dt>A8 a step</dt><dd className="p">{sign(sel.x)}</dd><dt>Progress 8</dt><dd className="p">{sign(sel.y, 2)}</dd>
-                <dt>A8 {M.years[0]}</dt><dd>{fmt(sel.a1)}</dd><dt>A8 {M.years[2]}</dt><dd>{fmt(sel.a3)}</dd>
+                <dt>A8 a year</dt><dd className="p">{sign(sel.x, 2)}</dd><dt>Progress 8</dt><dd className="p">{sign(sel.y, 2)}</dd>
+                <dt>A8 {M.years[0]}</dt><dd>{fmt(sel.a[0])}</dd><dt>A8 {M.years.at(-1)}</dt><dd>{fmt(sel.a.at(-1))}</dd>
                 <dt>FSM6</dt><dd>{fmt(sel.fsm, 1, "%")}</dd><dt>EHCP</dt><dd>{fmt(sel.ehcp, 1, "%")}</dd>
                 <dt>4+ E&amp;M</dt><dd>{sel.b94 == null ? "n/a" : sel.b94 + "%"}</dd><dt>Absence</dt><dd>{fmt(sel.abs, 1, "%")}</dd>
                 <dt>Type</dt><dd title={sel.type}>{shortType(sel.type)}</dd><dt>Ofsted</dt><dd title={sel.ofsted}>{sel.ofsted || "n/a"}</dd>
@@ -193,7 +196,7 @@ export default function DynamicSchools() {
               <Trajectory s={sel} med={M.med} years={M.years} />
             </section>
             <section className="ds-card">
-              <p className="ds-k">Where every school moved <span>A8 a step · gold: this school</span></p>
+              <p className="ds-k">Where every school moved <span>A8 trend a year · gold: this school</span></p>
               <Distribution all={data.all} sel={sel} M={M} />
               <div className="ds-strip" aria-hidden="true">{["R", "S", "I", "D"].map((k) => <i key={k} className={k} style={{ flex: C[k] }} />)}</div>
               <div className="ds-counts">{["R", "S", "I", "D"].map((k) => <span key={k} className={k}><b>{C[k]}</b>{QNAME[k]}</span>)}</div>
@@ -220,11 +223,11 @@ export default function DynamicSchools() {
           <div className="ds-regions">{regions.map((r) => <button key={r} className={region === r ? "on" : ""} onClick={() => { setRegion(r); setShown(25); }}>{r === "Yorkshire and the Humber" ? "Yorkshire & Humber" : r}</button>)}</div>
           <div className="ds-tablewrap">
             <table className="ds-table">
-              <thead><tr><th>#</th><th>School</th><th className="r">FSM6</th><th className="r">A8 a step</th><th className="r">Progress 8</th><th className="r">A8 {M.years[2]}</th></tr></thead>
+              <thead><tr><th>#</th><th>School</th><th className="r">FSM6</th><th className="r">A8 a year</th><th className="r">Progress 8</th><th className="r">A8 {M.years.at(-1)}</th></tr></thead>
               <tbody>{ranked.slice(0, shown).map((s, i) => (
                 <tr key={s.urn} onClick={() => { pick(s); shellRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={s === sel ? "on" : ""}>
                   <td className="n">{i + 1}</td><td><b>{s.name}</b><span>{s.la}</span></td><td className="r">{fmt(s.fsm, 0, "%")}</td>
-                  <td className="r p">{sign(s.x)}</td><td className="r p">{sign(s.y, 2)}</td><td className="r">{fmt(s.a3)}</td></tr>
+                  <td className="r p">{sign(s.x, 2)}</td><td className="r p">{sign(s.y, 2)}</td><td className="r">{fmt(s.a.at(-1))}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -245,8 +248,8 @@ export default function DynamicSchools() {
         </div>
         <div className="panel">
           <h3>How to read it</h3>
-          <p className="finding">Across: the average of the two steps in Attainment 8, {M.years[0]} to {M.years[1]} and {M.years[1]} to {M.years[2]}, three consecutive years of results with the latest still provisional. Up: Progress 8, the value a school adds from pupils' starting points; the most recent published figure is for {M.years[0]}, as none was published for the two years since.</p>
-          <p className="ds-p">The median school moved {sign(M.med.x)} a step. The three other quadrants are drawn smaller and pressed toward the edges so the dynamic schools have room; every school still sits at its true value. Only dynamic schools are named, anywhere on this page. One year's movement can be a cohort effect, a school that started high has less room to climb, the latest year is provisional, and Progress 8 is older than two of the three results years: this shows where to look, not what you will find.</p>
+          <p className="finding">Across: the trend in Attainment 8, in points a year, drawn as a line through the last results before the pandemic ({M.years[0]}) and the three years since ({M.years.slice(1).join(', ')}, the latest provisional). A line uses every year, so a school that peaked and then fell is read as it is, not just by where it started and finished. Up: Progress 8, the value a school adds from pupils' starting points; the most recent published figure is for {M.years[1]}.</p>
+          <p className="ds-p">The median school's trend is {sign(M.med.x, 2)} a year. The three other quadrants are drawn smaller and pressed toward the edges so the dynamic schools have room; every school still sits at its true value. Only dynamic schools are named, anywhere on this page. One year's movement can be a cohort effect, a school that started high has less room to climb, the latest year is provisional, and Progress 8 is older than the two most recent results years: this shows where to look, not what you will find.</p>
           <p className="src">Institute analysis of DfE data: {M.vintage}.</p>
         </div>
       </div>

@@ -15,7 +15,8 @@ export function prepare(raw) {
   const toX = (lon) => (lon - LON0) * KX, toY = (lat) => (lat - LAT0) * KY;
   const dyn = raw.D.map((r, i) => {
     const o = { q: "R", rank: i + 1 }; F.forEach((k, j) => (o[k] = r[j]));
-    o.s1 = o.a2 - o.a1; o.s2 = o.a3 - o.a2; o.x = (o.s1 + o.s2) / 2; o.y = o.p8; o.dTot = o.a3 - o.a1;
+    o.a = M.years.map((y) => o["a" + y]); const n = o.a.length;
+    o.sLast = o.a[n - 1] - o.a[n - 2]; o.sPrev = o.a[n - 2] - o.a[n - 3]; o.dPre = o.a[n - 1] - o.a[0]; o.y = o.p8;
     o.X = toX(o.lon); o.Y = toY(o.lat); return o;
   });
   const others = raw.O.map(([q, x, y, lat, lon, fsm]) => ({ q, x, y, fsm, X: toX(lon), Y: toY(lat) }));
@@ -126,11 +127,12 @@ export function createEngine(canvas, data, { onSelect, onHover } = {}) {
       if (major) { g.fillStyle = i === 0 ? PURPLE : INK; g.fillText(i === 0 ? "0" : sign(v, 1), lx - 4, y + 3.5); } }
     g.save(); g.translate(16, (plot.t + plot.b) / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillStyle = MUTED; g.font = `600 9.5px ${SANS}`; g.fillText("PROGRESS 8 · 2024", 0, 0); g.restore();
     const by = plot.b + 8; g.textAlign = "center"; g.font = `500 10px ${SANS}`;
-    for (let i = -XMAX * 2; i <= XMAX * 2; i++) { if (i < 0 && i % 2) continue;
-      const v = i / 2, x = qx(v), major = i < 0 ? i % 4 === 0 : i % 2 === 0;
+    const U = XMAX <= 3 ? 0.5 : 1, dp = U < 1 ? 1 : 0;  /* labelled every U, minor ticks every U/2 */
+    for (let i = -Math.round(XMAX / U) * 2; i <= Math.round(XMAX / U) * 2; i++) { if (i < 0 && i % 2) continue;
+      const v = (i * U) / 2, x = qx(v), major = i < 0 ? i % 4 === 0 : i % 2 === 0;
       g.beginPath(); g.moveTo(x, by); g.lineTo(x, by + (major ? 9 : 5)); g.stroke();
-      if (major) { g.fillStyle = v === 0 ? PURPLE : INK; g.fillText(v === 0 ? "0" : sign(v, 0), x, by + 21); } }
-    g.fillStyle = MUTED; g.font = `600 9.5px ${SANS}`; g.textAlign = "left"; g.fillText("AVERAGE ATTAINMENT 8 CHANGE PER STEP · " + M.years.join(" → "), plot.l, by + 37);
+      if (major) { g.fillStyle = v === 0 ? PURPLE : INK; g.fillText(v === 0 ? "0" : sign(v, dp), x, by + 21); } }
+    g.fillStyle = MUTED; g.font = `600 9.5px ${SANS}`; g.textAlign = "left"; g.fillText("ATTAINMENT 8 TREND, POINTS A YEAR · " + M.years[0] + " (PRE-PANDEMIC), " + M.years.slice(1).join(", "), plot.l, by + 37);
     g.textAlign = "right"; g.font = `9.5px ${SANS}`; g.fillText("scale compressed left of 0 and below 0", plot.r, by + 37);
     g.restore();
   }
