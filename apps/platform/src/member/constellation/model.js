@@ -1,6 +1,7 @@
 /* Constellation core — the Measurement Guide, executable.
    The AI reads, the maths counts: everything in this file is deterministic,
-   every figure traceable to a source upload, and nothing leaves the browser. */
+   every figure traceable to a source upload. Files are parsed on the device;
+   with a school vault, the resulting state is shared with verified members. */
 
 /* ── storage: IndexedDB, per school, on this device only ── */
 const DB = (schoolId) => new Promise((res, rej) => {

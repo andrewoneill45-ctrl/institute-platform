@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
 import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats } from "./model.js";
+import { vaultMembership, vaultLoad, vaultSave, planSync } from "./vault.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
 
@@ -43,12 +44,50 @@ function Constellation() {
 
   useEffect(ensureMotionCss, []);
   const loadedFor = useRef(null);
+  const vault = useRef({ member: false, urn: null, version: 0 });
+  const adopted = useRef(false); /* true when state was just taken FROM the vault: cache it, don't push it back */
+  const pushTimer = useRef(null);
+  const [vaultOn, setVaultOn] = useState(false);
+  const [vaultNote, setVaultNote] = useState("");
   useEffect(() => {
     if (!user) return;
     loadedFor.current = null;
-    loadState(sid).then((s) => { setState(s || blankState()); loadedFor.current = sid; });
+    (async () => {
+      const m = await vaultMembership();
+      const local = await loadState(sid);
+      if (m) {
+        const row = await vaultLoad(m.urn);
+        vault.current = { member: true, urn: m.urn, version: row?.version || 0 };
+        setVaultOn(true);
+        const plan = planSync(local, row);
+        if (plan === "adopt") { adopted.current = true; setState(row.state); }
+        else setState(local || blankState()); /* "seed" pushes on the save effect; "blank" writes on first commit */
+      } else {
+        vault.current = { member: false, urn: null, version: 0 };
+        setVaultOn(false);
+        setState(local || blankState());
+      }
+      loadedFor.current = sid;
+    })();
   }, [sid, !!user]);
-  useEffect(() => { if (state && loadedFor.current === sid) saveState(sid, state); }, [state, sid]);
+  useEffect(() => {
+    if (!(state && loadedFor.current === sid)) return;
+    saveState(sid, state); /* the device cache, always */
+    if (!vault.current.member) return;
+    if (adopted.current) { adopted.current = false; return; } /* came from the vault: nothing to push */
+    clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(async () => {
+      const r = await vaultSave(vault.current.urn, state, vault.current.version, user?.id);
+      if (r?.ok) { vault.current.version = r.version; setVaultNote(""); }
+      else if (r?.conflict) {
+        vault.current.version = r.version;
+        adopted.current = true;
+        setState(r.state);
+        setVaultNote("A colleague updated the school's data while you worked; showing the latest.");
+      } else setVaultNote("The vault could not be reached; your work is safe on this device and will share next time.");
+    }, 1200);
+    return () => clearTimeout(pushTimer.current);
+  }, [state, sid]);
 
   const computed = useMemo(() => (state ? computeAll(state) : {}), [state]);
   const pupils = Object.values(computed);
@@ -115,7 +154,8 @@ function Constellation() {
         <div className="asi-rise" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 14 }}>
           <div>
             <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 30, letterSpacing: "-.015em", margin: 0 }}>Constellation</h1>
-            <p style={{ color: MUTED, fontSize: 13.5, margin: "4px 0 0" }}>Every child in view · {state.roll.length ? `${state.roll.length} pupils on roll` : "awaiting the roll"} · held on this device only, nothing leaves the browser</p>
+            <p style={{ color: MUTED, fontSize: 13.5, margin: "4px 0 0" }}>Every child in view · {state.roll.length ? `${state.roll.length} pupils on roll` : "awaiting the roll"} · {vaultOn ? "read on your device, held in your school's private vault" : "held on this device only, nothing leaves the browser"}</p>
+            {vaultNote && <p style={{ color: "#8a6d1c", fontSize: 12, margin: "4px 0 0" }}>{vaultNote}</p>}
           </div>
           <div style={{ display: "flex", gap: 6, background: "#fff", borderRadius: 999, padding: 5, boxShadow: shadow }}>
             {[["view", "School View"], ["up", "Uploads"], ["ins", "Insights"]].map(([k, l]) => (
@@ -204,7 +244,7 @@ function Constellation() {
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
-              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { if (window.confirm("Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)")) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); setState({ ...blankState(), dialects: d }); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>Start again on this device</button> · Read and scored entirely in your browser; nothing is transmitted. {state.ledger.length ? `Saved on this device: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
+              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={kick}>Held for review · never guessed</div>
