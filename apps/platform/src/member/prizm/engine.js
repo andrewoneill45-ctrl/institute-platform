@@ -59,11 +59,14 @@ export function scopeLabel(scope, n) {
    its name). Deterministic, instant, entirely on the device. */
 const STOP = new Set(["tell", "me", "about", "the", "a", "an", "in", "of", "and", "or", "for", "on", "at", "to", "my", "our", "all", "show", "give", "want", "need", "with", "across", "report", "reports", "analysis", "analyse", "look", "looking", "compare", "schools", "school", "secondary", "secondaries", "england", "english", "please", "what", "how", "are", "doing", "i"]);
 const toks = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s&']/g, " ").split(/\s+/).filter((t) => t && !STOP.has(t));
-function matches(name, needle, qTokens) {
+/* 0 = no match; otherwise a score: how many of the candidate's own tokens
+   the query contains (so "North East" outranks "East of England" when both
+   match "north east"). A plain substring hit scores by full token count. */
+function matchScore(name, needle, qTokens) {
   const n = (name || "").toLowerCase();
-  if (n.includes(needle)) return true;
   const nt = toks(name);
-  return nt.length > 0 && nt.every((t) => qTokens.includes(t));
+  if (n.includes(needle)) return Math.max(nt.length, 1) + 0.5;
+  return nt.length > 0 && nt.every((t) => qTokens.includes(t)) ? nt.length : 0;
 }
 export function searchEntities(all, q) {
   const needle = (q || "").trim().toLowerCase();
@@ -72,13 +75,15 @@ export function searchEntities(all, q) {
   const sec = secondaries(all);
   const trusts = {}, las = {}, regions = {};
   const schools = [];
+  const add = (m, name, sc) => { const e = m[name] || (m[name] = { n: 0, sc }); e.n++; };
   for (const s of sec) {
-    if (s.trust && s.trust !== "Not supported by a trust" && matches(s.trust, needle, qTokens)) trusts[s.trust] = (trusts[s.trust] || 0) + 1;
-    if (s.la && matches(s.la, needle, qTokens)) las[s.la] = (las[s.la] || 0) + 1;
-    if (s.region && matches(s.region, needle, qTokens)) regions[s.region] = (regions[s.region] || 0) + 1;
+    let sc;
+    if (s.trust && s.trust !== "Not supported by a trust" && (sc = matchScore(s.trust, needle, qTokens))) add(trusts, s.trust, sc);
+    if (s.la && (sc = matchScore(s.la, needle, qTokens))) add(las, s.la, sc);
+    if (s.region && (sc = matchScore(s.region, needle, qTokens))) add(regions, s.region, sc);
     if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
   }
-  const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, n]) => ({ name, n }));
+  const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
   return { trusts: top(trusts), las: top(las), regions: top(regions), schools };
 }
 
@@ -103,6 +108,7 @@ export function benchmarks(all) {
 
 /* ── the blocks: each returns pure data for the renderer ── */
 export const BLOCK_TYPES = [
+  { type: "headlines", name: "Headlines", desc: "the scope in four numbers, against England" },
   { type: "cohort", name: "The cohort", desc: "every school in scope, headline by headline" },
   { type: "movement", name: "Movement", desc: "this year against last, school by school" },
   { type: "gap", name: "The disadvantage gap", desc: "disadvantaged and other pupils, side by side" },
@@ -114,6 +120,20 @@ export const BLOCK_TYPES = [
 export function computeBlock(type, schools, all, bench) {
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const vals = (f) => schools.map(f).filter((v) => v != null);
+  if (type === "headlines") {
+    const a8s = vals((s) => num(s.attainment8));
+    return {
+      n: schools.length,
+      las: new Set(schools.map((s) => s.la).filter(Boolean)).size,
+      a8Mean: r1(mean(a8s)),
+      b94Mean: r1(mean(vals((s) => num(s.basics_94)))),
+      b95Mean: r1(mean(vals((s) => num(s.basics_95)))),
+      fsmMean: r1(mean(vals((s) => num(s.edu_fsm_pct)))),
+      aboveNat: a8s.filter((v) => v >= bench.a8Med).length,
+      drift: r1(mean(schools.filter((s) => num(s.attainment8) != null && num(s.a8_prev) != null).map((s) => s.attainment8 - s.a8_prev))),
+      bench,
+    };
+  }
   if (type === "cohort") {
     const rows = schools.map((s) => ({
       urn: s.urn, name: s.name, la: s.la, pupils: s.pupils ?? null, fsm: num(s.edu_fsm_pct),

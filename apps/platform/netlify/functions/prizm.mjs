@@ -16,9 +16,9 @@ Respond ONLY with a JSON object, no markdown fences, of this shape:
      {"type":"region","name":"<one of: North East, North West, Yorkshire and the Humber, East Midlands, West Midlands, East of England, London, South East, South West>"} |
      {"type":"catholicLa","las":["<LA name>", ...]} |
      {"type":"urns","urns":["<urn>", ...]}>,
-   "blocks": [{"type":"<one of: cohort, movement, gap, scatter, distribution, ofsted>"}, ...]}}
+   "blocks": [{"type":"<one of: headlines, cohort, movement, gap, scatter, distribution, ofsted>"}, ...]}}
 
-Block meanings: cohort (headline table, every school), movement (this year vs last, school by school), gap (disadvantaged vs other pupils), scatter (FSM context vs Attainment 8 against England), distribution (where scope schools sit in the national A8 distribution), ofsted (current judgements vs England).
+Block meanings: headlines (the scope in four numbers against England; almost always first), cohort (every school ranked, chart plus full table), movement (this year vs last, school by school), gap (disadvantaged vs other pupils), scatter (FSM context vs Attainment 8 against England), distribution (where scope schools sit in the national A8 distribution), ofsted (current judgements vs England).
 Choose and ORDER blocks to answer what the member actually asked; fewer, sharper blocks beat all six. If the member's aim mentions disadvantage, gap comes early. If they name no scope and none is in context, set "spec" to null and ask for the trust, local authority or schools in your reply.
 If the context lists candidate entity names from the dataset, prefer those exact spellings. Keep "reply" under 50 words. Output raw JSON only.`;
 
