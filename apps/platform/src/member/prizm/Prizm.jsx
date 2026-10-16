@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getDataset } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
-import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel } from "./engine.js";
+import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel, attachOfsted } from "./engine.js";
 import { renderBlocks, coverHtml, reportHtml, PZ_CSS } from "./render.js";
 
 /* Prizm — the report studio. One box: say what you need, or type a name.
@@ -24,7 +24,7 @@ export default function Prizm() {
   const [drawer, setDrawer] = useState(true);
 
   useEffect(ensureMotionCss, []);
-  useEffect(() => { getDataset().then(({ raw }) => setAll(raw)); }, []);
+  useEffect(() => { getDataset().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted))); }, []);
 
   const hits = useMemo(() => (all && q.trim().length >= 2 ? searchEntities(all, q) : null), [all, q]);
   const chips = useMemo(() => {
@@ -34,6 +34,7 @@ export default function Prizm() {
     (hits.regions || []).forEach((r) => c.push({ k: "r" + r.name, label: r.name, tag: `region · ${r.n}`, sc: { type: "region", name: r.name } }));
     hits.trusts.forEach((t) => c.push({ k: "t" + t.name, label: t.name, tag: `trust · ${t.n}`, sc: { type: "trust", name: t.name } }));
     hits.las.forEach((l) => c.push({ k: "l" + l.name, label: l.name, tag: `authority · ${l.n}`, sc: { type: "la", name: l.name } }));
+    (hits.towns || []).forEach((t) => c.push({ k: "w" + t.name, label: t.name, tag: `town · ${t.n}`, sc: { type: "town", name: t.name } }));
     hits.schools.forEach((s) => c.push({ k: "s" + s.urn, label: s.name, tag: s.la, sc: scope && scope.type === "urns" ? { type: "urns", urns: [...new Set([...scope.urns, String(s.urn)])] } : { type: "urns", urns: [String(s.urn)] } }));
     return c.slice(0, 7);
   }, [hits, scope]);

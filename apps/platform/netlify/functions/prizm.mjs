@@ -16,8 +16,9 @@ Respond ONLY with a JSON object, no markdown fences, of this shape:
      {"type":"region","name":"<one of: North East, North West, Yorkshire and the Humber, East Midlands, West Midlands, East of England, London, South East, South West>"} |
      {"type":"england"} |
      {"type":"catholicLa","las":["<LA name>", ...]} |
+     {"type":"town","name":"<town name>"} |
      {"type":"urns","urns":["<urn>", ...]}>
-   — and ANY scope may also carry "faith": one of catholic | church-of-england | jewish | muslim | christian | faith (any faith school), and/or "gender": "Girls" | "Boys". "Catholic secondaries in the north east" is {"type":"region","name":"North East","faith":"catholic"}; use faith/gender filters rather than inventing local authority lists.,
+   — and ANY scope may also carry attribute filters: "faith" (catholic | church-of-england | jewish | muslim | christian | faith), "gender" ("Girls"|"Boys"), "ofsted" ("Outstanding"|"Good"|"Requires improvement"|"Inadequate"), "schoolType" (grammar | voluntary-aided | free | community | utc | studio | academy), "sixthForm" (true|false), "minPupils"/"maxPupils", "minFsm"/"maxFsm" (whole-school FSM %), "minA8"/"maxA8", "minDrift"/"maxDrift" (change in A8 on last year), and "order" {"by": "a8"|"improvement"|"pupils"|"fsm", "limit": <n>} for top-N scopes. "Catholic secondaries in the north east" is {"type":"region","name":"North East","faith":"catholic"}; "the 20 most improved schools in London" is {"type":"region","name":"London","order":{"by":"improvement","limit":20}}. Compose filters; never invent lists of local authorities.,
    "blocks": [{"type":"<one of: headlines, cohort, movement, gap, scatter, distribution, ofsted>"}, ...]}}
 
 Block meanings: headlines (the scope in four numbers against England; almost always first), cohort (every school ranked, chart plus full table), movement (this year vs last, school by school), gap (disadvantaged vs other pupils), scatter (FSM context vs Attainment 8 against England), distribution (where scope schools sit in the national A8 distribution), ofsted (current judgements vs England).
