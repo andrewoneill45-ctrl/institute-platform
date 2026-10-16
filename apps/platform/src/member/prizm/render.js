@@ -25,11 +25,21 @@ function niceTicks(min, max, n = 5) {
 }
 const tip = (lines) => `<title>${esc(lines.join("\n"))}</title>`;
 
+/* rotated labels need room proportional to the longest name drawn */
+function labelSpace(rows, cw) {
+  const chars = Math.max(8, ...rows.map((r) => short(r.label, cw > 20 ? 30 : 20).length));
+  const px = chars * 5.8 + 10;
+  return { lab: Math.min(172, Math.round(px * 0.82) + 12), padL: Math.max(0, Math.round(px * 0.58) - cw / 2) };
+}
+
 /* ── the chart kit ─────────────────────────────────────────────────────── */
 
 /* columns: rows [{label, v, tipLines}] sorted; refs [{v,label,color,dy}] */
 function columnsSvg({ rows, refs = [], min, max, unit = "", dp = 1 }) {
-  const W = 1152, pl = 60, pr = 104, pt = 16, lab = 104, ph = 330, H = pt + ph + lab;
+  const W = 1152, pr = 104, pt = 16, ph = 330;
+  const cw0 = (W - 60 - pr) / rows.length;
+  const { lab, padL } = labelSpace(rows, cw0);
+  const pl = 60 + padL, H = pt + ph + lab;
   const cw = (W - pl - pr) / rows.length;
   const y = (v) => pt + ph * (1 - (v - min) / (max - min));
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">`;
@@ -50,7 +60,10 @@ function columnsSvg({ rows, refs = [], min, max, unit = "", dp = 1 }) {
 
 /* dumbbells: rows [{label, a, b, tipLines, faint}]; mode change (a→b) or gap (a=dis gold, b=non purple) */
 function dumbbellsSvg({ rows, min, max, unit = "", mode = "change", refs = [] }) {
-  const W = 1152, pl = 60, pr = mode === "gap" ? 104 : 20, pt = 14, lab = 104, ph = 320, H = pt + ph + lab;
+  const W = 1152, pr = mode === "gap" ? 104 : 20, pt = 14, ph = 320;
+  const cw0 = (W - 60 - pr) / rows.length;
+  const { lab, padL } = labelSpace(rows, cw0);
+  const pl = 60 + padL, H = pt + ph + lab;
   const cw = (W - pl - pr) / rows.length;
   const y = (v) => pt + ph * (1 - (v - min) / (max - min));
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">`;
@@ -108,7 +121,9 @@ function cohortHtml(d) {
     tipLines: [r.name, `Attainment 8 ${f1(r.a8)} (${sign(r.d)} on 2024/25)`, `4+ E&M ${f0(r.b94)} · 5+ ${f0(r.b95)} · FSM ${r.fsm == null ? "–" : f1(r.fsm) + "%"}`],
   })));
   const above = ranked.filter((r) => r.a8 >= d.bench.a8Med).length;
-  const headline = `${above === ranked.length ? "Every one" : above} of ${ranked.length} schools ${above === 1 ? "sits" : "sit"} at or above England's median, from ${f1(ranked[ranked.length - 1].a8)} to ${f1(ranked[0].a8)}.`;
+  const headline = above === ranked.length
+    ? `Every one of the ${ranked.length} schools sits at or above England's median, from ${f1(ranked[ranked.length - 1].a8)} to ${f1(ranked[0].a8)}.`
+    : `${above} of ${ranked.length} schools ${above === 1 ? "sits" : "sit"} at or above England's median, from ${f1(ranked[ranked.length - 1].a8)} to ${f1(ranked[0].a8)}.`;
   const chart = columnsSvg({ rows: shown, min: Math.max(0, Math.floor((ranked[ranked.length - 1].a8 - 6) / 10) * 10), max: Math.min(90, Math.ceil((ranked[0].a8 + 6) / 10) * 10), refs: [{ v: d.a8Mean, label: "Scope", color: "var(--gold)" }, { v: d.bench.a8Med, label: "England", color: "var(--nat)" }] });
   /* the full data, grouped by LA, folded away */
   const by = {}; d.rows.forEach((r) => { (by[r.la || "Other"] = by[r.la || "Other"] || []).push(r); });
