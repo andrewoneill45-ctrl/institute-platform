@@ -20,8 +20,9 @@ const tell = (patch) => {
 
 async function load() {
   tell({ phase: "downloading", received: 0 });
-  const ofstedP = fetch("/data/ofsted.json").then((r) => r.json()).catch(() => ({}));
-  const res = await fetch("/data/schools.json");
+  const V = typeof __ASI_BUILD__ !== "undefined" ? "?v=" + __ASI_BUILD__ : "";
+  const ofstedP = fetch("/data/ofsted.json" + V).then((r) => r.json()).catch(() => ({}));
+  const res = await fetch("/data/schools.json" + V);
   if (!res.ok) throw new Error("schools.json came back " + res.status);
   let raw;
   if (res.body && res.body.getReader) {
