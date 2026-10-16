@@ -30,6 +30,7 @@ export default function Prizm() {
   const chips = useMemo(() => {
     if (!hits) return [];
     const c = [];
+    (hits.composed || []).forEach((x, i) => c.push({ k: "x" + i, label: x.label.replace(/ · \d+ schools?$/, ""), tag: `${x.n} school${x.n === 1 ? "" : "s"}`, sc: x.sc }));
     (hits.regions || []).forEach((r) => c.push({ k: "r" + r.name, label: r.name, tag: `region · ${r.n}`, sc: { type: "region", name: r.name } }));
     hits.trusts.forEach((t) => c.push({ k: "t" + t.name, label: t.name, tag: `trust · ${t.n}`, sc: { type: "trust", name: t.name } }));
     hits.las.forEach((l) => c.push({ k: "l" + l.name, label: l.name, tag: `authority · ${l.n}`, sc: { type: "la", name: l.name } }));

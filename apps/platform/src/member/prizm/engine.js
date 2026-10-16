@@ -16,13 +16,31 @@ export function secondaries(all) {
   return all.filter((s) => num(s.attainment8) != null && !/independent|special|pupil referral|alternative|secure/i.test(s.type || ""));
 }
 
+/* ── attribute filters: faith and gender live on every scope ── */
+export const FAITHS = {
+  catholic: { re: /catholic/i, label: "Catholic" },
+  "church-of-england": { re: /church of england/i, label: "Church of England" },
+  jewish: { re: /jewish/i, label: "Jewish" },
+  muslim: { re: /muslim/i, label: "Muslim" },
+  christian: { re: /^christian$/i, label: "Christian" },
+  faith: { re: /^(?!\s*$)(?!does not apply)(?!none).+/i, label: "Faith" },
+};
+function applyFilters(out, scope) {
+  if (scope.faith && FAITHS[scope.faith]) out = out.filter((s) => FAITHS[scope.faith].re.test(s.religiousCharacter || ""));
+  if (scope.gender) out = out.filter((s) => (s.gender || "") === scope.gender);
+  return out;
+}
+
 /* ── scope resolution: which schools is this report about? ──
-   scope = { type: "trust"|"la"|"urns"|"catholicLa", name?, urns?, las? } */
+   scope = { type: "trust"|"la"|"region"|"england"|"urns"|"catholicLa",
+             name?, urns?, las?, faith?, gender? } */
 export function resolveScope(all, scope) {
   if (!scope || !scope.type) return [];
   const sec = secondaries(all);
   let out = [];
-  if (scope.type === "trust" && scope.name) {
+  if (scope.type === "england") {
+    out = sec;
+  } else if (scope.type === "trust" && scope.name) {
     const t = scope.name.trim().toLowerCase();
     out = sec.filter((s) => (s.trust || "").trim().toLowerCase() === t);
   } else if (scope.type === "la" && scope.name) {
@@ -38,17 +56,20 @@ export function resolveScope(all, scope) {
     const las = new Set(scope.las.map((x) => x.trim().toLowerCase()));
     out = sec.filter((s) => las.has((s.la || "").trim().toLowerCase()) && /catholic/i.test(s.religiousCharacter || ""));
   }
-  return [...out].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  return applyFilters([...out], scope).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 }
 
 export function scopeLabel(scope, n) {
   if (!scope) return "";
   const c = n != null ? ` · ${n} school${n === 1 ? "" : "s"}` : "";
-  if (scope.type === "trust") return scope.name + c;
-  if (scope.type === "la") return scope.name + c;
-  if (scope.type === "region") return scope.name + c;
+  const pre = [scope.gender === "Girls" ? "Girls'" : scope.gender === "Boys" ? "Boys'" : null, scope.faith && FAITHS[scope.faith] ? FAITHS[scope.faith].label : null].filter(Boolean).join(" ");
+  const wrap = (base) => (pre ? `${pre} schools · ${base}` : base) + c;
+  if (scope.type === "trust") return wrap(scope.name);
+  if (scope.type === "la") return wrap(scope.name);
+  if (scope.type === "region") return wrap(scope.name);
+  if (scope.type === "england") return wrap("England");
   if (scope.type === "catholicLa") return "Catholic schools · " + scope.las.join(", ") + c;
-  if (scope.type === "urns") return "Selected schools" + c;
+  if (scope.type === "urns") return pre ? wrap("selected schools") : "Selected schools" + c;
   return "";
 }
 
@@ -68,23 +89,60 @@ function matchScore(name, needle, qTokens) {
   if (n.includes(needle)) return Math.max(nt.length, 1) + 0.5;
   return nt.length > 0 && nt.every((t) => qTokens.includes(t)) ? nt.length : 0;
 }
-export function searchEntities(all, q) {
-  const needle = (q || "").trim().toLowerCase();
-  if (needle.length < 2) return { trusts: [], las: [], regions: [], schools: [] };
-  const qTokens = toks(needle);
-  const sec = secondaries(all);
-  const trusts = {}, las = {}, regions = {};
-  const schools = [];
-  const add = (m, name, sc) => { const e = m[name] || (m[name] = { n: 0, sc }); e.n++; };
-  for (const s of sec) {
-    let sc;
-    if (s.trust && s.trust !== "Not supported by a trust" && (sc = matchScore(s.trust, needle, qTokens))) add(trusts, s.trust, sc);
-    if (s.la && (sc = matchScore(s.la, needle, qTokens))) add(las, s.la, sc);
-    if (s.region && (sc = matchScore(s.region, needle, qTokens))) add(regions, s.region, sc);
-    if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
+/* pull faith and gender words out of the query, leaving the base */
+function parseFilters(needle) {
+  let rest = " " + needle + " ";
+  const f = {};
+  if (/\b(church of england|c of e|cofe|ce schools)\b/.test(rest)) { f.faith = "church-of-england"; rest = rest.replace(/\b(church of england|c of e|cofe)\b/g, " "); }
+  for (const [key, word] of [["catholic", /\b(catholic|roman catholic|rc)\b/], ["jewish", /\bjewish\b/], ["muslim", /\b(muslim|islamic)\b/], ["christian", /\bchristian\b/], ["faith", /\bfaith\b/]]) {
+    if (!f.faith && word.test(rest)) { f.faith = key; rest = rest.replace(word, " "); }
   }
+  if (/\bgirls?('s)?\b/.test(rest)) { f.gender = "Girls"; rest = rest.replace(/\bgirls?('s)?\b/g, " "); }
+  else if (/\bboys?('s)?\b/.test(rest)) { f.gender = "Boys"; rest = rest.replace(/\bboys?('s)?\b/g, " "); }
+  return { filters: f, rest: rest.replace(/\s+/g, " ").trim() };
+}
+
+export function searchEntities(all, q) {
+  const raw = (q || "").trim().toLowerCase();
+  if (raw.length < 2) return { trusts: [], las: [], regions: [], schools: [], composed: [] };
+  const { filters, rest } = parseFilters(raw);
+  const hasF = !!(filters.faith || filters.gender);
+  const sec = secondaries(all);
   const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
-  return { trusts: top(trusts), las: top(las), regions: top(regions), schools };
+  const pass = (needle) => {
+    const qTokens = toks(needle);
+    const trusts = {}, las = {}, regions = {};
+    const schools = [];
+    const add = (m, name, sc) => { const e = m[name] || (m[name] = { n: 0, sc }); e.n++; };
+    if (needle.length >= 2) for (const s of sec) {
+      let sc;
+      if (s.trust && s.trust !== "Not supported by a trust" && (sc = matchScore(s.trust, needle, qTokens))) add(trusts, s.trust, sc);
+      if (s.la && (sc = matchScore(s.la, needle, qTokens))) add(las, s.la, sc);
+      if (s.region && (sc = matchScore(s.region, needle, qTokens))) add(regions, s.region, sc);
+      if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
+    }
+    return { trusts: top(trusts), las: top(las), regions: top(regions), schools };
+  };
+  /* plain entities always match the query as typed - names may contain the
+     filter words ("All Saints Catholic College") */
+  const out = { ...pass(raw), composed: [] };
+  if (hasF) {
+    /* composition uses what remains once the filters are lifted out - or
+       England when the query names no place at all */
+    const base = pass(rest);
+    const bases = [
+      ...base.regions.slice(0, 2).map((r) => ({ type: "region", name: r.name })),
+      ...base.las.slice(0, 2).map((l) => ({ type: "la", name: l.name })),
+      ...base.trusts.slice(0, 1).map((t) => ({ type: "trust", name: t.name })),
+    ];
+    if (!bases.length) bases.push({ type: "england" });
+    out.composed = bases.map((b) => {
+      const sc = { ...b, ...filters };
+      const n = resolveScope(all, sc).length;
+      return n ? { label: scopeLabel(sc), n, sc } : null;
+    }).filter(Boolean).slice(0, 4);
+  }
+  return out;
 }
 
 /* ── national benchmarks, computed once ── */

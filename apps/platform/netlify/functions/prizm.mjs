@@ -14,8 +14,10 @@ Respond ONLY with a JSON object, no markdown fences, of this shape:
      {"type":"trust","name":"<EXACT trust name as given in context or by the member, uppercase as DfE styles it>"} |
      {"type":"la","name":"<local authority name>"} |
      {"type":"region","name":"<one of: North East, North West, Yorkshire and the Humber, East Midlands, West Midlands, East of England, London, South East, South West>"} |
+     {"type":"england"} |
      {"type":"catholicLa","las":["<LA name>", ...]} |
-     {"type":"urns","urns":["<urn>", ...]}>,
+     {"type":"urns","urns":["<urn>", ...]}>
+   — and ANY scope may also carry "faith": one of catholic | church-of-england | jewish | muslim | christian | faith (any faith school), and/or "gender": "Girls" | "Boys". "Catholic secondaries in the north east" is {"type":"region","name":"North East","faith":"catholic"}; use faith/gender filters rather than inventing local authority lists.,
    "blocks": [{"type":"<one of: headlines, cohort, movement, gap, scatter, distribution, ofsted>"}, ...]}}
 
 Block meanings: headlines (the scope in four numbers against England; almost always first), cohort (every school ranked, chart plus full table), movement (this year vs last, school by school), gap (disadvantaged vs other pupils), scatter (FSM context vs Attainment 8 against England), distribution (where scope schools sit in the national A8 distribution), ofsted (current judgements vs England).
