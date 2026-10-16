@@ -17,6 +17,7 @@ const INSTRUMENTS = [
   { to: "lens", verb: "Know", name: "Lens", accent: "#6A0CA0", desc: "Your inspection room: SEF, evidence vault, Ofsted and Section 48 frameworks, and Ask: a critical friend who knows both schedules and reads your own documents.", cta: "Open Lens" },
   { to: "orbit", verb: "Act", name: "Orbit", accent: "#C6A035", desc: "Strategy in motion: vision, objectives and strategies as one living plan, suggested from your Lens priorities and kept honest as the year turns.", cta: "Open Orbit" },
   { to: "constellation", verb: "Live", name: "Constellation", accent: "#4B0875", desc: "Every child in view: upload years of the data you already hold, keyed by UPN, and watch the whole school resolve into year groups, groups and single pupils, with the children nothing currently reaches flagged first.", cta: "Open Constellation" },
+  { to: "prizm", verb: "Prove", name: "Prizm", accent: "#B3532A", desc: "The report studio: say what you need to understand about a trust, an authority or any set of schools, and Prizm composes the report before your eyes - every figure computed from the published data, downloadable as one beautiful file.", cta: "Open Prizm" },
 ];
 
 /* each instrument's emblem: a small mark that is quietly alive */
@@ -52,6 +53,17 @@ function Emblem({ kind }) {
           <animateMotion dur="9s" repeatCount="indefinite" path="M 10.5 49.6 a 31 14 -18 1 1 59 -19.2 a 31 14 -18 1 1 -59 19.2" />
         </circle>
       ) : <circle cx="69.5" cy="30.4" r="3.3" fill={D} />}
+    </svg>
+  );
+  if (kind === "prizm") return (
+    <svg viewBox="0 0 80 80" width="46" height="46" aria-hidden="true" style={{ display: "block" }}>
+      <line x1="4" y1="40" x2="30" y2="40" stroke="rgba(34,18,51,.45)" strokeWidth="2" />
+      <path d="M30 22 L30 58 L52 40 Z" fill="none" stroke={D} strokeWidth="2.4" strokeLinejoin="round" />
+      {[["#3E5F8A", 22], ["#6A0CA0", 34], ["#C6A035", 46], ["#B3532A", 58]].map(([c, y], i) => (
+        <line key={c} x1="48" y1="40" x2="76" y2={y} stroke={c} strokeWidth="2.2" strokeLinecap="round" opacity=".9">
+          {!RM && <animate attributeName="opacity" values=".45;1;.45" dur={(3 + i * 0.7) + "s"} repeatCount="indefinite" />}
+        </line>
+      ))}
     </svg>
   );
   return (

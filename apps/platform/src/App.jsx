@@ -12,6 +12,7 @@ import Atlas from "./member/Atlas.jsx";
 import Lens from "./member/Lens.jsx";
 import Orbit from "./member/Orbit.jsx";
 import Constellation from "./member/constellation/Constellation.jsx";
+import Prizm from "./member/prizm/Prizm.jsx";
 import { RequireMember } from "./lib/auth.jsx";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="lens" element={<Lens />} />
         <Route path="orbit" element={<Orbit />} />
         <Route path="constellation" element={<Constellation />} />
+        <Route path="prizm" element={<Prizm />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
