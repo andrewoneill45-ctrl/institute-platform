@@ -52,17 +52,30 @@ export function scopeLabel(scope, n) {
   return "";
 }
 
-/* ── the picker's search: trusts, LAs and schools matching a query ── */
+/* ── the picker's search: understands sentences, not just substrings ──
+   "Tell me about secondary schools in the North East of England" finds the
+   region: furniture words are stripped and an entity matches when all of its
+   own meaning-bearing tokens appear in the query (or the query appears in
+   its name). Deterministic, instant, entirely on the device. */
+const STOP = new Set(["tell", "me", "about", "the", "a", "an", "in", "of", "and", "or", "for", "on", "at", "to", "my", "our", "all", "show", "give", "want", "need", "with", "across", "report", "reports", "analysis", "analyse", "look", "looking", "compare", "schools", "school", "secondary", "secondaries", "england", "english", "please", "what", "how", "are", "doing", "i"]);
+const toks = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s&']/g, " ").split(/\s+/).filter((t) => t && !STOP.has(t));
+function matches(name, needle, qTokens) {
+  const n = (name || "").toLowerCase();
+  if (n.includes(needle)) return true;
+  const nt = toks(name);
+  return nt.length > 0 && nt.every((t) => qTokens.includes(t));
+}
 export function searchEntities(all, q) {
   const needle = (q || "").trim().toLowerCase();
   if (needle.length < 2) return { trusts: [], las: [], regions: [], schools: [] };
+  const qTokens = toks(needle);
   const sec = secondaries(all);
   const trusts = {}, las = {}, regions = {};
   const schools = [];
   for (const s of sec) {
-    if (s.trust && s.trust !== "Not supported by a trust" && s.trust.toLowerCase().includes(needle)) trusts[s.trust] = (trusts[s.trust] || 0) + 1;
-    if (s.la && s.la.toLowerCase().includes(needle)) las[s.la] = (las[s.la] || 0) + 1;
-    if (s.region && s.region.toLowerCase().includes(needle)) regions[s.region] = (regions[s.region] || 0) + 1;
+    if (s.trust && s.trust !== "Not supported by a trust" && matches(s.trust, needle, qTokens)) trusts[s.trust] = (trusts[s.trust] || 0) + 1;
+    if (s.la && matches(s.la, needle, qTokens)) las[s.la] = (las[s.la] || 0) + 1;
+    if (s.region && matches(s.region, needle, qTokens)) regions[s.region] = (regions[s.region] || 0) + 1;
     if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
   }
   const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, n]) => ({ name, n }));

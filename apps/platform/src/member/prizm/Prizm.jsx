@@ -38,10 +38,10 @@ export default function Prizm() {
   function toggle(t) { setBlocks((b) => (b.includes(t) ? b.filter((x) => x !== t) : [...b, t])); }
   function pick(sc, label) { setScope(sc); setQ(""); if (!title) setTitle(""); setMsgs((m) => m.length ? m : [{ role: "assistant", content: `Scope set: ${label}. Tell me what you want to understand and I'll shape the report; or build it by hand below.` }]); }
 
-  async function send() {
-    const text = brief.trim();
+  async function send(given) {
+    const text = (given ?? brief).trim();
     if (!text || thinking) return;
-    setBrief(""); setThinking(true); setAskNote("");
+    setBrief(""); setQ(""); setThinking(true); setAskNote("");
     const history = [...msgs, { role: "user", content: text }];
     setMsgs(history);
     try {
@@ -95,7 +95,16 @@ export default function Prizm() {
               <div style={{ fontSize: 10.5, letterSpacing: ".12em", fontWeight: 700, color: MUTED, marginBottom: 8 }}>SCOPE</div>
               {scope && <div style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 8 }}>{scopeLabel(scope, computed ? computed.schools.length : null)}
                 <button onClick={() => setScope(null)} style={{ marginLeft: 8, border: "none", background: "transparent", color: "#B3261E", cursor: "pointer", fontSize: 11.5, textDecoration: "underline" }}>clear</button></div>}
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a trust, local authority or school…"
+              <input value={q} onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const first = hits && (hits.regions?.[0] && { sc: { type: "region", name: hits.regions[0].name }, l: hits.regions[0].name }
+                    || hits.trusts[0] && { sc: { type: "trust", name: hits.trusts[0].name }, l: hits.trusts[0].name }
+                    || hits.las[0] && { sc: { type: "la", name: hits.las[0].name }, l: hits.las[0].name }
+                    || hits.schools[0] && { sc: { type: "urns", urns: [String(hits.schools[0].urn)] }, l: hits.schools[0].name });
+                  if (first) pick(first.sc, first.l); else if (q.trim().length >= 8) send(q);
+                }}
+                placeholder="A trust, an authority, a region, a school — or just say what you need…"
                 style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 9, border: "1px solid rgba(34,18,51,.18)", fontSize: 13, background: PAPER }} />
               {hits && (hits.trusts.length || hits.las.length || hits.regions?.length || hits.schools.length) ? (
                 <div style={{ marginTop: 8, display: "grid", gap: 4, fontSize: 12.5 }}>
@@ -105,6 +114,11 @@ export default function Prizm() {
                   {hits.schools.map((s) => <Hit key={s.urn} label={s.name} tag={s.la} onClick={() => pick(scope && scope.type === "urns" ? { type: "urns", urns: [...new Set([...scope.urns, String(s.urn)])] } : { type: "urns", urns: [String(s.urn)] }, s.name)} />)}
                 </div>
               ) : null}
+              {hits && !hits.regions?.length && !hits.trusts.length && !hits.las.length && !hits.schools.length && q.trim().length >= 8 && (
+                <button onClick={() => send(q)} disabled={thinking} style={{ marginTop: 8, width: "100%", textAlign: "left", border: "1px solid rgba(106,12,160,.25)", background: "rgba(106,12,160,.05)", borderRadius: 9, padding: "8px 11px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, color: "#4B0875" }}>
+                  Nothing matches by name — <strong>ask Prizm to read it</strong> →
+                </button>
+              )}
               {scope?.type === "urns" && <p style={{ fontSize: 11, color: MUTED, margin: "8px 0 0" }}>Keep searching to add more schools to the set.</p>}
             </div>
 
