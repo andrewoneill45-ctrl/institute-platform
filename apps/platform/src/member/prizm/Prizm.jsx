@@ -97,8 +97,9 @@ export default function Prizm() {
                 <button onClick={() => setScope(null)} style={{ marginLeft: 8, border: "none", background: "transparent", color: "#B3261E", cursor: "pointer", fontSize: 11.5, textDecoration: "underline" }}>clear</button></div>}
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a trust, local authority or school…"
                 style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 9, border: "1px solid rgba(34,18,51,.18)", fontSize: 13, background: PAPER }} />
-              {hits && (hits.trusts.length || hits.las.length || hits.schools.length) ? (
+              {hits && (hits.trusts.length || hits.las.length || hits.regions?.length || hits.schools.length) ? (
                 <div style={{ marginTop: 8, display: "grid", gap: 4, fontSize: 12.5 }}>
+                  {(hits.regions || []).map((r) => <Hit key={"r" + r.name} label={r.name} tag={`region · ${r.n}`} onClick={() => pick({ type: "region", name: r.name }, r.name)} />)}
                   {hits.trusts.map((t) => <Hit key={"t" + t.name} label={t.name} tag={`trust · ${t.n}`} onClick={() => pick({ type: "trust", name: t.name }, t.name)} />)}
                   {hits.las.map((l) => <Hit key={"l" + l.name} label={l.name} tag={`local authority · ${l.n}`} onClick={() => pick({ type: "la", name: l.name }, l.name)} />)}
                   {hits.schools.map((s) => <Hit key={s.urn} label={s.name} tag={s.la} onClick={() => pick(scope && scope.type === "urns" ? { type: "urns", urns: [...new Set([...scope.urns, String(s.urn)])] } : { type: "urns", urns: [String(s.urn)] }, s.name)} />)}

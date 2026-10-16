@@ -52,42 +52,62 @@ export function DotPlot({ rows }) {
   );
 }
 
+/* rounded tick positions: a readable scale beats a data-tight one */
+function niceTicks(lo, hi, want = 5) {
+  const span = hi - lo || 1;
+  const raw = span / want, pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => span / s <= want) || pow * 10;
+  const start = Math.ceil(lo / step) * step, ticks = [];
+  for (let v = start; v <= hi + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+  return ticks;
+}
+
 export function Scatter({ points, r, highlight, xLabel, yLabel }) {
   if (!points?.length) return null;
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const X = (v) => 66 + ((v - x0) / ((x1 - x0) || 1)) * 968;
-  const Y = (v) => 396 - ((v - y0) / ((y1 - y0) || 1)) * 340;
+  const pad = (lo, hi) => { const m = (hi - lo || 1) * 0.05; return [lo - m, hi + m]; };
+  const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
+  const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
+  const L = 70, R = 1044, T = 24, B = 386;
+  const X = (v) => L + ((v - x0) / ((x1 - x0) || 1)) * (R - L);
+  const Y = (v) => B - ((v - y0) / ((y1 - y0) || 1)) * (B - T);
   // simple least-squares for the trend ribbon
   const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
   let sxy = 0, sxx = 0;
   points.forEach((p) => { sxy += (p.x - mx) * (p.y - my); sxx += (p.x - mx) ** 2; });
   const b = sxy / (sxx || 1), a = my - b * mx;
   const yA = Y(a + b * x0), yB = Y(a + b * x1);
+  const xt = niceTicks(x0, x1), yt = niceTicks(y0, y1);
+  const ft = (v) => Number(v.toFixed(2)).toLocaleString("en-GB");
   return (
     <svg viewBox="0 0 1080 448" width="100%" role="img">
       <defs>
-        <linearGradient id="rib" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor={PURPLE} stopOpacity=".10" /><stop offset="1" stopColor={DEEP} stopOpacity=".14" /></linearGradient>
+        <linearGradient id="rib" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor={PURPLE} stopOpacity=".07" /><stop offset="1" stopColor={DEEP} stopOpacity=".10" /></linearGradient>
         <radialGradient id="ggl" cx="50%" cy="50%" r="50%"><stop offset="0" stopColor={GOLD} stopOpacity=".5" /><stop offset="1" stopColor={GOLD} stopOpacity="0" /></radialGradient>
         <linearGradient id="dfd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#8E3DBE" /><stop offset="1" stopColor={DEEP} /></linearGradient>
       </defs>
-      <g stroke="rgba(106,12,160,.10)" strokeDasharray="1 6" strokeLinecap="round">
-        <line x1="66" y1="110" x2="1044" y2="110" /><line x1="66" y1="250" x2="1044" y2="250" /><line x1="66" y1="390" x2="1044" y2="390" />
+      <g stroke="rgba(106,12,160,.12)" strokeDasharray="1 6" strokeLinecap="round">
+        {yt.map((v) => <line key={"gy" + v} x1={L} y1={Y(v)} x2={R} y2={Y(v)} />)}
       </g>
-      <path d={`M66 ${yA - 18} L1044 ${yB - 18} L1044 ${yB + 18} L66 ${yA + 18} Z`} fill="url(#rib)" />
-      <line x1="66" y1={yA} x2="1044" y2={yB} stroke={DEEP} strokeWidth="2.2" strokeLinecap="round" />
+      <g fontSize="11" fill={MUTED} style={{ fontVariantNumeric: "tabular-nums" }}>
+        {yt.map((v) => <text key={"ty" + v} x={L - 10} y={Y(v) + 4} textAnchor="end">{ft(v)}</text>)}
+        {xt.map((v) => <g key={"tx" + v}><line x1={X(v)} y1={B} x2={X(v)} y2={B + 6} stroke="rgba(106,12,160,.3)" /><text x={X(v)} y={B + 20} textAnchor="middle">{ft(v)}</text></g>)}
+      </g>
+      <line x1={L} y1={B} x2={R} y2={B} stroke="rgba(34,18,51,.3)" />
+      <line x1={L} y1={T} x2={L} y2={B} stroke="rgba(34,18,51,.3)" />
+      <path d={`M${X(x0)} ${yA - 16} L${X(x1)} ${yB - 16} L${X(x1)} ${yB + 16} L${X(x0)} ${yA + 16} Z`} fill="url(#rib)" />
+      <line x1={X(x0)} y1={yA} x2={X(x1)} y2={yB} stroke={DEEP} strokeWidth="2.2" strokeLinecap="round" />
       <g fill="url(#dfd)">
-        {points.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="4" opacity={Math.max(0.1, 0.32 - (p.x - x0) / ((x1 - x0) || 1) * 0.2)} />)}
+        {points.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="4" opacity="0.5" />)}
       </g>
       {highlight && (<g>
         <circle cx={X(highlight.x)} cy={Y(highlight.y)} r="32" fill="url(#ggl)" />
         <circle cx={X(highlight.x)} cy={Y(highlight.y)} r="8" fill={GOLD} stroke="#fff" strokeWidth="2.5" />
         <text x={Math.min(780, X(highlight.x) + 18)} y={Math.max(26, Y(highlight.y) - 14)} fontSize="12" fontWeight="700" fill="#221233">{highlight.name}</text>
       </g>)}
-      <g fontSize="11" fill={MUTED}>
-        <text x="66" y="430">{xLabel}</text>
-        <text x="1044" y="430" textAnchor="end">{yLabel}{r != null ? ` · r = ${r}` : ""}</text>
-      </g>
+      <text x={(L + R) / 2} y="436" textAnchor="middle" fontSize="11.5" fill={MUTED}>{xLabel}</text>
+      <text x="16" y={(T + B) / 2} fontSize="11.5" fill={MUTED} textAnchor="middle" transform={`rotate(-90 16 ${(T + B) / 2})`}>{yLabel}</text>
+      {r != null && <text x={R} y="436" textAnchor="end" fontSize="11" fill={MUTED} style={{ fontVariantNumeric: "tabular-nums" }}>r = {r}</text>}
     </svg>
   );
 }

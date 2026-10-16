@@ -13,6 +13,7 @@ Respond ONLY with a JSON object, no markdown fences, of this shape:
    "scope": <one of:
      {"type":"trust","name":"<EXACT trust name as given in context or by the member, uppercase as DfE styles it>"} |
      {"type":"la","name":"<local authority name>"} |
+     {"type":"region","name":"<one of: North East, North West, Yorkshire and the Humber, East Midlands, West Midlands, East of England, London, South East, South West>"} |
      {"type":"catholicLa","las":["<LA name>", ...]} |
      {"type":"urns","urns":["<urn>", ...]}>,
    "blocks": [{"type":"<one of: cohort, movement, gap, scatter, distribution, ofsted>"}, ...]}}

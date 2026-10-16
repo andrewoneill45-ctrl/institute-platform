@@ -28,6 +28,9 @@ export function resolveScope(all, scope) {
   } else if (scope.type === "la" && scope.name) {
     const l = scope.name.trim().toLowerCase();
     out = sec.filter((s) => (s.la || "").trim().toLowerCase() === l);
+  } else if (scope.type === "region" && scope.name) {
+    const r = scope.name.trim().toLowerCase();
+    out = sec.filter((s) => (s.region || "").trim().toLowerCase() === r);
   } else if (scope.type === "urns" && Array.isArray(scope.urns)) {
     const set = new Set(scope.urns.map(String));
     out = sec.filter((s) => set.has(String(s.urn)));
@@ -43,6 +46,7 @@ export function scopeLabel(scope, n) {
   const c = n != null ? ` · ${n} school${n === 1 ? "" : "s"}` : "";
   if (scope.type === "trust") return scope.name + c;
   if (scope.type === "la") return scope.name + c;
+  if (scope.type === "region") return scope.name + c;
   if (scope.type === "catholicLa") return "Catholic schools · " + scope.las.join(", ") + c;
   if (scope.type === "urns") return "Selected schools" + c;
   return "";
@@ -51,17 +55,18 @@ export function scopeLabel(scope, n) {
 /* ── the picker's search: trusts, LAs and schools matching a query ── */
 export function searchEntities(all, q) {
   const needle = (q || "").trim().toLowerCase();
-  if (needle.length < 2) return { trusts: [], las: [], schools: [] };
+  if (needle.length < 2) return { trusts: [], las: [], regions: [], schools: [] };
   const sec = secondaries(all);
-  const trusts = {}, las = {};
+  const trusts = {}, las = {}, regions = {};
   const schools = [];
   for (const s of sec) {
     if (s.trust && s.trust !== "Not supported by a trust" && s.trust.toLowerCase().includes(needle)) trusts[s.trust] = (trusts[s.trust] || 0) + 1;
     if (s.la && s.la.toLowerCase().includes(needle)) las[s.la] = (las[s.la] || 0) + 1;
+    if (s.region && s.region.toLowerCase().includes(needle)) regions[s.region] = (regions[s.region] || 0) + 1;
     if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
   }
   const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, n]) => ({ name, n }));
-  return { trusts: top(trusts), las: top(las), schools };
+  return { trusts: top(trusts), las: top(las), regions: top(regions), schools };
 }
 
 /* ── national benchmarks, computed once ── */
