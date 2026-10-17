@@ -134,7 +134,8 @@ export function scopeLabel(scope, n) {
     scope.minDest != null ? `sustained destinations ${scope.minDest}%+` : null, scope.maxDest != null ? `sustained under ${scope.maxDest}%` : null,
     scope.minNotsust != null ? `not sustained ${scope.minNotsust}%+` : null,
   ].filter(Boolean);
-  const ord = scope.order && scope.order.limit ? `Top ${scope.order.limit} by ${{ a8: "Attainment 8", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] || scope.order.by} · ` : "";
+  const ordName = scope.order ? { a8: "Attainment 8", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
+  const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
   const pre = bits.join(" ");
   const wrap = (base) => ord + (pre ? `${pre} schools · ${base}` : base) + (tail.length ? " · " + tail.join(" · ") : "") + c;
   if (scope.type === "trust") return wrap(scope.name);

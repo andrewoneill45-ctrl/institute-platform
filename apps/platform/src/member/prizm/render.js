@@ -129,9 +129,13 @@ function cohortHtml(d) {
   const by = {}; d.rows.forEach((r) => { (by[r.la || "Other"] = by[r.la || "Other"] || []).push(r); });
   const groups = Object.keys(by).sort();
   const tbl = (rows) => `<table class="pz-table"><thead><tr><th>School</th><th>FSM</th><th>A8</th><th>vs 24/25</th><th>4+ E&amp;M</th><th>5+ E&amp;M</th><th>P8 (2024)</th></tr></thead><tbody>${rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td>${r.fsm == null ? "–" : f1(r.fsm) + "%"}</td><td class="num">${f1(r.a8)}</td><td class="num" style="color:${r.d == null ? "var(--muted)" : r.d >= 0.05 ? "var(--up)" : r.d <= -0.05 ? "var(--down)" : "var(--muted)"}">${sign(r.d)}</td><td class="num">${f0(r.b94)}</td><td class="num">${f0(r.b95)}</td><td class="num">${r.p8prev == null ? "–" : (r.p8prev > 0 ? "+" : "") + r.p8prev.toFixed(2)}</td></tr>`).join("")}</tbody></table>`;
-  const details = groups.length > 1
+  const inner = groups.length > 1
     ? groups.map((g) => `<details class="pz-fold"${groups.length <= 3 ? " open" : ""}><summary>${esc(g)}<span>${by[g].length} school${by[g].length === 1 ? "" : "s"}</span></summary>${tbl(by[g].sort((a, b) => (b.a8 ?? -1) - (a.a8 ?? -1)))}</details>`).join("")
-    : `<details class="pz-fold" open><summary>The full table<span>${d.rows.length} schools</span></summary>${tbl(ranked)}</details>`;
+    : `<details class="pz-fold"${d.rows.length <= 30 ? " open" : ""}><summary>The full table<span>${d.rows.length} schools</span></summary>${tbl(ranked)}</details>`;
+  /* more than a handful of authorities: the whole list folds away behind one line */
+  const details = groups.length > 3
+    ? `<details class="pz-fold pz-master"><summary>Every school, authority by authority<span>${d.rows.length} schools · ${groups.length} authorities</span></summary><div class="pz-master-body">${inner}</div></details>`
+    : inner;
   return section("The cohort", headline,
     (capped ? `The chart shows the top and bottom ${shown.length / 2} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare 2025/26 provisional with 2024/25.",
     chart + legend([["var(--purple)", "School"], ["var(--gold)", `Scope mean ${f1(d.a8Mean)}`], ["var(--nat)", `England median ${f1(d.bench.a8Med)}`]]) + details);
@@ -289,11 +293,14 @@ export const PZ_CSS = `
   .pz-legend span{display:inline-flex;align-items:center;gap:6px}
   .pz-legend i{width:13px;height:10px;border-radius:1px;display:inline-block}
   .pz-fold{margin-top:12px;border:1px solid var(--hair);background:var(--card)}
-  .pz-fold summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:11px 16px;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .pz-fold summary{cursor:pointer;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:12px;padding:11px 16px;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .pz-fold summary span{margin-left:auto;text-align:right;white-space:nowrap}
+  .pz-master-body{padding:2px 14px 14px}
+  .pz-master-body .pz-fold{margin-top:8px}
   .pz-fold summary::-webkit-details-marker{display:none}
   .pz-fold summary span{color:var(--muted);font-weight:400;font-size:11.5px}
-  .pz-fold summary::after{content:"+";font-family:Fraunces,Georgia,serif;color:var(--purple);font-size:17px;margin-left:12px}
-  .pz-fold[open] summary::after{content:"\\2212"}
+  .pz-fold > summary::after{content:"+";font-family:Fraunces,Georgia,serif;color:var(--purple);font-size:17px;margin-left:12px}
+  .pz-fold[open] > summary::after{content:"\\2212"}
   .pz-fold > table{margin:0 16px 14px;width:calc(100% - 32px)}
   .pz-table{width:100%;border-collapse:collapse;font-size:12px}
   .pz-table th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--grid)}
