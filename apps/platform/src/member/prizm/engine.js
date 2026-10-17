@@ -61,6 +61,16 @@ function applyFilters(out, scope) {
   if (scope.maxA8 != null) out = out.filter((s) => num(s.attainment8) != null && s.attainment8 <= scope.maxA8);
   if (scope.minDrift != null) out = out.filter((s) => drift(s) != null && drift(s) >= scope.minDrift);
   if (scope.maxDrift != null) out = out.filter((s) => drift(s) != null && drift(s) <= scope.maxDrift);
+  if (scope.minAbs != null) out = out.filter((s) => num(s.abs_overall_pct) != null && s.abs_overall_pct >= scope.minAbs);
+  if (scope.maxAbs != null) out = out.filter((s) => num(s.abs_overall_pct) != null && s.abs_overall_pct <= scope.maxAbs);
+  if (scope.minPA != null) out = out.filter((s) => num(s.abs_persistent_pct) != null && s.abs_persistent_pct >= scope.minPA);
+  if (scope.maxPA != null) out = out.filter((s) => num(s.abs_persistent_pct) != null && s.abs_persistent_pct <= scope.maxPA);
+  if (scope.minSusp != null) out = out.filter((s) => num(s.susp_rate) != null && s.susp_rate >= scope.minSusp);
+  if (scope.maxSusp != null) out = out.filter((s) => num(s.susp_rate) != null && s.susp_rate <= scope.maxSusp);
+  if (scope.maxPex != null) out = out.filter((s) => num(s.permex_rate) != null && s.permex_rate <= scope.maxPex);
+  if (scope.minDest != null) out = out.filter((s) => num(s.dest_sustained) != null && s.dest_sustained >= scope.minDest);
+  if (scope.maxDest != null) out = out.filter((s) => num(s.dest_sustained) != null && s.dest_sustained <= scope.maxDest);
+  if (scope.minNotsust != null) out = out.filter((s) => num(s.dest_notsust) != null && s.dest_notsust >= scope.minNotsust);
   if (scope.order && scope.order.by) {
     const key = { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 }[scope.order.by];
     if (key) {
@@ -117,6 +127,12 @@ export function scopeLabel(scope, n) {
     scope.minFsm != null ? `FSM ${scope.minFsm}%+` : null, scope.maxFsm != null ? `FSM under ${scope.maxFsm}%` : null,
     scope.minA8 != null ? `A8 ${scope.minA8}+` : null, scope.maxA8 != null ? `A8 under ${scope.maxA8}` : null,
     scope.minDrift != null ? "improving" : null, scope.maxDrift != null ? "declining" : null,
+    scope.minAbs != null ? `absence ${scope.minAbs}%+` : null, scope.maxAbs != null ? `absence under ${scope.maxAbs}%` : null,
+    scope.minPA != null ? `persistent absence ${scope.minPA}%+` : null, scope.maxPA != null ? `PA under ${scope.maxPA}%` : null,
+    scope.minSusp != null ? `suspensions ${scope.minSusp}+ per 100` : null, scope.maxSusp != null ? `suspensions under ${scope.maxSusp}` : null,
+    scope.maxPex === 0 ? "no permanent exclusions" : scope.maxPex != null ? `PEX under ${scope.maxPex}` : null,
+    scope.minDest != null ? `sustained destinations ${scope.minDest}%+` : null, scope.maxDest != null ? `sustained under ${scope.maxDest}%` : null,
+    scope.minNotsust != null ? `not sustained ${scope.minNotsust}%+` : null,
   ].filter(Boolean);
   const ord = scope.order && scope.order.limit ? `Top ${scope.order.limit} by ${{ a8: "Attainment 8", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] || scope.order.by} · ` : "";
   const pre = bits.join(" ");
@@ -194,6 +210,26 @@ export function parseQuery(raw) {
   /* attainment thresholds */
   eat(/\b(a8|attainment 8) (over|above|at least) (\d{2}(?:\.\d)?)\b/, (m) => { f.minA8 = +m[3]; });
   eat(/\b(a8|attainment 8) (under|below) (\d{2}(?:\.\d)?)\b/, (m) => { f.maxA8 = +m[3]; });
+  /* attendance */
+  eat(/\babsence (over|above) (\d{1,2}(?:\.\d)?)\s*%?/, (m) => { f.minAbs = +m[2]; });
+  eat(/\babsence (under|below) (\d{1,2}(?:\.\d)?)\s*%?/, (m) => { f.maxAbs = +m[2]; });
+  eat(/\b(poor|weak|low) attendance\b/, () => { f.minAbs = f.minAbs ?? 8; });
+  eat(/\b(strong|excellent|high) attendance\b/, () => { f.maxAbs = f.maxAbs ?? 5.5; });
+  eat(/\bpersistent absence (over|above) (\d{1,2})\s*%?/, (m) => { f.minPA = +m[2]; });
+  eat(/\bpersistent absence (under|below) (\d{1,2})\s*%?/, (m) => { f.maxPA = +m[2]; });
+  eat(/\bhigh persistent absence\b/, () => { f.minPA = f.minPA ?? 30; });
+  /* behaviour */
+  eat(/\bhigh suspensions?\b/, () => { f.minSusp = f.minSusp ?? 15; });
+  eat(/\blow suspensions?\b/, () => { f.maxSusp = f.maxSusp ?? 4; });
+  eat(/\bsuspension rates? (over|above) (\d{1,2}(?:\.\d)?)/, (m) => { f.minSusp = +m[2]; });
+  eat(/\bsuspension rates? (under|below) (\d{1,2}(?:\.\d)?)/, (m) => { f.maxSusp = +m[2]; });
+  eat(/\b(no|zero) permanent exclusions\b/, () => { f.maxPex = 0; });
+  /* destinations */
+  eat(/\bsustained destinations? (over|above|at least) (\d{2})\s*%?/, (m) => { f.minDest = +m[2]; });
+  eat(/\bsustained destinations? (under|below) (\d{2})\s*%?/, (m) => { f.maxDest = +m[2]; });
+  eat(/\b(strong|good) destinations\b/, () => { f.minDest = f.minDest ?? 95; });
+  eat(/\b(weak|poor) destinations\b/, () => { f.maxDest = f.maxDest ?? 88; });
+  eat(/\b(high neet|neet risk|neet)\b/, () => { f.minNotsust = f.minNotsust ?? 10; });
   /* movement */
   eat(/\b(?:the )?(\d{1,3})? ?most improved\b/, (m) => { order = { by: "improvement", limit: m[1] ? +m[1] : 20 }; });
   eat(/\bimproving\b/, () => { f.minDrift = f.minDrift ?? 0.05; });
@@ -306,6 +342,12 @@ export function benchmarks(all) {
     a8DisMean: r1(mean(dis)), a8NonMean: r1(mean(non)),
     a8PrevMean: r1(mean(prev)),
     drift: r1(mean(a8) - mean(prev)),
+    absMed: r1(med(take((s) => num(s.abs_overall_pct)))),
+    paMed: r1(med(take((s) => num(s.abs_persistent_pct)))),
+    suspMed: r1(med(take((s) => num(s.susp_rate)))),
+    pexMean: r1(mean(take((s) => num(s.permex_rate)))),
+    destMed: r1(med(take((s) => num(s.dest_sustained)))),
+    notsustMed: r1(med(take((s) => num(s.dest_notsust)))),
   };
 }
 
@@ -315,6 +357,9 @@ export const BLOCK_TYPES = [
   { type: "cohort", name: "The cohort", desc: "every school in scope, headline by headline" },
   { type: "movement", name: "Movement", desc: "this year against last, school by school" },
   { type: "gap", name: "The disadvantage gap", desc: "disadvantaged and other pupils, side by side" },
+  { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
+  { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
+  { type: "destinations", name: "Destinations", desc: "where leavers went, and who wasn't sustained" },
   { type: "scatter", name: "Context and outcomes", desc: "FSM against Attainment 8, the scope against England" },
   { type: "distribution", name: "Where they sit", desc: "the national Attainment 8 distribution, scope schools marked" },
   { type: "ofsted", name: "Inspection profile", desc: "current Ofsted judgements across the scope" },
@@ -356,6 +401,24 @@ export function computeBlock(type, schools, all, bench) {
       .map((s) => ({ name: s.name, dis: s.a8_disadv, non: s.a8_nondisadv, gap: r1(s.a8_nondisadv - s.a8_disadv) }))
       .sort((a, b) => a.gap - b.gap);
     return { rows, scopeDisMean: r1(mean(rows.map((r) => r.dis))), natDisMean: bench.a8DisMean, natNonMean: bench.a8NonMean };
+  }
+  if (type === "attendance") {
+    const rows = schools.filter((s) => num(s.abs_overall_pct) != null)
+      .map((s) => ({ name: s.name, abs: r1(s.abs_overall_pct), pa: r1(s.abs_persistent_pct), sev: r1(s.abs_severe_pct) }))
+      .sort((a, b) => a.abs - b.abs);
+    return { rows, absMean: r1(mean(rows.map((r) => r.abs))), paMean: r1(mean(rows.map((r) => r.pa).filter((v) => v != null))), bench };
+  }
+  if (type === "behaviour") {
+    const rows = schools.filter((s) => num(s.susp_rate) != null)
+      .map((s) => ({ name: s.name, susp: r1(s.susp_rate), s1: r1(s.susp_one_plus_pct), pex: num(s.permex_rate) }))
+      .sort((a, b) => a.susp - b.susp);
+    return { rows, suspMean: r1(mean(rows.map((r) => r.susp))), pexZero: rows.filter((r) => r.pex === 0).length, bench };
+  }
+  if (type === "destinations") {
+    const rows = schools.filter((s) => num(s.dest_sustained) != null)
+      .map((s) => ({ name: s.name, dest: r1(s.dest_sustained), edu: r1(s.dest_edu), appren: r1(s.dest_appren), work: r1(s.dest_work), notsust: r1(s.dest_notsust) }))
+      .sort((a, b) => b.dest - a.dest);
+    return { rows, destMean: r1(mean(rows.map((r) => r.dest))), highNotsust: rows.filter((r) => r.notsust != null && r.notsust >= 10).length, bench };
   }
   if (type === "scatter") {
     const nat = secondaries(all).filter((s) => num(s.edu_fsm_pct) != null && num(s.attainment8) != null);

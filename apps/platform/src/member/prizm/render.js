@@ -208,7 +208,47 @@ function ofstedHtml(d) {
     `<table class="pz-table"><thead><tr><th>Judgement</th><th>Schools</th><th></th><th>Scope</th><th>England</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml };
+function attendanceHtml(d) {
+  if (!d.rows.length) return "";
+  const better = d.rows.filter((r) => r.abs <= d.bench.absMed).length;
+  const { rows: shown, capped } = capRows(d.rows.map((r) => ({
+    label: r.name, v: r.abs,
+    tipLines: [r.name, `Overall absence ${f1(r.abs)}%`, `Persistent ${f1(r.pa)}% · severe ${f1(r.sev)}%`],
+  })));
+  const hi = Math.max(...d.rows.map((r) => r.abs));
+  const headline = `Scope absence averages ${f1(d.absMean)}% against England's median ${f1(d.bench.absMed)}%; ${better} of ${d.rows.length} schools sit at or better than the national median.`;
+  const tbl = `<details class="pz-fold"><summary>Every school's attendance<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Overall absence</th><th>Persistent (10%+)</th><th>Severe (50%+)</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.abs)}%</td><td class="num">${f1(r.pa)}%</td><td class="num">${f1(r.sev)}%</td></tr>`).join("")}</tbody></table></details>`;
+  return section("Attendance", headline,
+    (capped ? `Showing the best and worst ${shown.length / 2} of ${d.rows.length}. ` : "") + "Sorted lowest absence first; persistent and severe absence in the tooltips and the table.",
+    columnsSvg({ rows: shown, min: 0, max: Math.min(30, Math.ceil((hi + 2) / 5) * 5), unit: "%", refs: [{ v: d.bench.absMed, label: "England", color: "var(--nat)" }, { v: d.absMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
+}
+
+function behaviourHtml(d) {
+  if (!d.rows.length) return "";
+  const { rows: shown, capped } = capRows(d.rows.map((r) => ({
+    label: r.name, v: r.susp,
+    tipLines: [r.name, `Suspensions ${f1(r.susp)} per 100 pupils`, `${r.s1 == null ? "–" : f1(r.s1) + "% suspended at least once"} · permanent exclusions ${r.pex == null ? "–" : f1(r.pex)}`],
+  })));
+  const hi = Math.max(...d.rows.map((r) => r.susp));
+  const headline = `Suspensions average ${f1(d.suspMean)} per 100 pupils against England's median ${f1(d.bench.suspMed)}, and ${d.pexZero} of ${d.rows.length} schools recorded no permanent exclusions.`;
+  return section("Suspensions and exclusions", headline, (capped ? `Showing the two ends of ${d.rows.length} schools. ` : "") + "Sorted lowest suspension rate first.",
+    columnsSvg({ rows: shown, min: 0, max: Math.ceil((hi + 3) / 10) * 10, refs: [{ v: d.bench.suspMed, label: "England", color: "var(--nat)" }] }));
+}
+
+function destinationsHtml(d) {
+  if (!d.rows.length) return "";
+  const { rows: shown, capped } = capRows(d.rows.map((r) => ({
+    label: r.name, v: r.dest,
+    tipLines: [r.name, `Sustained destination ${f1(r.dest)}%`, `Education ${f1(r.edu)}% · apprenticeship ${f1(r.appren)}% · work ${f1(r.work)}%`, `Not sustained ${f1(r.notsust)}%`],
+  })));
+  const lo = Math.min(...d.rows.map((r) => r.dest));
+  const headline = `${f1(d.destMean)}% of leavers sustained a destination, against England's median ${f1(d.bench.destMed)}%; in ${d.highNotsust} school${d.highNotsust === 1 ? "" : "s"}, one leaver in ten or more was not sustained.`;
+  const tbl = `<details class="pz-fold"><summary>Every school's destinations<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Sustained</th><th>Education</th><th>Apprenticeship</th><th>Work</th><th>Not sustained</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.dest)}%</td><td class="num">${f1(r.edu)}%</td><td class="num">${f1(r.appren)}%</td><td class="num">${f1(r.work)}%</td><td class="num" style="color:${r.notsust != null && r.notsust >= 10 ? "var(--down)" : "inherit"}">${f1(r.notsust)}%</td></tr>`).join("")}</tbody></table></details>`;
+  return section("Destinations", headline, (capped ? `Showing the two ends of ${d.rows.length} schools. ` : "") + "Pupils sustaining education, apprenticeship or employment after key stage 4; the latest published destinations year.",
+    columnsSvg({ rows: shown, min: Math.max(0, Math.floor((lo - 6) / 10) * 10), max: 100, unit: "%", refs: [{ v: d.bench.destMed, label: "England", color: "var(--nat)" }, { v: d.destMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
+}
+
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml };
 
 export function renderBlocks(computed) {
   return computed.blocks.map((b) => (RENDERERS[b.type] ? RENDERERS[b.type](b.data) : "")).join("");

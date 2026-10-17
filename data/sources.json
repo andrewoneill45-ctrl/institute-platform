@@ -1,0 +1,68 @@
+{
+  "updated": null,
+  "note": "The Institute's evidence manifest. Each entry is one feed: where it comes from, how it travels, and when it last moved. The nightly refresh (.github/workflows/refresh.yml) reads this file, pulls what it can over the open internet of a CI runner, and commits only when something changed. A copy is published to apps/platform/public/data/sources.json as the provenance record behind every figure on the site.",
+  "sources": [
+    {
+      "key": "ks4",
+      "name": "Key stage 4 performance (Attainment 8, EBacc, basics)",
+      "publisher": "Department for Education",
+      "route": "release-zip",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/data-catalogue/data-set/5278712e-8e5a-4868-96be-4cd03ef66bdb",
+      "apiDataSetId": null,
+      "cadence": "Provisional mid-October, revised February, final spring",
+      "lastVersion": "2025/26 provisional (published 15 Oct 2026)",
+      "lastPulled": "2026-10-16",
+      "output": "apps/platform/public/data/schools.json",
+      "notes": "School-level release is a zip download, not yet in the EES API. Pulled by hand via browser when a new vintage lands; next expected movement is the 2025/26 REVISED release, February 2027. Progress 8 has no 2024/25 or 2025/26 cohort; the last published P8 is 2023/24."
+    },
+    {
+      "key": "attendance-pulse",
+      "name": "Pupil attendance in schools (fortnightly)",
+      "publisher": "Department for Education",
+      "route": "api",
+      "catalogueId": "9a0b0ffb-390d-4b0d-8a80-8f5827afb53c",
+      "apiDataSetId": null,
+      "cadence": "Fortnightly in term time",
+      "lastVersion": null,
+      "lastPulled": null,
+      "output": "apps/platform/public/data/pulse.json",
+      "notes": "National, regional and LA-level only — NOT school-level — so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
+    },
+    {
+      "key": "gias",
+      "name": "Get Information About Schools (the register itself)",
+      "publisher": "Department for Education",
+      "route": "gias-daily",
+      "downloadPattern": "https://ea-edubase-api-prod.azurewebsites.net/edubase/downloads/public/edubasealldata{YYYYMMDD}.csv",
+      "cadence": "Daily",
+      "lastVersion": null,
+      "lastPulled": null,
+      "output": "data/registry/gias-latest.csv (working copy, not shipped)",
+      "notes": "The canonical registry: every school's URN, status, opens, closures and successor URNs. The refresh uses it to catch converted academies (URN changes) and newly opened schools before a performance release names them."
+    },
+    {
+      "key": "ofsted",
+      "name": "Ofsted inspection outcomes (management information)",
+      "publisher": "Ofsted",
+      "route": "manual",
+      "catalogueUrl": "https://www.gov.uk/government/statistical-data-sets/monthly-management-information-ofsteds-school-inspections-outcomes",
+      "cadence": "Monthly",
+      "lastVersion": "state-funded schools MI, autumn 2026",
+      "lastPulled": "2026-10-11",
+      "output": "apps/platform/public/data/ofsted.json",
+      "notes": "Published as an ODS/XLSX on gov.uk, no API. Monthly refresh is a hand pull until Ofsted's new report-card data settles into a stable download."
+    },
+    {
+      "key": "ks2",
+      "name": "Key stage 2 attainment by school",
+      "publisher": "Department for Education",
+      "route": "api",
+      "apiDataSetId": "019afee4-e5d0-72f9-9a8f-d7a1a56eac1d",
+      "cadence": "Annual; 2025/26 school-level expected December 2026",
+      "lastVersion": null,
+      "lastPulled": null,
+      "output": "apps/platform/public/data/ks2.json (planned)",
+      "notes": "The December 2026 release is the tripwire: when the API dataset version moves, the refresh flags it in the run summary so primary-phase Atlas can be built on fresh data."
+    }
+  ]
+}

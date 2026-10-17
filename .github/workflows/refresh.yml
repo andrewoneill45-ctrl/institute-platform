@@ -1,0 +1,56 @@
+# The Institute's nightly data refresh.
+#
+# This runner has open internet, which the Claude workspace does not —
+# so this is where the platform actually meets the DfE. It checks the
+# EES API for new dataset versions (the December KS2 tripwire, the
+# February KS4 revision), pulls the fortnightly attendance pulse, scans
+# the daily GIAS register for URN changes, validates the whole data
+# estate, and commits only when something changed. Netlify then deploys
+# the commit like any other.
+#
+# Enable: GitHub repo → Actions tab → enable workflows. Run by hand any
+# time from Actions → "Refresh the evidence estate" → Run workflow.
+
+name: Refresh the evidence estate
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # 03:17 UTC nightly — off the :00 rush
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run the refresh pipeline
+        run: node data/pipeline/refresh.mjs
+
+      - name: Commit if anything changed
+        run: |
+          git add data/sources.json data/registry/urn-changes.json \
+                  apps/platform/public/data/sources.json \
+                  apps/platform/public/data/pulse.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Nothing changed tonight."
+            exit 0
+          fi
+          git config user.name "institute-refresh"
+          git config user.email "refresh@institute.school"
+          git commit -m "Nightly data refresh: $(date -u +%Y-%m-%d)" \
+            -m "Automated pull from DfE feeds (see data/sources.json for provenance)." \
+            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" \
+            -m "Claude-Session: https://claude.ai/code/session_01QiDBQFSQ7rEiopHCZ3EAw8"
+          git push

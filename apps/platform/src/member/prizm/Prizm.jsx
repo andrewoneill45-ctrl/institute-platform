@@ -46,7 +46,15 @@ export default function Prizm() {
   const computed = useMemo(() => (all && scope ? computeReport(all, spec) : null), [all, spec, scope]);
 
   function toggle(t) { setBlocks((b) => (b.includes(t) ? b.filter((x) => x !== t) : [...b, t])); }
-  function pick(c) { setScope(c.sc); setQ(""); }
+  function pick(c) {
+    setScope(c.sc); setQ("");
+    /* a filter implies its evidence: querying absence should show the attendance block */
+    const sc = c.sc, want = [];
+    if (sc.minAbs != null || sc.maxAbs != null || sc.minPA != null || sc.maxPA != null) want.push("attendance");
+    if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null) want.push("behaviour");
+    if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
+    if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
+  }
 
   async function send(given) {
     const text = (given ?? q).trim();
