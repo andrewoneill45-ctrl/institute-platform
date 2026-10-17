@@ -4,7 +4,7 @@
    column and dumbbell charts with reference lines and tooltips, computed
    narrative headlines, and collapsible tables for the full data. */
 
-import { VINTAGE, scopeLabel, r1 } from "./engine.js";
+import { VINTAGE, VINTAGE_KS2, scopeLabel, r1 } from "./engine.js";
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const f1 = (v) => (v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1));
@@ -102,6 +102,17 @@ function section(label, headline, note, body) {
 /* ── blocks ────────────────────────────────────────────────────────────── */
 
 function headlinesHtml(d) {
+  if (d.kind === "ks2") {
+    const vsNat = d.rwmMean != null && d.bench.rwmMean != null ? r1(d.rwmMean - d.bench.rwmMean) : null;
+    const tiles = [
+      { n: d.rwmMean != null ? Math.round(d.rwmMean) + "<small>%</small>" : "–", p: `of pupils reached the expected standard in reading, writing and maths, against ${f0(d.bench.rwmMean)} in England.`, c: vsNat != null ? `${sign(vsNat)} pts vs England · drift ${sign(d.drift)} on 2023/24` : "" },
+      { n: d.highMean != null ? Math.round(d.highMean) + "<small>%</small>" : "–", p: `reached the higher standard in all three, against a national school median of ${f0(d.bench.highMed)}.`, c: `reading score mean ${f1(d.readMean)} · England median ${f1(d.bench.readMed)}` },
+      { n: String(d.aboveNat), p: `of the ${d.n} schools sit at or above England's median RWM of ${f0(d.bench.rwmMed)}.`, c: d.las > 1 ? `${d.las} local authorities` : "one local authority" },
+      { n: d.fsmMean != null ? f1(d.fsmMean) + "<small>%</small>" : "–", p: "mean whole-school FSM across the scope: the context the results were earned in.", c: "KS2 2024/25, the latest published" },
+    ];
+    return section("Headlines", "The scope in four numbers.", null,
+      `<div class="pz-tiles">${tiles.map((t) => `<div class="pz-tile"><div class="n">${t.n}</div><p>${t.p}</p>${t.c ? `<div class="cmp">${t.c}</div>` : ""}</div>`).join("")}</div>`);
+  }
   const vsNat = d.a8Mean != null && d.bench.a8Mean != null ? r1(d.a8Mean - d.bench.a8Mean) : null;
   const tiles = [
     { n: f1(d.a8Mean), p: `Attainment 8 across the scope (unweighted school mean), against ${f1(d.bench.a8Mean)} in England.`, c: vsNat != null ? `${sign(vsNat)} points vs England · drift ${sign(d.drift)} on 2024/25` : "" },
@@ -114,6 +125,7 @@ function headlinesHtml(d) {
 }
 
 function cohortHtml(d) {
+  if (d.kind === "ks2") return ks2CohortHtml(d);
   const ranked = d.rows.filter((r) => r.a8 != null).sort((a, b) => b.a8 - a.a8);
   if (!ranked.length) return "";
   const { rows: shown, capped } = capRows(ranked.map((r) => ({
@@ -141,11 +153,41 @@ function cohortHtml(d) {
     chart + legend([["var(--purple)", "School"], ["var(--gold)", `Scope mean ${f1(d.a8Mean)}`], ["var(--nat)", `England median ${f1(d.bench.a8Med)}`]]) + details);
 }
 
+/* the primary cohort: RWM expected standard, ranked, grouped by authority */
+function ks2CohortHtml(d) {
+  const ranked = d.rows.filter((r) => r.rwm != null).sort((a, b) => b.rwm - a.rwm);
+  if (!ranked.length) return "";
+  const { rows: shown, capped } = capRows(ranked.map((r) => ({
+    label: r.name, v: r.rwm,
+    tipLines: [r.name, `RWM expected ${f0(r.rwm)} (${sign(r.d, 0)} on 2023/24)`, `Higher std ${f0(r.high)} · reading ${f1(r.read)} · FSM ${r.fsm == null ? "–" : f1(r.fsm) + "%"}`],
+  })));
+  const above = ranked.filter((r) => r.rwm >= d.bench.rwmMed).length;
+  const headline = above === ranked.length
+    ? `Every one of the ${ranked.length} schools sits at or above England's median, from ${f0(ranked[ranked.length - 1].rwm)} to ${f0(ranked[0].rwm)} reaching the expected standard.`
+    : `${above} of ${ranked.length} schools ${above === 1 ? "sits" : "sit"} at or above England's median, from ${f0(ranked[ranked.length - 1].rwm)} to ${f0(ranked[0].rwm)} reaching the expected standard.`;
+  const chart = columnsSvg({ rows: shown, min: Math.max(0, Math.floor((ranked[ranked.length - 1].rwm - 6) / 10) * 10), max: 100, unit: "%", dp: 0, refs: [{ v: d.rwmMean, label: "Scope", color: "var(--gold)" }, { v: d.bench.rwmMed, label: "England", color: "var(--nat)" }] });
+  const by = {}; d.rows.forEach((r) => { (by[r.la || "Other"] = by[r.la || "Other"] || []).push(r); });
+  const groups = Object.keys(by).sort();
+  const tbl = (rows) => `<table class="pz-table"><thead><tr><th>School</th><th>FSM</th><th>RWM</th><th>vs 23/24</th><th>Higher</th><th>Reading</th><th>Maths</th><th>Writing</th></tr></thead><tbody>${rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td>${r.fsm == null ? "–" : f1(r.fsm) + "%"}</td><td class="num">${f0(r.rwm)}</td><td class="num" style="color:${r.d == null ? "var(--muted)" : r.d >= 0.5 ? "var(--up)" : r.d <= -0.5 ? "var(--down)" : "var(--muted)"}">${sign(r.d, 0)}</td><td class="num">${f0(r.high)}</td><td class="num">${f1(r.read)}</td><td class="num">${f0(r.mat)}</td><td class="num">${f0(r.writ)}</td></tr>`).join("")}</tbody></table>`;
+  const inner = groups.length > 1
+    ? groups.map((g) => `<details class="pz-fold"${groups.length <= 3 ? " open" : ""}><summary>${esc(g)}<span>${by[g].length} school${by[g].length === 1 ? "" : "s"}</span></summary>${tbl(by[g].sort((a, b) => (b.rwm ?? -1) - (a.rwm ?? -1)))}</details>`).join("")
+    : `<details class="pz-fold"${d.rows.length <= 30 ? " open" : ""}><summary>The full table<span>${d.rows.length} schools</span></summary>${tbl(ranked)}</details>`;
+  const details = groups.length > 3
+    ? `<details class="pz-fold pz-master"><summary>Every school, authority by authority<span>${d.rows.length} schools · ${groups.length} authorities</span></summary><div class="pz-master-body">${inner}</div></details>`
+    : inner;
+  return section("The cohort", headline,
+    (capped ? `The chart shows the top and bottom ${shown.length / 2} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare KS2 2024/25 with 2023/24.",
+    chart + legend([["var(--purple)", "School"], ["var(--gold)", `Scope mean ${f0(d.rwmMean)}`], ["var(--nat)", `England median ${f0(d.bench.rwmMed)}`]]) + details);
+}
+
 function movementHtml(d) {
   if (!d.rows.length) return "";
+  const KS2 = d.kind === "ks2";
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
     label: r.name, a: r.prev, b: r.now,
-    tipLines: [r.name, `2024/25 ${f1(r.prev)} → 2025/26 ${f1(r.now)}`, `${sign(r.d)} points`],
+    tipLines: KS2
+      ? [r.name, `2023/24 ${f0(r.prev)} → 2024/25 ${f0(r.now)} RWM`, `${sign(r.d, 0)} points`]
+      : [r.name, `2024/25 ${f1(r.prev)} → 2025/26 ${f1(r.now)}`, `${sign(r.d)} points`],
   })), 40);
   const up = d.rows.filter((r) => r.d > 0.05).length, dn = d.rows.filter((r) => r.d < -0.05).length;
   const headline = `${up} school${up === 1 ? "" : "s"} rose and ${dn} fell: a scope drift of ${sign(d.scopeDrift)} against England's ${sign(d.natDrift)}.`;
@@ -153,51 +195,56 @@ function movementHtml(d) {
   const top = d.rows.slice(0, 4), bot = d.rows.slice(-4).reverse();
   const side = `<div class="pz-rank"><div><h4>Largest rises</h4><ol>${top.map((r) => `<li>${esc(short(r.name))} <span>${sign(r.d)}</span></li>`).join("")}</ol></div><div><h4>Largest falls</h4><ol>${bot.map((r) => `<li>${esc(short(r.name))} <span>${sign(r.d)}</span></li>`).join("")}</ol></div></div>`;
   return section("Movement", headline,
-    (capped ? `Showing the ${shown.length / 2} strongest rises and falls of ${d.rows.length} schools. ` : "") + "Hollow circle 2024/25, filled circle 2025/26 provisional.",
-    dumbbellsSvg({ rows: shown, min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(90, Math.ceil((hi + 4) / 10) * 10) }) + side);
+    (capped ? `Showing the ${shown.length / 2} strongest rises and falls of ${d.rows.length} schools. ` : "") + (KS2 ? "Hollow circle 2023/24, filled circle 2024/25; RWM expected standard." : "Hollow circle 2024/25, filled circle 2025/26 provisional."),
+    dumbbellsSvg({ rows: shown, min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(KS2 ? 100 : 90, Math.ceil((hi + 4) / 10) * 10), unit: KS2 ? "%" : "" }) + side);
 }
 
 function gapHtml(d) {
   if (!d.rows.length) return "";
+  const KS2 = d.kind === "ks2";
+  const F = KS2 ? (v) => f0(v) : f1, U = KS2 ? "%" : "";
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
     label: r.name, a: r.dis, b: r.non,
-    tipLines: [r.name, `Disadvantaged ${f1(r.dis)} · others ${f1(r.non)}`, `Gap ${f1(r.gap)} points`],
+    tipLines: [r.name, `Disadvantaged ${F(r.dis)} · others ${F(r.non)}`, `Gap ${KS2 ? Math.round(r.gap) : f1(r.gap)} points`],
   })), 40);
-  const beat = d.rows.filter((r) => r.dis >= d.natDisMean + (d.natNonMean - d.natDisMean)).length; /* dis >= England all-pupil-ish */
-  const natAll = r1((d.natDisMean + d.natNonMean) / 2);
-  const headline = `Scope disadvantaged mean ${f1(d.scopeDisMean)} against England's disadvantaged ${f1(d.natDisMean)}; sorted narrowest gap first.`;
+  const headline = `Scope disadvantaged mean ${F(d.scopeDisMean)} against England's disadvantaged ${F(d.natDisMean)}; sorted narrowest gap first.`;
   const lo = Math.min(...d.rows.map((r) => r.dis), 20), hi = Math.max(...d.rows.map((r) => r.non), 60);
   return section("The disadvantage gap", headline,
-    (capped ? `Showing the ${shown.length / 2} narrowest and widest of ${d.rows.length} schools. ` : "") + `England's other pupils average ${f1(d.natNonMean)}.`,
-    dumbbellsSvg({ rows: shown, mode: "gap", min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(90, Math.ceil((hi + 4) / 10) * 10), refs: [{ v: d.natDisMean, label: "Eng. disadv.", color: "var(--nat)" }] })
-    + legend([["var(--gold)", "Disadvantaged"], ["var(--purple)", "Other pupils"]]) + (void beat, void natAll, ""));
+    (capped ? `Showing the ${shown.length / 2} narrowest and widest of ${d.rows.length} schools. ` : "") + `England's other pupils average ${F(d.natNonMean)}.` + (KS2 ? " RWM expected standard." : ""),
+    dumbbellsSvg({ rows: shown, mode: "gap", min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(KS2 ? 100 : 90, Math.ceil((hi + 4) / 10) * 10), unit: U, refs: [{ v: d.natDisMean, label: "Eng. disadv.", color: "var(--nat)" }] })
+    + legend([["var(--gold)", "Disadvantaged"], ["var(--purple)", "Other pupils"]]));
 }
 
 function scatterHtml(d) {
+  const KS2 = d.kind === "ks2";
+  const TOP = KS2 ? 100 : 80, MEASURE = KS2 ? "RWM expected standard" : "Attainment 8", PHASE = KS2 ? "primary" : "secondary";
   const W = 1000, H = 440, L = 54, B = 44;
   const x = (f) => L + (Math.max(0, Math.min(70, f)) / 70) * (W - L - 20);
-  const y = (a) => (H - B) - (Math.max(0, Math.min(80, a)) / 80) * (H - B - 20);
+  const y = (a) => (H - B) - (Math.max(0, Math.min(TOP, a)) / TOP) * (H - B - 20);
   const cloud = d.cloud.map(([f, a]) => `<circle cx="${x(f).toFixed(1)}" cy="${y(a).toFixed(1)}" r="2" fill="var(--slo)"/>`).join("");
-  const marks = d.marks.map((m) => `<circle cx="${x(m.fsm).toFixed(1)}" cy="${y(m.a8).toFixed(1)}" r="5.2" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.4">${tip([m.name, `FSM ${f1(m.fsm)}% · A8 ${f1(m.a8)}`])}</circle>`).join("");
+  const marks = d.marks.map((m) => `<circle cx="${x(m.fsm).toFixed(1)}" cy="${y(m.a8).toFixed(1)}" r="5.2" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.4">${tip([m.name, KS2 ? `FSM ${f1(m.fsm)}% · RWM ${f0(m.a8)}` : `FSM ${f1(m.fsm)}% · A8 ${f1(m.a8)}`])}</circle>`).join("");
+  const yTicks = KS2 ? [25, 50, 75, 100] : [20, 40, 60, 80];
   const axes = `<line x1="${L}" y1="${H - B}" x2="${W - 20}" y2="${H - B}" stroke="var(--grid)"/><line x1="${L}" y1="20" x2="${L}" y2="${H - B}" stroke="var(--grid)"/>
     ${[0, 20, 40, 60].map((v) => `<text class="tick" x="${x(v)}" y="${H - B + 16}" text-anchor="middle">${v}%</text>`).join("")}
-    ${[20, 40, 60, 80].map((v) => `<text class="tick" x="${L - 8}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("")}
+    ${yTicks.map((v) => `<text class="tick" x="${L - 8}" y="${y(v) + 3}" text-anchor="end">${v}${KS2 ? "%" : ""}</text>`).join("")}
     <text class="tick" x="${(W + L) / 2}" y="${H - 6}" text-anchor="middle">whole-school FSM</text>
-    <text class="tick" x="16" y="${(H - B) / 2}" transform="rotate(-90 16 ${(H - B) / 2})" text-anchor="middle">Attainment 8</text>`;
-  return section("Context and outcomes", "Where the scope sits against every state-funded secondary in England, given its intake.",
+    <text class="tick" x="16" y="${(H - B) / 2}" transform="rotate(-90 16 ${(H - B) / 2})" text-anchor="middle">${MEASURE}</text>`;
+  return section("Context and outcomes", `Where the scope sits against every state-funded ${PHASE} in England, given its intake.`,
     "Association, not causation; the grey cloud is the rest of the country.",
-    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${axes}${cloud}${marks}</svg>` + legend([["var(--purple)", "Scope school"], ["var(--slo)", "Every other state-funded secondary"]]));
+    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${axes}${cloud}${marks}</svg>` + legend([["var(--purple)", "Scope school"], ["var(--slo)", `Every other state-funded ${PHASE}`]]));
 }
 
 function distributionHtml(d) {
+  const KS2 = d.kind === "ks2";
+  const SPAN = KS2 ? 100 : 90, XT = KS2 ? [0, 25, 50, 75, 100] : [0, 30, 60, 90];
   const W = 1000, H = 250, B = 34;
   const maxN = Math.max(...d.bins.map((b) => b.n));
   const bw = (W - 60) / d.bins.length;
   const bars = d.bins.map((b, i) => { const h = (b.n / maxN) * (H - B - 30); return `<rect x="${40 + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="var(--lilac)"/>`; }).join("");
-  const marks = d.marks.map((m) => { const px = 40 + (Math.max(0, Math.min(89.9, m.a8)) / 90) * (W - 60); return `<line x1="${px.toFixed(1)}" y1="26" x2="${px.toFixed(1)}" y2="${H - B}" stroke="var(--gold)" stroke-width="2">${tip([m.name, `A8 ${f1(m.a8)}`])}</line>`; }).join("");
-  const medX = 40 + (d.med / 90) * (W - 60);
-  return section("Where they sit", `Each gold line is a school in scope, set in the national distribution of ${d.total.toLocaleString("en-GB")} schools.`, null,
-    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${bars}<line x1="${medX}" y1="26" x2="${medX}" y2="${H - B}" stroke="var(--nat)" stroke-dasharray="3 4"/><text class="tick" x="${medX}" y="18" text-anchor="middle">England median ${f1(d.med)}</text>${marks}${[0, 30, 60, 90].map((v) => `<text class="tick" x="${40 + (v / 90) * (W - 60)}" y="${H - 14}" text-anchor="middle">${v}</text>`).join("")}</svg>`);
+  const marks = d.marks.map((m) => { const px = 40 + (Math.max(0, Math.min(SPAN - 0.1, m.a8)) / SPAN) * (W - 60); return `<line x1="${px.toFixed(1)}" y1="26" x2="${px.toFixed(1)}" y2="${H - B}" stroke="var(--gold)" stroke-width="2">${tip([m.name, KS2 ? `RWM ${f0(m.a8)}` : `A8 ${f1(m.a8)}`])}</line>`; }).join("");
+  const medX = 40 + (d.med / SPAN) * (W - 60);
+  return section("Where they sit", `Each gold line is a school in scope, set in the national distribution of ${d.total.toLocaleString("en-GB")} schools${KS2 ? " by RWM expected standard" : ""}.`, null,
+    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${bars}<line x1="${medX}" y1="26" x2="${medX}" y2="${H - B}" stroke="var(--nat)" stroke-dasharray="3 4"/><text class="tick" x="${medX}" y="18" text-anchor="middle">England median ${KS2 ? f0(d.med) : f1(d.med)}</text>${marks}${XT.map((v) => `<text class="tick" x="${40 + (v / SPAN) * (W - 60)}" y="${H - 14}" text-anchor="middle">${v}${KS2 ? "%" : ""}</text>`).join("")}</svg>`);
 }
 
 function ofstedHtml(d) {
@@ -321,13 +368,14 @@ export const PZ_CSS = `
 
 export function coverHtml(spec, computed) {
   const n = computed.schools.length;
+  const KS2 = computed.phase === "primary";
   const las = new Set(computed.schools.map((s) => s.la).filter(Boolean)).size;
   return `${WORDMARK}
   <div class="pz-for">A report by The All Saints Institute · Prizm</div>
   <h1>${esc(spec.title || "A report")}</h1>
   <p class="pz-sub">${esc(scopeLabel(spec.scope, null) || "")} · every figure computed from the DfE's published national dataset, traceable to its vintage.</p>
-  <div class="pz-meta"><div><b>${n}</b>school${n === 1 ? "" : "s"}</div><div><b>${las}</b>local authorit${las === 1 ? "y" : "ies"}</div><div><b>2025/26</b>provisional results</div><div><b>${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</b>prepared</div></div>
-  <div class="pz-vintage">${esc(VINTAGE)}</div>`;
+  <div class="pz-meta"><div><b>${n}</b>school${n === 1 ? "" : "s"}</div><div><b>${las}</b>local authorit${las === 1 ? "y" : "ies"}</div><div><b>${KS2 ? "2024/25" : "2025/26"}</b>${KS2 ? "KS2 results" : "provisional results"}</div><div><b>${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</b>prepared</div></div>
+  <div class="pz-vintage">${esc(KS2 ? VINTAGE_KS2 : VINTAGE)}</div>`;
 }
 
 /* ── the deliverable: one self-contained file ── */
@@ -339,6 +387,6 @@ export function reportHtml(spec, computed) {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>body{margin:0;background:#F2EFEA;padding:34px 14px}main{max-width:960px;margin:0 auto}${PZ_CSS}</style></head>
 <body><main><div class="pz-report">${coverHtml(spec, computed)}${renderBlocks(computed)}
-<div class="pz-foot"><span>Built with Prizm at institute.school · the AI arranges, the mathematics counts.</span><span>${esc(VINTAGE)}</span></div>
+<div class="pz-foot"><span>Built with Prizm at institute.school · the AI arranges, the mathematics counts.</span><span>${esc(computed.phase === "primary" ? VINTAGE_KS2 : VINTAGE)}</span></div>
 </div></main></body></html>`;
 }

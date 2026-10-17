@@ -12,6 +12,19 @@ import { renderBlocks, coverHtml, reportHtml, PZ_CSS } from "./render.js";
 const INK = "#221233", MUTED = "#6F6580", PAPER = "#FBFAF7", PURPLE = "#6A0CA0";
 const panel = { background: "#fff", border: "1px solid rgba(34,18,51,.1)", borderRadius: 14, padding: 18 };
 const DEFAULT_BLOCKS = ["headlines", "cohort", "movement", "gap", "scatter"];
+/* what the same blocks mean when the scope is the primary estate */
+const KS2_DESCS = {
+  headlines: "the scope in four numbers, against England (KS2)",
+  cohort: "every school ranked by RWM expected standard",
+  movement: "KS2 2024/25 against 2023/24, school by school",
+  gap: "disadvantaged and other pupils at the expected standard",
+  attendance: "overall and persistent absence against primary England",
+  behaviour: "suspension rates and permanent exclusions (primary)",
+  destinations: "secondary only — KS4 leavers' destinations",
+  scatter: "FSM against RWM, the scope against England's primaries",
+  distribution: "the national RWM distribution, scope schools marked",
+  ofsted: "current Ofsted judgements across the scope",
+};
 
 export default function Prizm() {
   const [all, setAll] = useState(null);
@@ -152,12 +165,17 @@ export default function Prizm() {
 
               <div className="asi-rise" style={{ ...panel, "--asi-d": "320ms" }}>
                 <div style={{ fontSize: 10.5, letterSpacing: ".12em", fontWeight: 700, color: MUTED, marginBottom: 8 }}>BLOCKS</div>
-                {BLOCK_TYPES.map((b) => (
-                  <label key={b.type} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "5px 0", cursor: "pointer" }}>
-                    <input type="checkbox" checked={blocks.includes(b.type)} onChange={() => toggle(b.type)} style={{ marginTop: 2, accentColor: PURPLE }} />
-                    <span style={{ fontSize: 12.5, color: INK }}><strong>{b.name}</strong><span style={{ color: MUTED }}> — {b.desc}</span></span>
-                  </label>
-                ))}
+                {BLOCK_TYPES.map((b) => {
+                  const pri = scope && scope.phase === "primary";
+                  const desc = pri ? (KS2_DESCS[b.type] || b.desc) : b.desc;
+                  const off = pri && b.type === "destinations";
+                  return (
+                    <label key={b.type} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "5px 0", cursor: off ? "default" : "pointer", opacity: off ? 0.45 : 1 }}>
+                      <input type="checkbox" checked={!off && blocks.includes(b.type)} disabled={off} onChange={() => toggle(b.type)} style={{ marginTop: 2, accentColor: PURPLE }} />
+                      <span style={{ fontSize: 12.5, color: INK }}><strong>{b.name}</strong><span style={{ color: MUTED }}> — {desc}</span></span>
+                    </label>
+                  );
+                })}
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title the report (or let the reader)…"
                   style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", borderRadius: 9, border: "1px solid rgba(34,18,51,.18)", fontSize: 13, background: PAPER }} />
               </div>

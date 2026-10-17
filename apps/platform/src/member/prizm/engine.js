@@ -4,6 +4,7 @@
    traceable to its DfE vintage. Nothing in this file calls a network. */
 
 export const VINTAGE = "DfE performance data 2025/26 provisional · arrows against 2024/25 · P8 is 2023/24, the last published";
+export const VINTAGE_KS2 = "DfE KS2 data 2024/25, the latest published · arrows against 2023/24 · 2025/26 school-level KS2 publishes December 2026";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 export const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
@@ -15,6 +16,11 @@ export const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
 export function secondaries(all) {
   return all.filter((s) => num(s.attainment8) != null && !/independent|special|pupil referral|alternative|secure/i.test(s.type || ""));
 }
+/* The primary estate: state-funded mainstream schools with published KS2. */
+export function primaries(all) {
+  return all.filter((s) => num(s.ks2_rwm_exp) != null && !/independent|special|pupil referral|alternative|secure/i.test(s.type || ""));
+}
+const baseFor = (all, scope) => (scope && scope.phase === "primary" ? primaries(all) : secondaries(all));
 
 /* ── Ofsted grades live in a sibling file keyed by URN; join them once ── */
 const OE = { 1: "Outstanding", 2: "Good", 3: "Requires improvement", 4: "Inadequate" };
@@ -46,7 +52,11 @@ export const TYPES = {
   academy: { test: (s) => /academy/i.test(s.type || ""), label: "Academy" },
 };
 const drift = (s) => (num(s.attainment8) != null && num(s.a8_prev) != null ? s.attainment8 - s.a8_prev : null);
+const pdrift = (s) => (num(s.ks2_rwm_exp) != null && num(s.ks2_rwm_prev) != null ? s.ks2_rwm_exp - s.ks2_rwm_prev : null);
+const pdriftOk = (s) => num(s.ks2_rwm_exp) != null && num(s.ks2_rwm_prev) != null;
 function applyFilters(out, scope) {
+  const PRI = scope.phase === "primary";
+  const dr = PRI ? pdrift : drift;
   if (scope.faith && FAITHS[scope.faith]) out = out.filter((s) => FAITHS[scope.faith].re.test(s.religiousCharacter || ""));
   if (scope.gender) out = out.filter((s) => (s.gender || "") === scope.gender);
   if (scope.ofsted) out = out.filter((s) => (s.ofstedGrade || null) === scope.ofsted);
@@ -59,8 +69,12 @@ function applyFilters(out, scope) {
   if (scope.maxFsm != null) out = out.filter((s) => num(s.edu_fsm_pct) != null && s.edu_fsm_pct <= scope.maxFsm);
   if (scope.minA8 != null) out = out.filter((s) => num(s.attainment8) != null && s.attainment8 >= scope.minA8);
   if (scope.maxA8 != null) out = out.filter((s) => num(s.attainment8) != null && s.attainment8 <= scope.maxA8);
-  if (scope.minDrift != null) out = out.filter((s) => drift(s) != null && drift(s) >= scope.minDrift);
-  if (scope.maxDrift != null) out = out.filter((s) => drift(s) != null && drift(s) <= scope.maxDrift);
+  if (scope.minDrift != null) out = out.filter((s) => dr(s) != null && dr(s) >= scope.minDrift);
+  if (scope.maxDrift != null) out = out.filter((s) => dr(s) != null && dr(s) <= scope.maxDrift);
+  if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
+  if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
+  if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
+  if (scope.maxRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg <= scope.maxRead);
   if (scope.minAbs != null) out = out.filter((s) => num(s.abs_overall_pct) != null && s.abs_overall_pct >= scope.minAbs);
   if (scope.maxAbs != null) out = out.filter((s) => num(s.abs_overall_pct) != null && s.abs_overall_pct <= scope.maxAbs);
   if (scope.minPA != null) out = out.filter((s) => num(s.abs_persistent_pct) != null && s.abs_persistent_pct >= scope.minPA);
@@ -72,7 +86,9 @@ function applyFilters(out, scope) {
   if (scope.maxDest != null) out = out.filter((s) => num(s.dest_sustained) != null && s.dest_sustained <= scope.maxDest);
   if (scope.minNotsust != null) out = out.filter((s) => num(s.dest_notsust) != null && s.dest_notsust >= scope.minNotsust);
   if (scope.order && scope.order.by) {
-    const key = { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 }[scope.order.by];
+    const key = (PRI
+      ? { a8: (s) => num(s.ks2_rwm_exp) ?? -99, rwm: (s) => num(s.ks2_rwm_exp) ?? -99, reading: (s) => num(s.ks2_read_avg) ?? -99, improvement: (s) => pdrift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 }
+      : { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 })[scope.order.by];
     if (key) {
       out = [...out].sort((a, b) => key(b) - key(a));
       if (scope.order.limit) out = out.slice(0, scope.order.limit);
@@ -86,7 +102,7 @@ function applyFilters(out, scope) {
              name?, urns?, las?, faith?, gender? } */
 export function resolveScope(all, scope) {
   if (!scope || !scope.type) return [];
-  const sec = secondaries(all);
+  const sec = baseFor(all, scope);
   let out = [];
   if (scope.type === "england") {
     out = sec;
@@ -120,6 +136,7 @@ export function scopeLabel(scope, n) {
     scope.gender === "Girls" ? "Girls'" : scope.gender === "Boys" ? "Boys'" : null,
     scope.faith && FAITHS[scope.faith] ? FAITHS[scope.faith].label : null,
     scope.schoolType && TYPES[scope.schoolType] ? TYPES[scope.schoolType].label : null,
+    scope.phase === "primary" ? "primary" : null,
   ].filter(Boolean);
   const tail = [
     scope.sixthForm === true ? "with sixth forms" : scope.sixthForm === false ? "11-16" : null,
@@ -133,8 +150,10 @@ export function scopeLabel(scope, n) {
     scope.maxPex === 0 ? "no permanent exclusions" : scope.maxPex != null ? `PEX under ${scope.maxPex}` : null,
     scope.minDest != null ? `sustained destinations ${scope.minDest}%+` : null, scope.maxDest != null ? `sustained under ${scope.maxDest}%` : null,
     scope.minNotsust != null ? `not sustained ${scope.minNotsust}%+` : null,
+    scope.minRwm != null ? `RWM ${scope.minRwm}%+` : null, scope.maxRwm != null ? `RWM under ${scope.maxRwm}%` : null,
+    scope.minRead != null ? `reading ${scope.minRead}+` : null, scope.maxRead != null ? `reading under ${scope.maxRead}` : null,
   ].filter(Boolean);
-  const ordName = scope.order ? { a8: "Attainment 8", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
+  const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
   const pre = bits.join(" ");
   const wrap = (base) => ord + (pre ? `${pre} schools · ${base}` : base) + (tail.length ? " · " + tail.join(" · ") : "") + c;
@@ -170,6 +189,23 @@ export function parseQuery(raw) {
   let rest = " " + raw.toLowerCase() + " ";
   const f = {}; let order = null;
   const eat = (re, fn) => { const m = rest.match(re); if (m) { fn(m); rest = rest.replace(new RegExp(re.source, "g"), " "); } };
+  /* phase first: "primary/primaries" becomes the generic noun so every other
+     pattern ("good primaries", "small primaries") still reads naturally */
+  if (/\b(primary|primaries|ks2|key stage 2|sats|juniors?)\b/.test(rest)) {
+    f.phase = "primary";
+    rest = rest.replace(/\bprimar(y|ies)\b/g, "schools").replace(/\b(ks2|key stage 2|sats|juniors?)( (results|data|outcomes))?\b/g, " ").replace(/\s+/g, " ");
+    if (!/^\s/.test(rest)) rest = " " + rest;
+    if (!/\s$/.test(rest)) rest = rest + " ";
+  }
+  /* primary measures */
+  eat(/\b(rwm|reading,? writing and maths|combined) (over|above|at least) (\d{1,2})\s*%?/, (m) => { f.minRwm = +m[3]; f.phase = "primary"; });
+  eat(/\b(rwm|reading,? writing and maths|combined) (under|below) (\d{1,2})\s*%?/, (m) => { f.maxRwm = +m[3]; f.phase = "primary"; });
+  eat(/\b(strong|high) (rwm|standards)\b/, () => { if (f.phase === "primary") f.minRwm = f.minRwm ?? 75; });
+  eat(/\b(weak|low|poor) (rwm|standards)\b/, () => { if (f.phase === "primary") f.maxRwm = f.maxRwm ?? 50; });
+  eat(/\breading (scores? )?(over|above|at least) (\d{2,3})\b/, (m) => { f.minRead = +m[3]; f.phase = "primary"; });
+  eat(/\breading (scores? )?(under|below) (\d{2,3})\b/, (m) => { f.maxRead = +m[3]; f.phase = "primary"; });
+  eat(/\b(strong|excellent) read(ing|ers)\b/, () => { f.minRead = f.minRead ?? 106; f.phase = "primary"; });
+  eat(/\b(weak|poor|struggling) read(ing|ers)\b/, () => { f.maxRead = f.maxRead ?? 102; f.phase = "primary"; });
   /* ofsted - phrases before single words */
   eat(/\brequires improvement\b/, () => { f.ofsted = "Requires improvement"; });
   eat(/\boutstanding\b/, () => { f.ofsted = f.ofsted || "Outstanding"; });
@@ -283,7 +319,7 @@ export function searchEntities(all, q) {
   const raw = (q || "").trim().toLowerCase();
   if (raw.length < 2) return { trusts: [], las: [], regions: [], schools: [], composed: [] };
   const { filters, hasF, rest } = parseQuery(raw);
-  const sec = secondaries(all);
+  const sec = filters.phase === "primary" ? primaries(all) : secondaries(all);
   const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
   const pass = (needle) => {
     const qTokens = toks(needle);
@@ -336,7 +372,26 @@ export function benchmarks(all) {
   const a8 = take((s) => num(s.attainment8)), b94 = take((s) => num(s.basics_94)), b95 = take((s) => num(s.basics_95));
   const dis = take((s) => num(s.a8_disadv)), non = take((s) => num(s.a8_nondisadv));
   const prev = take((s) => num(s.a8_prev));
+  /* the primary estate's own benchmarks; same key names as the secondary ones
+     where the measure is shared, so a primary-phase report can overlay them */
+  const pri = primaries(all);
+  const ptake = (f) => pri.map(f).filter((v) => v != null);
+  const rwm = ptake((s) => num(s.ks2_rwm_exp)), prwm = ptake((s) => num(s.ks2_rwm_prev));
+  const priBench = {
+    n: pri.length,
+    rwmMean: r1(mean(rwm)), rwmMed: r1(med(rwm)),
+    highMed: r1(med(ptake((s) => num(s.ks2_rwm_high)))),
+    readMed: r1(med(ptake((s) => num(s.ks2_read_avg)))),
+    rwmDisMean: r1(mean(ptake((s) => num(s.ks2_rwm_disadv)))),
+    rwmNonMean: r1(mean(ptake((s) => num(s.ks2_rwm_nondisadv)))),
+    drift: r1(mean(rwm) - mean(prwm)),
+    absMed: r1(med(ptake((s) => num(s.abs_overall_pct)))),
+    paMed: r1(med(ptake((s) => num(s.abs_persistent_pct)))),
+    suspMed: r1(med(ptake((s) => num(s.susp_rate)))),
+    pexMean: r1(mean(ptake((s) => num(s.permex_rate)))),
+  };
   return {
+    pri: priBench,
     n: sec.length,
     a8Mean: r1(mean(a8)), a8Med: r1(med(a8)),
     b94Med: r1(med(b94)), b95Med: r1(med(b95)),
@@ -366,9 +421,66 @@ export const BLOCK_TYPES = [
   { type: "ofsted", name: "Inspection profile", desc: "current Ofsted judgements across the scope" },
 ];
 
-export function computeBlock(type, schools, all, bench) {
+export function computeBlock(type, schools, all, bench, phase) {
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const vals = (f) => schools.map(f).filter((v) => v != null);
+  const PRI = phase === "primary";
+  const estate = () => (PRI ? primaries(all) : secondaries(all));
+  if (PRI && type === "headlines") {
+    const rwms = vals((s) => num(s.ks2_rwm_exp));
+    return {
+      kind: "ks2", n: schools.length,
+      las: new Set(schools.map((s) => s.la).filter(Boolean)).size,
+      rwmMean: r1(mean(rwms)),
+      highMean: r1(mean(vals((s) => num(s.ks2_rwm_high)))),
+      readMean: r1(mean(vals((s) => num(s.ks2_read_avg)))),
+      fsmMean: r1(mean(vals((s) => num(s.edu_fsm_pct)))),
+      aboveNat: rwms.filter((v) => v >= bench.rwmMed).length,
+      drift: r1(mean(schools.filter((s) => pdriftOk(s)).map((s) => s.ks2_rwm_exp - s.ks2_rwm_prev))),
+      bench,
+    };
+  }
+  if (PRI && type === "cohort") {
+    const rows = schools.map((s) => ({
+      urn: s.urn, name: s.name, la: s.la, pupils: s.pupils ?? null, fsm: num(s.edu_fsm_pct),
+      rwm: num(s.ks2_rwm_exp), prev: num(s.ks2_rwm_prev), d: pdriftOk(s) ? r1(s.ks2_rwm_exp - s.ks2_rwm_prev) : null,
+      high: num(s.ks2_rwm_high), read: num(s.ks2_read_avg), mat: num(s.ks2_mat_exp), writ: num(s.ks2_writ_exp),
+    }));
+    return { kind: "ks2", rows, rwmMean: r1(mean(vals((s) => num(s.ks2_rwm_exp)))), fsmMean: r1(mean(vals((s) => num(s.edu_fsm_pct)))), bench };
+  }
+  if (PRI && type === "movement") {
+    const rows = schools.filter((s) => pdriftOk(s))
+      .map((s) => ({ name: s.name, prev: s.ks2_rwm_prev, now: s.ks2_rwm_exp, d: r1(s.ks2_rwm_exp - s.ks2_rwm_prev) }))
+      .sort((a, b) => b.d - a.d);
+    return { kind: "ks2", rows, scopeDrift: r1(mean(rows.map((r) => r.d))), natDrift: bench.drift };
+  }
+  if (PRI && type === "gap") {
+    const rows = schools.filter((s) => num(s.ks2_rwm_disadv) != null && num(s.ks2_rwm_nondisadv) != null)
+      .map((s) => ({ name: s.name, dis: s.ks2_rwm_disadv, non: s.ks2_rwm_nondisadv, gap: r1(s.ks2_rwm_nondisadv - s.ks2_rwm_disadv) }))
+      .sort((a, b) => a.gap - b.gap);
+    return { kind: "ks2", rows, scopeDisMean: r1(mean(rows.map((r) => r.dis))), natDisMean: bench.rwmDisMean, natNonMean: bench.rwmNonMean };
+  }
+  if (PRI && type === "scatter") {
+    const nat = primaries(all).filter((s) => num(s.edu_fsm_pct) != null && num(s.ks2_rwm_exp) != null);
+    const step = Math.max(1, Math.floor(nat.length / 1400));
+    const cloud = nat.filter((_, i) => i % step === 0).map((s) => [r1(s.edu_fsm_pct), r1(s.ks2_rwm_exp)]);
+    const marks = schools.filter((s) => num(s.edu_fsm_pct) != null && num(s.ks2_rwm_exp) != null)
+      .map((s) => ({ name: s.name, fsm: r1(s.edu_fsm_pct), a8: r1(s.ks2_rwm_exp) }));
+    return { kind: "ks2", cloud, marks };
+  }
+  if (PRI && type === "distribution") {
+    const rwms = primaries(all).map((s) => num(s.ks2_rwm_exp)).filter((v) => v != null);
+    const bins = Array.from({ length: 20 }, (_, i) => ({ lo: i * 5, hi: i * 5 + 5, n: 0 }));
+    rwms.forEach((v) => { const i = Math.max(0, Math.min(19, Math.floor(v / 5))); bins[i].n++; });
+    const marks = schools.filter((s) => num(s.ks2_rwm_exp) != null).map((s) => ({ name: s.name, a8: s.ks2_rwm_exp }));
+    return { kind: "ks2", bins, total: rwms.length, marks, med: bench.rwmMed };
+  }
+  if (PRI && type === "destinations") return { rows: [], destMean: null, highNotsust: 0, bench };
+  if (type === "ofsted") {
+    const count = (list) => { const m = {}; list.forEach((s) => { const k = s.ofstedGrade || "Not yet inspected"; m[k] = (m[k] || 0) + 1; }); return m; };
+    const est = estate();
+    return { scope: count(schools), nat: count(est), n: schools.length, natN: est.length };
+  }
   if (type === "headlines") {
     const a8s = vals((s) => num(s.attainment8));
     return {
@@ -436,16 +548,16 @@ export function computeBlock(type, schools, all, bench) {
     const marks = schools.filter((s) => num(s.attainment8) != null).map((s) => ({ name: s.name, a8: s.attainment8 }));
     return { bins, total: a8s.length, marks, med: bench.a8Med };
   }
-  if (type === "ofsted") {
-    const count = (list) => { const m = {}; list.forEach((s) => { const k = s.ofstedGrade || "Not yet inspected"; m[k] = (m[k] || 0) + 1; }); return m; };
-    return { scope: count(schools), nat: count(secondaries(all)), n: schools.length, natN: secondaries(all).length };
-  }
   return null;
 }
 
 export function computeReport(all, spec) {
   const schools = resolveScope(all, spec.scope);
   const bench = benchmarks(all);
-  const blocks = (spec.blocks || []).map((b) => ({ type: b.type, data: computeBlock(b.type, schools, all, bench) })).filter((b) => b.data);
-  return { schools, bench, blocks };
+  const phase = spec.scope && spec.scope.phase;
+  /* a primary report sees the primary estate's benchmarks under the shared
+     key names (absMed, suspMed, ...) plus its own (rwmMed, readMed, ...) */
+  const B = phase === "primary" ? { ...bench, ...bench.pri } : bench;
+  const blocks = (spec.blocks || []).map((b) => ({ type: b.type, data: computeBlock(b.type, schools, all, B, phase) })).filter((b) => b.data);
+  return { schools, bench: B, blocks, phase: phase || "secondary" };
 }
