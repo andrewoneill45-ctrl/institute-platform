@@ -70,7 +70,11 @@ function Landing({ onMap, onPrism }) {
 }
 
 export default function Atlas() {
-  const [door, setDoor] = useState(() => sessionStorage.getItem("asi-atlas-door") || "");
+  /* a ?urn= deep link (Prizm's charts click through here) goes straight to the map */
+  const [door, setDoor] = useState(() => {
+    try { if (new URLSearchParams(window.location.search).get("urn")) return "map"; } catch { /* no params */ }
+    return sessionStorage.getItem("asi-atlas-door") || "";
+  });
   const choose = (d) => { sessionStorage.setItem("asi-atlas-door", "map"); setDoor("map");
     if (d === "prism") setTimeout(() => window.dispatchEvent(new CustomEvent("asi-prism", { detail: "" })), 60); };
   return (

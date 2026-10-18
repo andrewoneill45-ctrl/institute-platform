@@ -498,13 +498,13 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
   }
   if (PRI && type === "movement") {
     const rows = schools.filter((s) => pdriftOk(s))
-      .map((s) => ({ name: s.name, prev: s.ks2_rwm_prev, now: s.ks2_rwm_exp, d: r1(s.ks2_rwm_exp - s.ks2_rwm_prev) }))
+      .map((s) => ({ urn: s.urn, name: s.name, prev: s.ks2_rwm_prev, now: s.ks2_rwm_exp, d: r1(s.ks2_rwm_exp - s.ks2_rwm_prev) }))
       .sort((a, b) => b.d - a.d);
     return { kind: "ks2", rows, scopeDrift: r1(mean(rows.map((r) => r.d))), natDrift: bench.drift };
   }
   if (PRI && type === "gap") {
     const rows = schools.filter((s) => num(s.ks2_rwm_disadv) != null && num(s.ks2_rwm_nondisadv) != null)
-      .map((s) => ({ name: s.name, dis: s.ks2_rwm_disadv, non: s.ks2_rwm_nondisadv, gap: r1(s.ks2_rwm_nondisadv - s.ks2_rwm_disadv) }))
+      .map((s) => ({ urn: s.urn, name: s.name, dis: s.ks2_rwm_disadv, non: s.ks2_rwm_nondisadv, gap: r1(s.ks2_rwm_nondisadv - s.ks2_rwm_disadv) }))
       .sort((a, b) => a.gap - b.gap);
     return { kind: "ks2", rows, scopeDisMean: r1(mean(rows.map((r) => r.dis))), natDisMean: bench.rwmDisMean, natNonMean: bench.rwmNonMean };
   }
@@ -513,14 +513,14 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
     const step = Math.max(1, Math.floor(nat.length / 1400));
     const cloud = nat.filter((_, i) => i % step === 0).map((s) => [r1(s.edu_fsm_pct), r1(s.ks2_rwm_exp)]);
     const marks = schools.filter((s) => num(s.edu_fsm_pct) != null && num(s.ks2_rwm_exp) != null)
-      .map((s) => ({ name: s.name, fsm: r1(s.edu_fsm_pct), a8: r1(s.ks2_rwm_exp) }));
+      .map((s) => ({ urn: s.urn, name: s.name, fsm: r1(s.edu_fsm_pct), a8: r1(s.ks2_rwm_exp) }));
     return { kind: "ks2", cloud, marks };
   }
   if (PRI && type === "distribution") {
     const rwms = primaries(all).map((s) => num(s.ks2_rwm_exp)).filter((v) => v != null);
     const bins = Array.from({ length: 20 }, (_, i) => ({ lo: i * 5, hi: i * 5 + 5, n: 0 }));
     rwms.forEach((v) => { const i = Math.max(0, Math.min(19, Math.floor(v / 5))); bins[i].n++; });
-    const marks = schools.filter((s) => num(s.ks2_rwm_exp) != null).map((s) => ({ name: s.name, a8: s.ks2_rwm_exp }));
+    const marks = schools.filter((s) => num(s.ks2_rwm_exp) != null).map((s) => ({ urn: s.urn, name: s.name, a8: s.ks2_rwm_exp }));
     return { kind: "ks2", bins, total: rwms.length, marks, med: bench.rwmMed };
   }
   if (PRI && type === "destinations") return { rows: [], destMean: null, highNotsust: 0, bench };
@@ -553,31 +553,31 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
   }
   if (type === "movement") {
     const rows = schools.filter((s) => num(s.attainment8) != null && num(s.a8_prev) != null)
-      .map((s) => ({ name: s.name, prev: s.a8_prev, now: s.attainment8, d: r1(s.attainment8 - s.a8_prev) }))
+      .map((s) => ({ urn: s.urn, name: s.name, prev: s.a8_prev, now: s.attainment8, d: r1(s.attainment8 - s.a8_prev) }))
       .sort((a, b) => b.d - a.d);
     return { rows, scopeDrift: r1(mean(rows.map((r) => r.d))), natDrift: bench.drift };
   }
   if (type === "gap") {
     const rows = schools.filter((s) => num(s.a8_disadv) != null && num(s.a8_nondisadv) != null)
-      .map((s) => ({ name: s.name, dis: s.a8_disadv, non: s.a8_nondisadv, gap: r1(s.a8_nondisadv - s.a8_disadv) }))
+      .map((s) => ({ urn: s.urn, name: s.name, dis: s.a8_disadv, non: s.a8_nondisadv, gap: r1(s.a8_nondisadv - s.a8_disadv) }))
       .sort((a, b) => a.gap - b.gap);
     return { rows, scopeDisMean: r1(mean(rows.map((r) => r.dis))), natDisMean: bench.a8DisMean, natNonMean: bench.a8NonMean };
   }
   if (type === "attendance") {
     const rows = schools.filter((s) => num(s.abs_overall_pct) != null)
-      .map((s) => ({ name: s.name, abs: r1(s.abs_overall_pct), pa: r1(s.abs_persistent_pct), sev: r1(s.abs_severe_pct) }))
+      .map((s) => ({ urn: s.urn, name: s.name, abs: r1(s.abs_overall_pct), pa: r1(s.abs_persistent_pct), sev: r1(s.abs_severe_pct) }))
       .sort((a, b) => a.abs - b.abs);
     return { rows, absMean: r1(mean(rows.map((r) => r.abs))), paMean: r1(mean(rows.map((r) => r.pa).filter((v) => v != null))), bench };
   }
   if (type === "behaviour") {
     const rows = schools.filter((s) => num(s.susp_rate) != null)
-      .map((s) => ({ name: s.name, susp: r1(s.susp_rate), s1: r1(s.susp_one_plus_pct), pex: num(s.permex_rate) }))
+      .map((s) => ({ urn: s.urn, name: s.name, susp: r1(s.susp_rate), s1: r1(s.susp_one_plus_pct), pex: num(s.permex_rate) }))
       .sort((a, b) => a.susp - b.susp);
     return { rows, suspMean: r1(mean(rows.map((r) => r.susp))), pexZero: rows.filter((r) => r.pex === 0).length, bench };
   }
   if (type === "destinations") {
     const rows = schools.filter((s) => num(s.dest_sustained) != null)
-      .map((s) => ({ name: s.name, dest: r1(s.dest_sustained), edu: r1(s.dest_edu), appren: r1(s.dest_appren), work: r1(s.dest_work), notsust: r1(s.dest_notsust) }))
+      .map((s) => ({ urn: s.urn, name: s.name, dest: r1(s.dest_sustained), edu: r1(s.dest_edu), appren: r1(s.dest_appren), work: r1(s.dest_work), notsust: r1(s.dest_notsust) }))
       .sort((a, b) => b.dest - a.dest);
     return { rows, destMean: r1(mean(rows.map((r) => r.dest))), highNotsust: rows.filter((r) => r.notsust != null && r.notsust >= 10).length, bench };
   }
@@ -586,14 +586,14 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
     const step = Math.max(1, Math.floor(nat.length / 1400));
     const cloud = nat.filter((_, i) => i % step === 0).map((s) => [r1(s.edu_fsm_pct), r1(s.attainment8)]);
     const marks = schools.filter((s) => num(s.edu_fsm_pct) != null && num(s.attainment8) != null)
-      .map((s) => ({ name: s.name, fsm: r1(s.edu_fsm_pct), a8: r1(s.attainment8) }));
+      .map((s) => ({ urn: s.urn, name: s.name, fsm: r1(s.edu_fsm_pct), a8: r1(s.attainment8) }));
     return { cloud, marks };
   }
   if (type === "distribution") {
     const a8s = secondaries(all).map((s) => num(s.attainment8)).filter((v) => v != null);
     const bins = Array.from({ length: 18 }, (_, i) => ({ lo: i * 5, hi: i * 5 + 5, n: 0 }));
     a8s.forEach((v) => { const i = Math.max(0, Math.min(17, Math.floor(v / 5))); bins[i].n++; });
-    const marks = schools.filter((s) => num(s.attainment8) != null).map((s) => ({ name: s.name, a8: s.attainment8 }));
+    const marks = schools.filter((s) => num(s.attainment8) != null).map((s) => ({ urn: s.urn, name: s.name, a8: s.attainment8 }));
     return { bins, total: a8s.length, marks, med: bench.a8Med };
   }
   return null;

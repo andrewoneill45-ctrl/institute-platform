@@ -23,7 +23,9 @@ function niceTicks(min, max, n = 5) {
   const t = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) t.push(+v.toFixed(2));
   return t;
 }
-const tip = (lines) => `<title>${esc(lines.join("\n"))}</title>`;
+const escA = (v) => esc(v).replace(/"/g, "&quot;");
+/* interactive hit: hover shows the card, data-urn makes it click through to Atlas */
+const hit = (lines, urn) => ` class="pz-hit" data-tip="${escA((lines || []).join("\n")).replace(/\n/g, "&#10;")}"${urn != null ? ` data-urn="${escA(String(urn))}"` : ""}`;
 
 /* rotated labels need room proportional to the longest name drawn */
 function labelSpace(rows, cw) {
@@ -47,7 +49,7 @@ function columnsSvg({ rows, refs = [], min, max, unit = "", dp = 1 }) {
   rows.forEach((r, i) => {
     const x = pl + i * cw, bw = Math.min(cw * 0.66, 26), bx = x + (cw - bw) / 2;
     if (r.v != null) {
-      s += `<g>${tip(r.tipLines)}<rect x="${bx.toFixed(1)}" y="${y(r.v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(min) - y(r.v)).toFixed(1)}" fill="var(--purple)" opacity="${r.dim ? 0.35 : 0.9}"/></g>`;
+      s += `<g${hit(r.tipLines, r.urn)}><rect x="${bx.toFixed(1)}" y="${y(r.v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(min) - y(r.v)).toFixed(1)}" fill="var(--purple)" opacity="${r.dim ? 0.35 : 0.9}"/></g>`;
       if (cw > 17) s += `<text class="val" x="${(x + cw / 2).toFixed(1)}" y="${(y(r.v) - 4).toFixed(1)}" text-anchor="middle">${r.v.toFixed(dp)}</text>`;
     }
     if (cw > 11) s += `<text class="lab" transform="translate(${(x + cw / 2 + 3).toFixed(1)},${pt + ph + 8}) rotate(-55)" text-anchor="end">${esc(short(r.label, cw > 20 ? 30 : 20))}</text>`;
@@ -72,7 +74,7 @@ function dumbbellsSvg({ rows, min, max, unit = "", mode = "change", refs = [] })
   rows.forEach((r, i) => {
     const cx = pl + i * cw + cw / 2;
     if (r.a != null && r.b != null) {
-      s += `<g opacity="${r.faint ? 0.38 : 1}">${tip(r.tipLines)}`;
+      s += `<g opacity="${r.faint ? 0.38 : 1}"${hit(r.tipLines, r.urn)}>`;
       if (mode === "change") {
         const c = r.b >= r.a ? "var(--up)" : "var(--down)";
         s += `<line x1="${cx}" x2="${cx}" y1="${y(r.a)}" y2="${y(r.b)}" stroke="${c}" stroke-width="2.4"/><circle cx="${cx}" cy="${y(r.a)}" r="3.4" fill="var(--paper)" stroke="${c}" stroke-width="1.6"/><circle cx="${cx}" cy="${y(r.b)}" r="4.2" fill="${c}"/>`;
@@ -155,7 +157,7 @@ function cohortHtml(d, ctx) {
     const lo = Math.min(ranked[ranked.length - 1].a8, vRanked[vRanked.length - 1].a8);
     const hi = Math.max(ranked[0].a8, vRanked[0].a8);
     const min = Math.max(0, Math.floor((lo - 6) / 10) * 10), max = Math.min(90, Math.ceil((hi + 6) / 10) * 10);
-    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, v: r.a8, tipLines: [r.name, `Attainment 8 ${f1(r.a8)} (${sign(r.d)} on 2024/25)`] }))).rows;
+    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, v: r.a8, urn: r.urn, tipLines: [r.name, `Attainment 8 ${f1(r.a8)} (${sign(r.d)} on 2024/25)`] }))).rows;
     const gapAB = r1(d.a8Mean - ctx.vs.a8Mean);
     const headline = `${esc(L.a)} averages ${f1(d.a8Mean)} against ${esc(L.b)}'s ${f1(ctx.vs.a8Mean)}: ${Math.abs(gapAB) < 0.05 ? "level pegging" : `${f1(Math.abs(gapAB))} points ${gapAB > 0 ? "ahead" : "behind"}`}, with England's median at ${f1(d.bench.a8Med)}.`;
     const strip = (name, mean, n) => `<div class="pz-vslabel"><span>${esc(name)}</span><span>${n} schools · mean ${f1(mean)}</span></div>`;
@@ -165,7 +167,7 @@ function cohortHtml(d, ctx) {
       + strip(L.b, ctx.vs.a8Mean, vRanked.length) + columnsSvg({ rows: mk(vRanked), min, max, refs: [{ v: d.bench.a8Med, label: "England", color: "var(--nat)" }] }));
   }
   const { rows: shown, capped } = capRows(ranked.map((r) => ({
-    label: r.name, v: r.a8,
+    label: r.name, v: r.a8, urn: r.urn,
     tipLines: [r.name, `Attainment 8 ${f1(r.a8)} (${sign(r.d)} on 2024/25)`, `4+ E&M ${f0(r.b94)} · 5+ ${f0(r.b95)} · FSM ${r.fsm == null ? "–" : f1(r.fsm) + "%"}`],
   })));
   const above = ranked.filter((r) => r.a8 >= d.bench.a8Med).length;
@@ -198,7 +200,7 @@ function ks2CohortHtml(d, ctx) {
     const vRanked = ctx.vs.rows.filter((r) => r.rwm != null).sort((a, b) => b.rwm - a.rwm);
     const lo = Math.min(ranked[ranked.length - 1].rwm, vRanked[vRanked.length - 1].rwm);
     const min = Math.max(0, Math.floor((lo - 6) / 10) * 10), max = 100;
-    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, v: r.rwm, tipLines: [r.name, `RWM expected ${f0(r.rwm)} (${sign(r.d, 0)} on 2023/24)`] }))).rows;
+    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, v: r.rwm, urn: r.urn, tipLines: [r.name, `RWM expected ${f0(r.rwm)} (${sign(r.d, 0)} on 2023/24)`] }))).rows;
     const gapAB = r1(d.rwmMean - ctx.vs.rwmMean);
     const headline = `${esc(L.a)} averages ${f0(d.rwmMean)} at the expected standard against ${esc(L.b)}'s ${f0(ctx.vs.rwmMean)}: ${Math.abs(gapAB) < 0.5 ? "level pegging" : `${Math.round(Math.abs(gapAB))} points ${gapAB > 0 ? "ahead" : "behind"}`}, with England's median at ${f0(d.bench.rwmMed)}.`;
     const strip = (name, mean, n) => `<div class="pz-vslabel"><span>${esc(name)}</span><span>${n} schools · mean ${f0(mean)}</span></div>`;
@@ -207,7 +209,7 @@ function ks2CohortHtml(d, ctx) {
       + strip(L.b, ctx.vs.rwmMean, vRanked.length) + columnsSvg({ rows: mk(vRanked), min, max, unit: "%", dp: 0, refs: [{ v: d.bench.rwmMed, label: "England", color: "var(--nat)" }] }));
   }
   const { rows: shown, capped } = capRows(ranked.map((r) => ({
-    label: r.name, v: r.rwm,
+    label: r.name, v: r.rwm, urn: r.urn,
     tipLines: [r.name, `RWM expected ${f0(r.rwm)} (${sign(r.d, 0)} on 2023/24)`, `Higher std ${f0(r.high)} · reading ${f1(r.read)} · FSM ${r.fsm == null ? "–" : f1(r.fsm) + "%"}`],
   })));
   const above = ranked.filter((r) => r.rwm >= d.bench.rwmMed).length;
@@ -234,7 +236,7 @@ function movementHtml(d, ctx) {
   const KS2 = d.kind === "ks2";
   const vsLine = ctx && ctx.vs && ctx.vs.scopeDrift != null ? ` ${esc((ctx.labels || {}).b || "The comparison")} drifted ${sign(ctx.vs.scopeDrift, KS2 ? 0 : 1)}.` : "";
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
-    label: r.name, a: r.prev, b: r.now,
+    label: r.name, a: r.prev, b: r.now, urn: r.urn,
     tipLines: KS2
       ? [r.name, `2023/24 ${f0(r.prev)} → 2024/25 ${f0(r.now)} RWM`, `${sign(r.d, 0)} points`]
       : [r.name, `2024/25 ${f1(r.prev)} → 2025/26 ${f1(r.now)}`, `${sign(r.d)} points`],
@@ -260,7 +262,7 @@ function gapHtml(d, ctx) {
     const lo = Math.min(...d.rows.map((r) => r.dis), ...v.rows.map((r) => r.dis), 20);
     const hi = Math.max(...d.rows.map((r) => r.non), ...v.rows.map((r) => r.non), 60);
     const min = Math.max(0, Math.floor((lo - 4) / 10) * 10), max = Math.min(KS2 ? 100 : 90, Math.ceil((hi + 4) / 10) * 10);
-    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, a: r.dis, b: r.non, tipLines: [r.name, `Disadvantaged ${F(r.dis)} · others ${F(r.non)}`, `Gap ${KS2 ? Math.round(r.gap) : f1(r.gap)}`] })), 40).rows;
+    const mk = (rows) => capRows(rows.map((r) => ({ label: r.name, a: r.dis, b: r.non, urn: r.urn, tipLines: [r.name, `Disadvantaged ${F(r.dis)} · others ${F(r.non)}`, `Gap ${KS2 ? Math.round(r.gap) : f1(r.gap)}`] })), 40).rows;
     const headline = `${esc(L.a)}'s disadvantaged pupils average ${F(d.scopeDisMean)} with a mean gap of ${F(gA)}; ${esc(L.b)}'s average ${F(v.scopeDisMean)} with a gap of ${F(gB)}.`;
     const strip = (name) => `<div class="pz-vslabel"><span>${esc(name)}</span><span>sorted narrowest gap first</span></div>`;
     return section("The disadvantage gap, side by side", headline, `England's disadvantaged pupils average ${F(d.natDisMean)}; its others ${F(d.natNonMean)}. One scale for both charts.`,
@@ -269,7 +271,7 @@ function gapHtml(d, ctx) {
       + legend([["var(--gold)", "Disadvantaged"], ["var(--purple)", "Other pupils"]]));
   }
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
-    label: r.name, a: r.dis, b: r.non,
+    label: r.name, a: r.dis, b: r.non, urn: r.urn,
     tipLines: [r.name, `Disadvantaged ${F(r.dis)} · others ${F(r.non)}`, `Gap ${KS2 ? Math.round(r.gap) : f1(r.gap)} points`],
   })), 40);
   const headline = `Scope disadvantaged mean ${F(d.scopeDisMean)} against England's disadvantaged ${F(d.natDisMean)}; sorted narrowest gap first.`;
@@ -289,7 +291,7 @@ function scatterHtml(d, ctx) {
   const x = (f) => L + (Math.max(0, Math.min(70, f)) / 70) * (W - L - 20);
   const y = (a) => (H - B) - (Math.max(0, Math.min(TOP, a)) / TOP) * (H - B - 20);
   const cloud = d.cloud.map(([f, a]) => `<circle cx="${x(f).toFixed(1)}" cy="${y(a).toFixed(1)}" r="2" fill="var(--slo)"/>`).join("");
-  const dot = (m, color) => `<circle cx="${x(m.fsm).toFixed(1)}" cy="${y(m.a8).toFixed(1)}" r="5.2" fill="${color}" stroke="var(--paper)" stroke-width="1.4">${tip([m.name, KS2 ? `FSM ${f1(m.fsm)}% · RWM ${f0(m.a8)}` : `FSM ${f1(m.fsm)}% · A8 ${f1(m.a8)}`])}</circle>`;
+  const dot = (m, color) => `<circle cx="${x(m.fsm).toFixed(1)}" cy="${y(m.a8).toFixed(1)}" r="5.2" fill="${color}" stroke="var(--paper)" stroke-width="1.4"${hit([m.name, KS2 ? `FSM ${f1(m.fsm)}% · RWM ${f0(m.a8)}` : `FSM ${f1(m.fsm)}% · A8 ${f1(m.a8)}`], m.urn)}/>`;
   const marks = (vsMarks ? vsMarks.map((m) => dot(m, "var(--gold)")).join("") : "") + d.marks.map((m) => dot(m, "var(--purple)")).join("");
   const yTicks = KS2 ? [25, 50, 75, 100] : [20, 40, 60, 80];
   const axes = `<line x1="${L}" y1="${H - B}" x2="${W - 20}" y2="${H - B}" stroke="var(--grid)"/><line x1="${L}" y1="20" x2="${L}" y2="${H - B}" stroke="var(--grid)"/>
@@ -313,7 +315,7 @@ function distributionHtml(d, ctx) {
   const maxN = Math.max(...d.bins.map((b) => b.n));
   const bw = (W - 60) / d.bins.length;
   const bars = d.bins.map((b, i) => { const h = (b.n / maxN) * (H - B - 30); return `<rect x="${40 + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="var(--lilac)"/>`; }).join("");
-  const line = (m, color) => { const px = 40 + (Math.max(0, Math.min(SPAN - 0.1, m.a8)) / SPAN) * (W - 60); return `<line x1="${px.toFixed(1)}" y1="26" x2="${px.toFixed(1)}" y2="${H - B}" stroke="${color}" stroke-width="2">${tip([m.name, KS2 ? `RWM ${f0(m.a8)}` : `A8 ${f1(m.a8)}`])}</line>`; };
+  const line = (m, color) => { const px = 40 + (Math.max(0, Math.min(SPAN - 0.1, m.a8)) / SPAN) * (W - 60); return `<line x1="${px.toFixed(1)}" y1="26" x2="${px.toFixed(1)}" y2="${H - B}" stroke="${color}" stroke-width="4" stroke-opacity="0.85"${hit([m.name, KS2 ? `RWM ${f0(m.a8)}` : `A8 ${f1(m.a8)}`], m.urn)}/>`; };
   const marks = (vs ? vs.marks.map((m) => line(m, "var(--purple)")).join("") : "") + d.marks.map((m) => line(m, "var(--gold)")).join("");
   const medX = 40 + (d.med / SPAN) * (W - 60);
   return section("Where they sit", vs
@@ -346,7 +348,7 @@ function attendanceHtml(d, ctx) {
   const vsLine = ctx && ctx.vs && ctx.vs.absMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")} averages ${f1(ctx.vs.absMean)}%.` : "";
   const better = d.rows.filter((r) => r.abs <= d.bench.absMed).length;
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
-    label: r.name, v: r.abs,
+    label: r.name, v: r.abs, urn: r.urn,
     tipLines: [r.name, `Overall absence ${f1(r.abs)}%`, `Persistent ${f1(r.pa)}% · severe ${f1(r.sev)}%`],
   })));
   const hi = Math.max(...d.rows.map((r) => r.abs));
@@ -361,7 +363,7 @@ function behaviourHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.suspMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}: ${f1(ctx.vs.suspMean)} per 100, ${ctx.vs.pexZero} with none.` : "";
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
-    label: r.name, v: r.susp,
+    label: r.name, v: r.susp, urn: r.urn,
     tipLines: [r.name, `Suspensions ${f1(r.susp)} per 100 pupils`, `${r.s1 == null ? "–" : f1(r.s1) + "% suspended at least once"} · permanent exclusions ${r.pex == null ? "–" : f1(r.pex)}`],
   })));
   const hi = Math.max(...d.rows.map((r) => r.susp));
@@ -374,7 +376,7 @@ function destinationsHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.destMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")} sustains ${f1(ctx.vs.destMean)}%.` : "";
   const { rows: shown, capped } = capRows(d.rows.map((r) => ({
-    label: r.name, v: r.dest,
+    label: r.name, v: r.dest, urn: r.urn,
     tipLines: [r.name, `Sustained destination ${f1(r.dest)}%`, `Education ${f1(r.edu)}% · apprenticeship ${f1(r.appren)}% · work ${f1(r.work)}%`, `Not sustained ${f1(r.notsust)}%`],
   })));
   const lo = Math.min(...d.rows.map((r) => r.dest));
@@ -403,6 +405,44 @@ function leagueHtml(d) {
     `Averages of school-level figures; ${PL} need at least three schools in scope to qualify${d.small ? `, which set ${d.small} aside` : ""}. England: ${esc(d.measure)} median ${F(d.natM)} · gap ${F(d.natGap)} · absence median ${f1(d.natAbs)}%.`,
     body);
 }
+
+/* ── the hover card: one delegated listener turns every pz-hit into a live
+   tooltip, and every data-urn into a door to the school's Atlas profile.
+   Self-contained on purpose: its toString() ships inside the download. ── */
+export function attachTipCard(doc, open) {
+  var card = doc.createElement("div");
+  card.className = "pz-tipcard";
+  card.style.display = "none";
+  doc.body.appendChild(card);
+  function onMove(e) {
+    var el = e.target && e.target.closest ? e.target.closest(".pz-hit") : null;
+    if (!el) { card.style.display = "none"; return; }
+    var lines = (el.getAttribute("data-tip") || "").split("\n");
+    while (card.firstChild) card.removeChild(card.firstChild);
+    var b = doc.createElement("b"); b.textContent = lines[0] || ""; card.appendChild(b);
+    for (var i = 1; i < lines.length; i++) { var sp = doc.createElement("span"); sp.textContent = lines[i]; card.appendChild(sp); }
+    if (el.getAttribute("data-urn")) { var a = doc.createElement("i"); a.textContent = "Click to open in Atlas"; card.appendChild(a); }
+    card.style.display = "block";
+    var w = card.offsetWidth, h = card.offsetHeight;
+    var win = doc.defaultView || window;
+    var nx = Math.min(e.clientX + 14, doc.documentElement.clientWidth - w - 10);
+    var ny = e.clientY - h - 14; if (ny < 8) ny = e.clientY + 18;
+    card.style.left = Math.max(8, nx) + "px";
+    card.style.top = (ny + win.scrollY) + "px";
+  }
+  function onClick(e) {
+    var el = e.target && e.target.closest ? e.target.closest(".pz-hit[data-urn]") : null;
+    if (!el) return;
+    var urn = el.getAttribute("data-urn");
+    var win = doc.defaultView || window;
+    if (open) open(urn);
+    else win.location.href = (win.__PZ_ATLAS__ || "/members/atlas") + "?urn=" + encodeURIComponent(urn);
+  }
+  doc.addEventListener("mousemove", onMove);
+  doc.addEventListener("click", onClick);
+  return function () { doc.removeEventListener("mousemove", onMove); doc.removeEventListener("click", onClick); card.remove(); };
+}
+export const PZ_TIP_JS = "(" + attachTipCard.toString() + ")(document, null);";
 
 /* ── the foreword: the reader's prose, verified against the computed data ── */
 export function forewordHtml(text) {
@@ -453,6 +493,13 @@ export const PZ_CSS = `
   .pz-vslabel span:last-child{color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none;font-size:11.5px}
   .pz-foreword .fw p{font-family:Fraunces,Georgia,serif;font-size:16.5px;line-height:1.62;color:var(--ink);max-width:72ch;margin:10px 0}
   .pz-foreword .fw-note{font-size:10.5px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--hair)}
+  .pz-hit{cursor:default}
+  .pz-hit[data-urn]{cursor:pointer}
+  .pz-hit[data-urn]:hover rect,.pz-hit[data-urn]:hover circle,line.pz-hit[data-urn]:hover{opacity:1;filter:brightness(1.12)}
+  .pz-tipcard{position:absolute;z-index:80;display:none;background:var(--dark,#241238);color:#fff;padding:10px 14px;border-radius:8px;max-width:300px;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.45;pointer-events:none;box-shadow:0 10px 30px rgba(34,18,51,.35)}
+  .pz-tipcard b{display:block;font-size:12.5px;margin-bottom:3px}
+  .pz-tipcard span{display:block;color:rgba(255,255,255,.78)}
+  .pz-tipcard i{display:block;margin-top:7px;font-style:normal;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#E4CE8B}
   .pz-report svg text{font-family:Inter,system-ui,sans-serif;fill:var(--muted)}
   .pz-report svg .lab{font-size:10.5px;fill:var(--ink)}
   .pz-report svg .val{font-size:9px;fill:var(--muted);font-variant-numeric:tabular-nums}
@@ -511,5 +558,6 @@ export function reportHtml(spec, computed, foreword) {
 <style>body{margin:0;background:#F2EFEA;padding:34px 14px}main{max-width:960px;margin:0 auto}${PZ_CSS}</style></head>
 <body><main><div class="pz-report">${coverHtml(spec, computed)}${forewordHtml(foreword)}${renderBlocks(computed)}
 <div class="pz-foot"><span>Built with Prizm at institute.school · the AI arranges, the mathematics counts.</span><span>${esc(computed.phase === "primary" ? VINTAGE_KS2 : VINTAGE)}</span></div>
+<script>window.__PZ_ATLAS__="https://institute.school/members/atlas";${PZ_TIP_JS}</script>
 </div></main></body></html>`;
 }

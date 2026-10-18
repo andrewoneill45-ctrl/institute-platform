@@ -176,6 +176,17 @@ const App = () => {
       setSchoolsData(_schoolsData);
       setSchoolsByUrn(_schoolsByUrn);
       setLoading(false);
+      /* deep link: /members/atlas?urn=100503 opens that school's profile
+         (Prizm's charts click through here) */
+      try {
+        const want = new URLSearchParams(window.location.search).get('urn');
+        const hit = want && _schoolsByUrn[String(want)];
+        if (hit) {
+          setShowLanding(false);
+          setSelectedSchool(hit);
+          if (hit.longitude != null && hit.latitude != null) setTimeout(() => mapRef.current?.flyTo({ center: [hit.longitude, hit.latitude], zoom: 12, duration: 900 }), 400);
+        }
+      } catch { /* no search params */ }
     }).catch(err => {
       console.error('Failed to load data:', err);
       setLoadNote('The dataset could not be loaded (' + (err && err.message ? err.message : err) + '). Check the connection and reload to try again.');

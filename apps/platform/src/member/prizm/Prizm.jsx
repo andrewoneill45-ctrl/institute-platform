@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getDataset } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel, attachOfsted, verifyCommentary } from "./engine.js";
-import { renderBlocks, coverHtml, reportHtml, forewordHtml, PZ_CSS } from "./render.js";
+import { renderBlocks, coverHtml, reportHtml, forewordHtml, attachTipCard, PZ_CSS } from "./render.js";
 import { listReports, saveReport, deleteReport } from "./reports.js";
 
 /* the findings the reader is allowed to quote: every scalar the engine
@@ -66,8 +67,11 @@ export default function Prizm() {
   const [saved, setSaved] = useState([]);
   const [keeping, setKeeping] = useState(false);
 
+  const navigate = useNavigate();
   useEffect(ensureMotionCss, []);
   useEffect(() => { getDataset().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted))); }, []);
+  /* live hover cards on every chart; a school's mark clicks through to Atlas */
+  useEffect(() => attachTipCard(document, (u) => navigate(`/members/atlas?urn=${u}`)), [navigate]);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   /* a different report means the old foreword no longer speaks for it */
   useEffect(() => { setForeword(null); setFwNote(null); }, [scope, blocks]);
@@ -86,7 +90,7 @@ export default function Prizm() {
   }, [hits, scope]);
 
   const spec = useMemo(() => ({
-    title: title || (scope ? "The picture in brief: " + scopeLabel(scope) : "A Prizm report"),
+    title: title || (scope ? scopeLabel(scope).replace(/ · /g, ", ") + ": the picture" : "A Prizm report"),
     scope, blocks: blocks.map((type) => ({ type })),
   }), [title, scope, blocks]);
   const computed = useMemo(() => (all && scope ? computeReport(all, spec) : null), [all, spec, scope]);
@@ -301,7 +305,7 @@ export default function Prizm() {
             </div>
           )}
 
-          <div className="asi-rise" style={{ "--asi-d": "260ms" }}>
+          <div className="asi-rise" style={{ "--asi-d": "260ms", ...(drawer ? {} : { maxWidth: 1100, margin: "0 auto", width: "100%" }) }}>
             {computed ? (
               <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) + renderBlocks(computed) }} />
             ) : (
