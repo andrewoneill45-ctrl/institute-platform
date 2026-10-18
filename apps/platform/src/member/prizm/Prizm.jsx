@@ -1,8 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getDataset } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
-import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel, attachOfsted } from "./engine.js";
-import { renderBlocks, coverHtml, reportHtml, PZ_CSS } from "./render.js";
+import { useAuth } from "../../lib/auth.jsx";
+import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel, attachOfsted, verifyCommentary } from "./engine.js";
+import { renderBlocks, coverHtml, reportHtml, forewordHtml, PZ_CSS } from "./render.js";
+import { listReports, saveReport, deleteReport } from "./reports.js";
+
+/* the findings the reader is allowed to quote: every scalar the engine
+   computed, with the big row arrays trimmed to their ends */
+function slim(v, depth = 0) {
+  if (Array.isArray(v)) {
+    if (!v.length || depth > 3) return undefined;
+    const take = v.length > 6 ? [...v.slice(0, 3), ...v.slice(-3)] : v;
+    return take.map((x) => slim(x, depth + 1)).filter((x) => x !== undefined);
+  }
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (["cloud", "bins", "marks", "bench"].includes(k)) continue;
+      const s = slim(val, depth + 1);
+      if (s !== undefined) o[k] = s;
+    }
+    return o;
+  }
+  return typeof v === "number" || typeof v === "string" || typeof v === "boolean" ? v : undefined;
+}
 
 /* Prizm — the report studio. One box: say what you need, or type a name.
    Entities resolve instantly on the device; sentences the dataset cannot
@@ -24,9 +46,12 @@ const KS2_DESCS = {
   scatter: "FSM against RWM, the scope against England's primaries",
   distribution: "the national RWM distribution, scope schools marked",
   ofsted: "current Ofsted judgements across the scope",
+  league: "authorities or trusts ranked by what their primaries achieve",
 };
 
 export default function Prizm() {
+  const { user } = useAuth() || {};
+  const urn = user && user.urn ? Number(user.urn) : null;
   const [all, setAll] = useState(null);
   const [title, setTitle] = useState("");
   const [scope, setScope] = useState(null);
@@ -35,9 +60,17 @@ export default function Prizm() {
   const [msgs, setMsgs] = useState([]);
   const [thinking, setThinking] = useState(false);
   const [drawer, setDrawer] = useState(true);
+  const [foreword, setForeword] = useState(null);
+  const [fwBusy, setFwBusy] = useState(false);
+  const [fwNote, setFwNote] = useState(null);
+  const [saved, setSaved] = useState([]);
+  const [keeping, setKeeping] = useState(false);
 
   useEffect(ensureMotionCss, []);
   useEffect(() => { getDataset().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted))); }, []);
+  useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
+  /* a different report means the old foreword no longer speaks for it */
+  useEffect(() => { setForeword(null); setFwNote(null); }, [scope, blocks]);
 
   const hits = useMemo(() => (all && q.trim().length >= 2 ? searchEntities(all, q) : null), [all, q]);
   const chips = useMemo(() => {
@@ -66,6 +99,7 @@ export default function Prizm() {
     if (sc.minAbs != null || sc.maxAbs != null || sc.minPA != null || sc.maxPA != null) want.push("attendance");
     if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null) want.push("behaviour");
     if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
+    if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(q)) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
 
@@ -95,9 +129,61 @@ export default function Prizm() {
     setThinking(false);
   }
 
+  function buildFindings() {
+    if (!computed) return null;
+    const { pri, ...england } = computed.bench;
+    return {
+      title: spec.title,
+      scope: scopeLabel(scope, computed.schools.length),
+      labels: computed.labels,
+      phase: computed.phase,
+      schools: computed.schools.length,
+      vsSchools: computed.vsSchools ? computed.vsSchools.length : undefined,
+      england,
+      blocks: computed.blocks.map((b) => ({ type: b.type, ...slim(b.data), versus: b.vs ? slim(b.vs) : undefined })),
+    };
+  }
+
+  async function askForeword() {
+    if (!computed || fwBusy) return;
+    setFwBusy(true); setFwNote(null);
+    const findings = buildFindings();
+    try {
+      const r = await fetch("/.netlify/functions/prizm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ foreword: true, findings }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.error || !data.foreword) throw new Error(data.error || "no foreword");
+      const safe = verifyCommentary(data.foreword, findings);
+      if (safe) setForeword(safe);
+      else setFwNote("The reader's draft quoted a figure outside the computed findings, so it was set aside. Ask again.");
+    } catch {
+      setFwNote("The reader is out of reach just now; the report stands on its own.");
+    }
+    setFwBusy(false);
+  }
+
+  async function keep() {
+    if (!computed || keeping) return;
+    setKeeping(true);
+    try {
+      const r = await saveReport(urn, spec.title, { title: spec.title, scope, blocks: blocks.map((type) => ({ type })) });
+      setSaved((s) => [r, ...s.filter((x) => x.id !== r.id)]);
+    } catch { /* surfaced by the list staying unchanged */ }
+    setKeeping(false);
+  }
+
+  function openSaved(r) {
+    const s = r.spec || {};
+    if (s.scope) setScope(s.scope);
+    if (s.title) setTitle(s.title);
+    if (Array.isArray(s.blocks) && s.blocks.length) setBlocks(s.blocks.map((b) => b.type).filter((t) => BLOCK_TYPES.some((k) => k.type === t)));
+  }
+
   function download() {
     if (!computed) return;
-    const blob = new Blob([reportHtml(spec, computed)], { type: "text/html;charset=utf-8" });
+    const blob = new Blob([reportHtml(spec, computed, foreword)], { type: "text/html;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = (spec.title || "prizm-report").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) + ".html";
@@ -181,16 +267,43 @@ export default function Prizm() {
               </div>
 
               {computed && (
-                <button onClick={download} className="asi-rise asi-lift" style={{ "--asi-d": "440ms", border: "none", background: PURPLE, color: "#fff", borderRadius: 12, padding: "13px 18px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
-                  Download as a single HTML file
-                </button>
+                <div className="asi-rise" style={{ "--asi-d": "440ms", display: "grid", gap: 8 }}>
+                  <button onClick={askForeword} disabled={fwBusy} style={{ border: "1px solid rgba(106,12,160,.3)", background: foreword ? "rgba(106,12,160,.06)" : "#fff", color: "#4B0875", borderRadius: 12, padding: "11px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: fwBusy ? 0.6 : 1 }}>
+                    {fwBusy ? "The reader is writing…" : foreword ? "Rewrite the foreword" : "Have the reader write the foreword"}
+                  </button>
+                  {fwNote && <div style={{ fontSize: 11.5, color: "#8a4a00", lineHeight: 1.45 }}>{fwNote}</div>}
+                  <button onClick={keep} disabled={keeping} style={{ border: "1px solid rgba(34,18,51,.2)", background: "#fff", color: INK, borderRadius: 12, padding: "11px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: keeping ? 0.6 : 1 }}>
+                    {keeping ? "Keeping…" : "Keep in the vault"}
+                  </button>
+                  <button onClick={download} className="asi-lift" style={{ border: "none", background: PURPLE, color: "#fff", borderRadius: 12, padding: "13px 18px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+                    Download as a single HTML file
+                  </button>
+                </div>
+              )}
+
+              {saved.length > 0 && (
+                <div className="asi-rise" style={{ ...panel, "--asi-d": "500ms" }}>
+                  <div style={{ fontSize: 10.5, letterSpacing: ".12em", fontWeight: 700, color: MUTED, marginBottom: 8 }}>THE VAULT&apos;S REPORTS</div>
+                  <div style={{ display: "grid", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+                    {saved.map((r) => (
+                      <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button onClick={() => openSaved(r)} style={{ flex: 1, textAlign: "left", border: "1px solid rgba(34,18,51,.1)", background: "#fff", borderRadius: 9, padding: "7px 10px", cursor: "pointer", fontFamily: "inherit", minWidth: 0 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: INK, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</span>
+                          <span style={{ fontSize: 10.5, color: MUTED }}>{new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · recomputes on today&apos;s data</span>
+                        </button>
+                        <button onClick={() => { deleteReport(urn, r.id).then(() => setSaved((s) => s.filter((x) => x.id !== r.id))).catch(() => {}); }} title="Remove"
+                          style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 15, padding: 4 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
 
           <div className="asi-rise" style={{ "--asi-d": "260ms" }}>
             {computed ? (
-              <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + renderBlocks(computed) }} />
+              <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) + renderBlocks(computed) }} />
             ) : (
               <div style={{ ...panel, padding: 60, textAlign: "center", color: MUTED }}>
                 <div style={{ fontFamily: "Fraunces, serif", fontWeight: 500, fontSize: 22, color: INK, marginBottom: 8 }}>The page is waiting for you.</div>

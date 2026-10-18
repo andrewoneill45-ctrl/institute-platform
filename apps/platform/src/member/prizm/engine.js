@@ -156,7 +156,8 @@ export function scopeLabel(scope, n) {
   const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
   const pre = bits.join(" ");
-  const wrap = (base) => ord + (pre ? `${pre} schools · ${base}` : base) + (tail.length ? " · " + tail.join(" · ") : "") + c;
+  const vs = scope.versus && scope.versus.type ? ` vs ${scopeShort(scope.versus)}` : "";
+  const wrap = (base) => ord + (pre ? `${pre} schools · ${base}` : base) + vs + (tail.length ? " · " + tail.join(" · ") : "") + c;
   if (scope.type === "trust") return wrap(scope.name);
   if (scope.type === "la") return wrap(scope.name);
   if (scope.type === "region") return wrap(scope.name);
@@ -315,9 +316,38 @@ function fuzzyPlaces(all, rest) {
   return out.sort((a, b) => b.score - a.score || b.n - a.n).slice(0, 3);
 }
 
+/* the best single scope a search result offers, for pairing two sides */
+function bestScope(res) {
+  if (res.composed && res.composed.length) return res.composed[0].sc;
+  if (res.regions.length) return { type: "region", name: res.regions[0].name };
+  if (res.las.length) return { type: "la", name: res.las[0].name };
+  if (res.towns && res.towns.length) return { type: "town", name: res.towns[0].name };
+  if (res.trusts.length) return { type: "trust", name: res.trusts[0].name };
+  return null;
+}
+
 export function searchEntities(all, q) {
   const raw = (q || "").trim().toLowerCase();
   if (raw.length < 2) return { trusts: [], las: [], regions: [], schools: [], composed: [] };
+  /* "A vs B", "A against B": two scopes, one report */
+  const VS = /\s+(?:vs\.?|versus|against|compared (?:to|with))\s+/;
+  if (VS.test(raw)) {
+    const [qa, qb] = raw.split(VS, 2);
+    const A = searchEntities(all, qa);
+    const sa = bestScope(A);
+    /* a bare "england" side means the national estate, not a region whose
+       name happens to contain the word */
+    const qbParsed = parseQuery(qb);
+    let sb = /^\s*(?:the |whole of |all of |rest of )*england\s*$/.test(qbParsed.rest)
+      ? { ...qbParsed.filters, type: "england" }
+      : bestScope(searchEntities(all, qb));
+    if (sa && sb) {
+      const sc = { ...sa, versus: sb };
+      const n = resolveScope(all, sc).length;
+      if (n) A.composed = [{ label: scopeLabel(sc, n), n, sc }, ...A.composed.filter((c) => !c.sc.versus)].slice(0, 4);
+    }
+    return A;
+  }
   const { filters, hasF, rest } = parseQuery(raw);
   const sec = filters.phase === "primary" ? primaries(all) : secondaries(all);
   const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
@@ -419,13 +449,31 @@ export const BLOCK_TYPES = [
   { type: "scatter", name: "Context and outcomes", desc: "FSM against Attainment 8, the scope against England" },
   { type: "distribution", name: "Where they sit", desc: "the national Attainment 8 distribution, scope schools marked" },
   { type: "ofsted", name: "Inspection profile", desc: "current Ofsted judgements across the scope" },
+  { type: "league", name: "The league", desc: "authorities or trusts ranked by what their schools achieve" },
 ];
 
-export function computeBlock(type, schools, all, bench, phase) {
+export function computeBlock(type, schools, all, bench, phase, blockSpec) {
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const vals = (f) => schools.map(f).filter((v) => v != null);
   const PRI = phase === "primary";
   const estate = () => (PRI ? primaries(all) : secondaries(all));
+  if (type === "league") {
+    /* aggregate up a level: rank the SYSTEM, not the schools */
+    const by = blockSpec && ["la", "trust", "region"].includes(blockSpec.by) ? blockSpec.by : "la";
+    const key = (s) => (by === "trust" ? (s.trust && s.trust !== "Not supported by a trust" ? s.trust : null) : s[by]);
+    const groups = {};
+    for (const s of schools) { const k = key(s); if (k) (groups[k] = groups[k] || []).push(s); }
+    const m = (list, f) => { const xs = list.map(f).filter((v) => v != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+    const rows = Object.entries(groups)
+      .filter(([, list]) => list.length >= 3)
+      .map(([name, list]) => (PRI
+        ? { name, n: list.length, m: r1(m(list, (s) => num(s.ks2_rwm_exp))), gap: r1(m(list, (s) => (num(s.ks2_rwm_nondisadv) != null && num(s.ks2_rwm_disadv) != null ? s.ks2_rwm_nondisadv - s.ks2_rwm_disadv : null))), abs: r1(m(list, (s) => num(s.abs_overall_pct))), susp: r1(m(list, (s) => num(s.susp_rate))) }
+        : { name, n: list.length, m: r1(m(list, (s) => num(s.attainment8))), gap: r1(m(list, (s) => (num(s.a8_nondisadv) != null && num(s.a8_disadv) != null ? s.a8_nondisadv - s.a8_disadv : null))), abs: r1(m(list, (s) => num(s.abs_overall_pct))), susp: r1(m(list, (s) => num(s.susp_rate))) }))
+      .filter((r) => r.m != null)
+      .sort((a, b) => b.m - a.m);
+    const small = Object.values(groups).filter((l) => l.length < 3).length;
+    return { kind: PRI ? "ks2" : "ks4", by, rows, small, measure: PRI ? "RWM expected" : "Attainment 8", natM: PRI ? bench.rwmMed : bench.a8Med, natGap: PRI ? r1(bench.rwmNonMean - bench.rwmDisMean) : r1(bench.a8NonMean - bench.a8DisMean), natAbs: bench.absMed, bench };
+  }
   if (PRI && type === "headlines") {
     const rwms = vals((s) => num(s.ks2_rwm_exp));
     return {
@@ -551,6 +599,17 @@ export function computeBlock(type, schools, all, bench, phase) {
   return null;
 }
 
+/* a short name for a scope, for chart labels and contrast sentences */
+export function scopeShort(scope) {
+  if (!scope) return "";
+  const place = scope.type === "england" ? "England" : scope.name || (scope.type === "catholicLa" ? "Catholic authorities" : "selection");
+  const bits = [
+    scope.faith && FAITHS[scope.faith] ? FAITHS[scope.faith].label : null,
+    scope.schoolType && TYPES[scope.schoolType] ? TYPES[scope.schoolType].label : null,
+  ].filter(Boolean).join(" ");
+  return bits ? `${bits} schools, ${place}` : place;
+}
+
 export function computeReport(all, spec) {
   const schools = resolveScope(all, spec.scope);
   const bench = benchmarks(all);
@@ -558,6 +617,53 @@ export function computeReport(all, spec) {
   /* a primary report sees the primary estate's benchmarks under the shared
      key names (absMed, suspMed, ...) plus its own (rwmMed, readMed, ...) */
   const B = phase === "primary" ? { ...bench, ...bench.pri } : bench;
-  const blocks = (spec.blocks || []).map((b) => ({ type: b.type, data: computeBlock(b.type, schools, all, B, phase) })).filter((b) => b.data);
-  return { schools, bench: B, blocks, phase: phase || "secondary" };
+  /* a versus scope rides on the main one: same phase, its own schools */
+  let vsScope = null, vsSchools = null;
+  if (spec.scope && spec.scope.versus && spec.scope.versus.type) {
+    vsScope = { ...spec.scope.versus, phase };
+    vsSchools = resolveScope(all, vsScope);
+  }
+  const blocks = (spec.blocks || []).map((b) => ({
+    type: b.type,
+    data: computeBlock(b.type, schools, all, B, phase, b),
+    vs: vsSchools && b.type !== "league" ? computeBlock(b.type, vsSchools, all, B, phase, b) : null,
+  })).filter((b) => b.data);
+  return {
+    schools, vsSchools, bench: B, blocks, phase: phase || "secondary",
+    labels: { a: scopeShort(spec.scope), b: vsScope ? scopeShort(vsScope) : null },
+  };
+}
+
+/* ── grounded commentary: the reader may write prose, but every figure in it
+   must already exist in the computed findings. Pure and node-testable. ── */
+export function allowedNumbers(findings) {
+  const out = new Set(["2019", "2023", "2024", "2025", "2026", "2027"]);
+  const walk = (v) => {
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out.add(String(v));
+      out.add(v.toFixed(1)); out.add(v.toFixed(0));
+      out.add(String(Math.round(v * 10) / 10)); out.add(String(Math.abs(v)));
+      out.add(Math.abs(v).toFixed(1)); out.add(Math.abs(v).toFixed(0));
+    } else if (typeof v === "string") { (v.match(/\d+(?:\.\d+)?/g) || []).forEach((n) => out.add(n)); }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  walk(findings);
+  return out;
+}
+export function verifyCommentary(text, findings) {
+  if (!text) return null;
+  const ok = allowedNumbers(findings);
+  /* measure names and vintages are vocabulary, not claims */
+  const scrubbed = String(text)
+    .replace(/\b20\d{2}\/\d{2}\b/g, " ")
+    .replace(/\b(attainment|progress)\s*8\b/gi, " ")
+    .replace(/\b[AP]8\b/g, " ")
+    .replace(/\bkey stage [124]\b/gi, " ").replace(/\bKS[124]\b/gi, " ")
+    .replace(/\bgrade [45]\+?\b/gi, " ").replace(/\b[45]\+ (?:in )?(?:english|E&M)\b/gi, " ")
+    .replace(/\bper 100\b/gi, " ")
+    .replace(/\byear \d{1,2}\b/gi, " ")
+    .replace(/(\d),(\d)/g, "$1$2");
+  const nums = scrubbed.match(/\d+(?:\.\d+)?/g) || [];
+  return nums.every((n) => ok.has(n) || ok.has(String(+n))) ? String(text).trim() : null;
 }

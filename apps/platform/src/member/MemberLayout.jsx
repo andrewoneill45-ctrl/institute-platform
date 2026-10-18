@@ -19,6 +19,7 @@ export default function MemberLayout() {
           <NavLink to="lens" className={({ isActive }) => (isActive ? "on" : "")}>Lens</NavLink>
           <NavLink to="orbit" className={({ isActive }) => (isActive ? "on" : "")}>Orbit</NavLink>
           <NavLink to="constellation" className={({ isActive }) => (isActive ? "on" : "")}>Constellation</NavLink>
+          <NavLink to="prizm" className={({ isActive }) => (isActive ? "on" : "")}>Prizm</NavLink>
         </div>
         <span className="spacer" style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{user?.school || user?.email}</span>
