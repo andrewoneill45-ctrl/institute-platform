@@ -421,7 +421,7 @@ export function attachTipCard(doc, open) {
     while (card.firstChild) card.removeChild(card.firstChild);
     var b = doc.createElement("b"); b.textContent = lines[0] || ""; card.appendChild(b);
     for (var i = 1; i < lines.length; i++) { var sp = doc.createElement("span"); sp.textContent = lines[i]; card.appendChild(sp); }
-    if (el.getAttribute("data-urn")) { var a = doc.createElement("i"); a.textContent = "Click to open in Atlas"; card.appendChild(a); }
+    if (el.getAttribute("data-urn")) { var a = doc.createElement("i"); a.textContent = "Click for the full picture"; card.appendChild(a); }
     card.style.display = "block";
     var w = card.offsetWidth, h = card.offsetHeight;
     var win = doc.defaultView || window;
@@ -436,13 +436,47 @@ export function attachTipCard(doc, open) {
     var urn = el.getAttribute("data-urn");
     var win = doc.defaultView || window;
     if (open) open(urn);
-    else win.location.href = (win.__PZ_ATLAS__ || "/members/atlas") + "?urn=" + encodeURIComponent(urn);
+    else win.location.href = (win.__PZ_OPEN__ || "/members/prizm") + "?school=" + encodeURIComponent(urn);
   }
   doc.addEventListener("mousemove", onMove);
   doc.addEventListener("click", onClick);
   return function () { doc.removeEventListener("mousemove", onMove); doc.removeEventListener("click", onClick); card.remove(); };
 }
 export const PZ_TIP_JS = "(" + attachTipCard.toString() + ")(document, null);";
+
+/* ── the school dashboard: one school, the whole record, same hand ── */
+export function schoolDashHtml(d) {
+  if (!d || !d.s) return "";
+  const { s, pri, bench } = d;
+  const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : (v != null && v !== "" && Number.isFinite(parseFloat(v)) ? parseFloat(v) : null));
+  const drift = pri ? (n(s.ks2_rwm_exp) != null && n(s.ks2_rwm_prev) != null ? s.ks2_rwm_exp - s.ks2_rwm_prev : null)
+    : (n(s.attainment8) != null && n(s.a8_prev) != null ? s.attainment8 - s.a8_prev : null);
+  const meta = [s.la, s.region, s.type, s.religiousCharacter && !/does not apply|none/i.test(s.religiousCharacter) ? s.religiousCharacter : null,
+    s.gender && s.gender !== "Mixed" ? s.gender : null, n(s.pupils) != null ? `${s.pupils} pupils` : null, s.ofstedGrade || null].filter(Boolean);
+  const tiles = pri ? [
+    { n: f0(n(s.ks2_rwm_exp)), p: `reached the expected standard in reading, writing and maths, against England's ${f0(bench.rwmMean)}.`, c: `${sign(r1(drift), 0)} on 2023/24` },
+    { n: f0(n(s.ks2_rwm_high)), p: `reached the higher standard in all three; England's median is ${f0(bench.highMed)}.`, c: `reading score ${f1(n(s.ks2_read_avg))} · England median ${f1(bench.readMed)}` },
+    { n: n(s.ks2_rwm_disadv) != null ? f0(n(s.ks2_rwm_disadv)) : "–", p: `of disadvantaged pupils at the expected standard; other pupils here reach ${f0(n(s.ks2_rwm_nondisadv))}.`, c: `England's disadvantaged average ${f0(bench.rwmDisMean)}` },
+    { n: n(s.abs_overall_pct) != null ? f1(n(s.abs_overall_pct)) + "<small>%</small>" : "–", p: `overall absence, against a primary England median of ${f1(bench.absMed)}%.`, c: `persistent ${f1(n(s.abs_persistent_pct))}%` },
+  ] : [
+    { n: f1(n(s.attainment8)), p: `Attainment 8, against England's ${f1(bench.a8Mean)}.`, c: `${sign(r1(drift))} on 2024/25 · P8 (2024) ${n(s.p8_prev) != null ? (s.p8_prev > 0 ? "+" : "") + Number(s.p8_prev).toFixed(2) : "–"}` },
+    { n: n(s.basics_95) != null ? f0(n(s.basics_95)) : "–", p: `of pupils at grade 5+ in English and maths; England's median is ${f0(bench.b95Med)}.`, c: `4+ in both: ${f0(n(s.basics_94))}` },
+    { n: n(s.a8_disadv) != null ? f1(n(s.a8_disadv)) : "–", p: `Attainment 8 for disadvantaged pupils; others here reach ${f1(n(s.a8_nondisadv))}.`, c: `England's disadvantaged mean ${f1(bench.a8DisMean)}` },
+    { n: n(s.abs_overall_pct) != null ? f1(n(s.abs_overall_pct)) + "<small>%</small>" : "–", p: `overall absence, against England's median ${f1(bench.absMed)}%.`, c: `persistent ${f1(n(s.abs_persistent_pct))}% · suspensions ${f1(n(s.susp_rate))} per 100` },
+  ];
+  const tileHtml = `<div class="pz-tiles">${tiles.map((t) => `<div class="pz-tile"><div class="n">${t.n}</div><p>${t.p}</p>${t.c ? `<div class="cmp">${t.c}</div>` : ""}</div>`).join("")}</div>`;
+  const row = (k, v, eng) => (v == null || v === "–" ? "" : `<tr><td class="nm">${esc(k)}</td><td class="num">${v}</td><td class="num" style="color:var(--muted)">${eng ?? ""}</td></tr>`);
+  const pct = (v) => (n(v) == null ? null : f1(n(v)) + "%");
+  const table = pri
+    ? [row("RWM expected standard", f0(n(s.ks2_rwm_exp)), f0(bench.rwmMed) + " (median)"), row("RWM 2023/24", f0(n(s.ks2_rwm_prev))), row("Higher standard", f0(n(s.ks2_rwm_high)), f0(bench.highMed)), row("Reading scaled score", f1(n(s.ks2_read_avg)), f1(bench.readMed)), row("Reading expected", f0(n(s.ks2_read_exp))), row("Maths expected", f0(n(s.ks2_mat_exp))), row("Writing expected", f0(n(s.ks2_writ_exp))), row("Grammar and spelling", f0(n(s.ks2_gps_exp))), row("Disadvantaged RWM", f0(n(s.ks2_rwm_disadv)), f0(bench.rwmDisMean)), row("Other pupils RWM", f0(n(s.ks2_rwm_nondisadv)), f0(bench.rwmNonMean)), row("FSM (KS2 cohort)", pct(s.ks2_fsm_pct)), row("EAL", pct(s.ks2_eal_pct)), row("SEN support", pct(s.ks2_sen_k_pct)), row("Overall absence", pct(s.abs_overall_pct), f1(bench.absMed) + "%"), row("Persistent absence", pct(s.abs_persistent_pct), f1(bench.paMed) + "%"), row("Suspensions per 100", f1(n(s.susp_rate)), f1(bench.suspMed))].join("")
+    : [row("Attainment 8", f1(n(s.attainment8)), f1(bench.a8Med) + " (median)"), row("Attainment 8, 2024/25", f1(n(s.a8_prev))), row("Progress 8 (2023/24)", n(s.p8_prev) != null ? (s.p8_prev > 0 ? "+" : "") + Number(s.p8_prev).toFixed(2) : null), row("Grade 5+ English and maths", f0(n(s.basics_95)), f0(bench.b95Med)), row("Grade 4+ English and maths", f0(n(s.basics_94)), f0(bench.b94Med)), row("Disadvantaged A8", f1(n(s.a8_disadv)), f1(bench.a8DisMean)), row("Other pupils A8", f1(n(s.a8_nondisadv)), f1(bench.a8NonMean)), row("Whole-school FSM", pct(s.edu_fsm_pct)), row("Overall absence", pct(s.abs_overall_pct), f1(bench.absMed) + "%"), row("Persistent absence", pct(s.abs_persistent_pct), f1(bench.paMed) + "%"), row("Severe absence", pct(s.abs_severe_pct)), row("Suspensions per 100", f1(n(s.susp_rate)), f1(bench.suspMed)), row("Suspended at least once", pct(s.susp_one_plus_pct)), row("Permanent exclusion rate", n(s.permex_rate) != null ? f1(n(s.permex_rate)) : null, f1(bench.pexMean) + " (mean)"), row("Sustained destination", pct(s.dest_sustained), f1(bench.destMed) + "%"), row("— education", pct(s.dest_edu)), row("— apprenticeship", pct(s.dest_appren)), row("— employment", pct(s.dest_work)), row("Not sustained", pct(s.dest_notsust), f1(bench.notsustMed) + "%")].join("");
+  return `${kick("The school, in brief")}<h1 style="font-size:38px">${esc(s.name)}</h1>
+  <p class="pz-sub">${esc(meta.join(" · "))}</p>
+  <div class="pz-vintage">${esc(pri ? VINTAGE_KS2 : VINTAGE)}</div>
+  <section class="pz-block">${tileHtml}</section>
+  ${d.dist ? distributionHtml(d.dist, {}) : ""}
+  <section class="pz-block">${kick("Every measure we hold")}<table class="pz-table"><thead><tr><th>Measure</th><th>${esc(short(s.name, 24))}</th><th>England</th></tr></thead><tbody>${table}</tbody></table></section>`;
+}
 
 /* ── the foreword: the reader's prose, verified against the computed data ── */
 export function forewordHtml(text) {
@@ -558,6 +592,6 @@ export function reportHtml(spec, computed, foreword) {
 <style>body{margin:0;background:#F2EFEA;padding:34px 14px}main{max-width:960px;margin:0 auto}${PZ_CSS}</style></head>
 <body><main><div class="pz-report">${coverHtml(spec, computed)}${forewordHtml(foreword)}${renderBlocks(computed)}
 <div class="pz-foot"><span>Built with Prizm at institute.school · the AI arranges, the mathematics counts.</span><span>${esc(computed.phase === "primary" ? VINTAGE_KS2 : VINTAGE)}</span></div>
-<script>window.__PZ_ATLAS__="https://institute.school/members/atlas";${PZ_TIP_JS}</script>
+<script>window.__PZ_OPEN__="https://institute.school/members/prizm";${PZ_TIP_JS}</script>
 </div></main></body></html>`;
 }

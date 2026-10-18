@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { getDataset } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
-import { BLOCK_TYPES, searchEntities, computeReport, scopeLabel, attachOfsted, verifyCommentary } from "./engine.js";
-import { renderBlocks, coverHtml, reportHtml, forewordHtml, attachTipCard, PZ_CSS } from "./render.js";
+import { BLOCK_TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, attachOfsted, verifyCommentary } from "./engine.js";
+import { renderBlocks, coverHtml, reportHtml, forewordHtml, schoolDashHtml, attachTipCard, PZ_CSS } from "./render.js";
 import { listReports, saveReport, deleteReport } from "./reports.js";
 
 /* the findings the reader is allowed to quote: every scalar the engine
@@ -68,10 +68,16 @@ export default function Prizm() {
   const [keeping, setKeeping] = useState(false);
 
   const navigate = useNavigate();
+  const [dashUrn, setDashUrn] = useState(null);
   useEffect(ensureMotionCss, []);
   useEffect(() => { getDataset().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted))); }, []);
-  /* live hover cards on every chart; a school's mark clicks through to Atlas */
-  useEffect(() => attachTipCard(document, (u) => navigate(`/members/atlas?urn=${u}`)), [navigate]);
+  /* live hover cards on every chart; a school's mark opens its dashboard
+     in place of the report, and Back restores the report untouched */
+  useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
+  /* arriving with ?school= (a click inside a downloaded report) opens the dash */
+  useEffect(() => {
+    try { const want = new URLSearchParams(window.location.search).get("school"); if (want) setDashUrn(want); } catch { /* no params */ }
+  }, []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   /* a different report means the old foreword no longer speaks for it */
   useEffect(() => { setForeword(null); setFwNote(null); }, [scope, blocks]);
@@ -94,6 +100,7 @@ export default function Prizm() {
     scope, blocks: blocks.map((type) => ({ type })),
   }), [title, scope, blocks]);
   const computed = useMemo(() => (all && scope ? computeReport(all, spec) : null), [all, spec, scope]);
+  const dash = useMemo(() => (all && dashUrn ? computeSchoolDash(all, dashUrn) : null), [all, dashUrn]);
 
   function toggle(t) { setBlocks((b) => (b.includes(t) ? b.filter((x) => x !== t) : [...b, t])); }
   function pick(c) {
@@ -306,7 +313,19 @@ export default function Prizm() {
           )}
 
           <div className="asi-rise" style={{ "--asi-d": "260ms", ...(drawer ? {} : { maxWidth: 1100, margin: "0 auto", width: "100%" }) }}>
-            {computed ? (
+            {dash ? (
+              <div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                  <button onClick={() => setDashUrn(null)} style={{ border: "none", background: INK, color: "#fff", borderRadius: 999, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    ← Back to the report
+                  </button>
+                  <button onClick={() => navigate(`/members/atlas?urn=${dash.s.urn}`)} style={{ border: "1px solid rgba(34,18,51,.2)", background: "#fff", color: INK, borderRadius: 999, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                    Open on the Atlas map
+                  </button>
+                </div>
+                <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: schoolDashHtml(dash) }} />
+              </div>
+            ) : computed ? (
               <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) + renderBlocks(computed) }} />
             ) : (
               <div style={{ ...panel, padding: 60, textAlign: "center", color: MUTED }}>

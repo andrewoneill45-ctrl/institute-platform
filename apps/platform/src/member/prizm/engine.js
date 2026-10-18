@@ -610,6 +610,17 @@ export function scopeShort(scope) {
   return bits ? `${bits} schools, ${place}` : place;
 }
 
+/* one school, everything the dataset holds on it — the in-report dashboard */
+export function computeSchoolDash(all, urn) {
+  const s = all.find((x) => String(x.urn) === String(urn));
+  if (!s) return null;
+  const bench = benchmarks(all);
+  const pri = num(s.attainment8) == null && num(s.ks2_rwm_exp) != null;
+  const B = pri ? { ...bench, ...bench.pri } : bench;
+  const dist = computeBlock("distribution", [s], all, B, pri ? "primary" : undefined);
+  return { s, pri, bench: B, dist };
+}
+
 export function computeReport(all, spec) {
   const schools = resolveScope(all, spec.scope);
   const bench = benchmarks(all);
