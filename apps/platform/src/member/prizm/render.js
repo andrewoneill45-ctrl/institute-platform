@@ -29,7 +29,7 @@ const hit = (lines, urn) => ` class="pz-hit" data-tip="${escA((lines || []).join
 
 /* rotated labels need room proportional to the longest name drawn */
 function labelSpace(rows, cw) {
-  const chars = Math.max(8, ...rows.map((r) => short(r.label, cw > 20 ? 30 : 20).length));
+  const chars = Math.max(8, ...rows.filter((r) => !r.gap).map((r) => short(r.label, cw > 20 ? 30 : 20).length));
   const px = chars * 5.8 + 10;
   return { lab: Math.min(172, Math.round(px * 0.82) + 12), padL: Math.max(0, Math.round(px * 0.58) - cw / 2) };
 }
@@ -48,6 +48,7 @@ function columnsSvg({ rows, refs = [], min, max, unit = "", dp = 1 }) {
   niceTicks(min, max).forEach((t) => { s += `<line class="gridl" x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}"/><text class="tick" x="${pl - 6}" y="${y(t) + 3.5}" text-anchor="end">${t}${unit}</text>`; });
   rows.forEach((r, i) => {
     const x = pl + i * cw, bw = Math.min(cw * 0.66, 26), bx = x + (cw - bw) / 2;
+    if (r.gap) { s += gapCol(x, cw, pt, ph, r.n); return; }
     if (r.v != null) {
       s += `<g${hit(r.tipLines, r.urn)}><rect x="${bx.toFixed(1)}" y="${y(r.v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(min) - y(r.v)).toFixed(1)}" fill="var(--purple)" opacity="${r.dim ? 0.35 : 0.9}"/></g>`;
       if (cw > 17) s += `<text class="val" x="${(x + cw / 2).toFixed(1)}" y="${(y(r.v) - 4).toFixed(1)}" text-anchor="middle">${r.v.toFixed(dp)}</text>`;
@@ -73,6 +74,7 @@ function dumbbellsSvg({ rows, min, max, unit = "", mode = "change", refs = [] })
   refs.forEach((rf) => { const yy = y(rf.v); s += `<line x1="${pl}" x2="${W - pr + 6}" y1="${yy}" y2="${yy}" stroke="${rf.color}" stroke-width="1.4" stroke-dasharray="5 4"/><text class="reftxt" x="${W - pr + 10}" y="${yy + 4}" style="fill:${rf.color}">${rf.label} ${rf.v.toFixed(1)}${unit}</text>`; });
   rows.forEach((r, i) => {
     const cx = pl + i * cw + cw / 2;
+    if (r.gap) { s += gapCol(pl + i * cw, cw, pt, ph, r.n); return; }
     if (r.a != null && r.b != null) {
       s += `<g opacity="${r.faint ? 0.38 : 1}"${hit(r.tipLines, r.urn)}>`;
       if (mode === "change") {
@@ -92,7 +94,17 @@ function dumbbellsSvg({ rows, min, max, unit = "", mode = "change", refs = [] })
 function capRows(rows, cap = 44) {
   if (rows.length <= cap) return { rows, capped: false };
   const half = Math.floor(cap / 2);
-  return { rows: [...rows.slice(0, half), ...rows.slice(-half)], capped: rows.length - cap };
+  /* the omitted middle is drawn, not hidden: a break column carries its count */
+  return { rows: [...rows.slice(0, half), { gap: true, n: rows.length - 2 * half }, ...rows.slice(-half)], capped: rows.length - cap };
+}
+
+/* the break column: a quiet band naming the schools between the two ends */
+function gapCol(x, cw, pt, ph, n) {
+  const cx = x + cw / 2, my = pt + ph / 2;
+  let g = `<rect x="${(x + Math.max(1, cw * 0.12)).toFixed(1)}" y="${pt}" width="${Math.max(3, cw * 0.76).toFixed(1)}" height="${ph}" fill="var(--lilac)" opacity="0.6"/>`;
+  for (let i = -1; i <= 1; i++) g += `<circle cx="${cx.toFixed(1)}" cy="${(my + i * 13).toFixed(1)}" r="2.2" fill="var(--muted)"/>`;
+  g += `<text class="lab" transform="translate(${(cx + 3).toFixed(1)},${pt + ph + 8}) rotate(-55)" text-anchor="end" style="fill:var(--muted);font-style:italic">${n.toLocaleString("en-GB")} schools between</text>`;
+  return g;
 }
 
 const legend = (items) => `<div class="pz-legend">${items.map(([c, t]) => `<span><i style="background:${c}"></i>${esc(t)}</span>`).join("")}</div>`;
@@ -187,7 +199,7 @@ function cohortHtml(d, ctx) {
     ? `<details class="pz-fold pz-master"><summary>Every school, authority by authority<span>${d.rows.length} schools · ${groups.length} authorities</span></summary><div class="pz-master-body">${inner}</div></details>`
     : inner;
   return section("The cohort", headline,
-    (capped ? `The chart shows the top and bottom ${shown.length / 2} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare 2025/26 provisional with 2024/25.",
+    (capped ? `The chart shows the top and bottom ${Math.floor(shown.length / 2)} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare 2025/26 provisional with 2024/25.",
     chart + legend([["var(--purple)", "School"], ["var(--gold)", `Scope mean ${f1(d.a8Mean)}`], ["var(--nat)", `England median ${f1(d.bench.a8Med)}`]]) + details);
 }
 
@@ -227,7 +239,7 @@ function ks2CohortHtml(d, ctx) {
     ? `<details class="pz-fold pz-master"><summary>Every school, authority by authority<span>${d.rows.length} schools · ${groups.length} authorities</span></summary><div class="pz-master-body">${inner}</div></details>`
     : inner;
   return section("The cohort", headline,
-    (capped ? `The chart shows the top and bottom ${shown.length / 2} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare KS2 2024/25 with 2023/24.",
+    (capped ? `The chart shows the top and bottom ${Math.floor(shown.length / 2)} of ${ranked.length} schools; ` : "") + "every school, with the full table folded beneath. Arrows compare KS2 2024/25 with 2023/24.",
     chart + legend([["var(--purple)", "School"], ["var(--gold)", `Scope mean ${f0(d.rwmMean)}`], ["var(--nat)", `England median ${f0(d.bench.rwmMed)}`]]) + details);
 }
 
@@ -247,7 +259,7 @@ function movementHtml(d, ctx) {
   const top = d.rows.slice(0, 4), bot = d.rows.slice(-4).reverse();
   const side = `<div class="pz-rank"><div><h4>Largest rises</h4><ol>${top.map((r) => `<li>${esc(short(r.name))} <span>${sign(r.d)}</span></li>`).join("")}</ol></div><div><h4>Largest falls</h4><ol>${bot.map((r) => `<li>${esc(short(r.name))} <span>${sign(r.d)}</span></li>`).join("")}</ol></div></div>`;
   return section("Movement", headline,
-    (capped ? `Showing the ${shown.length / 2} strongest rises and falls of ${d.rows.length} schools. ` : "") + (KS2 ? "Hollow circle 2023/24, filled circle 2024/25; RWM expected standard." : "Hollow circle 2024/25, filled circle 2025/26 provisional."),
+    (capped ? `Showing the ${Math.floor(shown.length / 2)} strongest rises and falls of ${d.rows.length} schools. ` : "") + (KS2 ? "Hollow circle 2023/24, filled circle 2024/25; RWM expected standard." : "Hollow circle 2024/25, filled circle 2025/26 provisional."),
     dumbbellsSvg({ rows: shown, min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(KS2 ? 100 : 90, Math.ceil((hi + 4) / 10) * 10), unit: KS2 ? "%" : "" }) + side);
 }
 
@@ -277,7 +289,7 @@ function gapHtml(d, ctx) {
   const headline = `Scope disadvantaged mean ${F(d.scopeDisMean)} against England's disadvantaged ${F(d.natDisMean)}; sorted narrowest gap first.`;
   const lo = Math.min(...d.rows.map((r) => r.dis), 20), hi = Math.max(...d.rows.map((r) => r.non), 60);
   return section("The disadvantage gap", headline,
-    (capped ? `Showing the ${shown.length / 2} narrowest and widest of ${d.rows.length} schools. ` : "") + `England's other pupils average ${F(d.natNonMean)}.` + (KS2 ? " RWM expected standard." : ""),
+    (capped ? `Showing the ${Math.floor(shown.length / 2)} narrowest and widest of ${d.rows.length} schools. ` : "") + `England's other pupils average ${F(d.natNonMean)}.` + (KS2 ? " RWM expected standard." : ""),
     dumbbellsSvg({ rows: shown, mode: "gap", min: Math.max(0, Math.floor((lo - 4) / 10) * 10), max: Math.min(KS2 ? 100 : 90, Math.ceil((hi + 4) / 10) * 10), unit: U, refs: [{ v: d.natDisMean, label: "Eng. disadv.", color: "var(--nat)" }] })
     + legend([["var(--gold)", "Disadvantaged"], ["var(--purple)", "Other pupils"]]));
 }
@@ -355,7 +367,7 @@ function attendanceHtml(d, ctx) {
   const headline = `Scope absence averages ${f1(d.absMean)}% against England's median ${f1(d.bench.absMed)}%; ${better} of ${d.rows.length} schools sit at or better than the national median.${vsLine}`;
   const tbl = `<details class="pz-fold"><summary>Every school's attendance<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Overall absence</th><th>Persistent (10%+)</th><th>Severe (50%+)</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.abs)}%</td><td class="num">${f1(r.pa)}%</td><td class="num">${f1(r.sev)}%</td></tr>`).join("")}</tbody></table></details>`;
   return section("Attendance", headline,
-    (capped ? `Showing the best and worst ${shown.length / 2} of ${d.rows.length}. ` : "") + "Sorted lowest absence first; persistent and severe absence in the tooltips and the table.",
+    (capped ? `Showing the best and worst ${Math.floor(shown.length / 2)} of ${d.rows.length}. ` : "") + "Sorted lowest absence first; persistent and severe absence in the tooltips and the table.",
     columnsSvg({ rows: shown, min: 0, max: Math.min(30, Math.ceil((hi + 2) / 5) * 5), unit: "%", refs: [{ v: d.bench.absMed, label: "England", color: "var(--nat)" }, { v: d.absMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
 }
 
