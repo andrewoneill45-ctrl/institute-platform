@@ -581,6 +581,10 @@ export function renderBlocks(computed) {
   const labels = computed.labels || {};
   return computed.blocks.map((b) => (RENDERERS[b.type] ? RENDERERS[b.type](b.data, { vs: b.vs, labels }) : "")).join("");
 }
+/* one block alone, so the studio can wrap each section with its own controls */
+export function renderBlock(b, computed) {
+  return RENDERERS[b.type] ? RENDERERS[b.type](b.data, { vs: b.vs, labels: computed.labels || {} }) : "";
+}
 
 /* ── house style ───────────────────────────────────────────────────────── */
 export const PZ_CSS = `
@@ -635,6 +639,12 @@ export const PZ_CSS = `
   .pz-mrow .e{grid-column:2/4;font-size:10.5px;color:var(--muted);margin-top:-2px}
   .pz-stack{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:4px 0 8px}
   .pz-stack span{display:block;height:100%}
+  .pz-blockwrap{position:relative}
+  .pz-blockctl{position:absolute;top:44px;right:-8px;z-index:30;display:flex;gap:4px;opacity:0;transform:translateY(-4px);transition:opacity .15s ease,transform .15s ease;pointer-events:none}
+  .pz-blockwrap:hover .pz-blockctl,.pz-blockwrap:focus-within .pz-blockctl{opacity:1;transform:none;pointer-events:auto}
+  .pz-blockctl button{width:26px;height:26px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--muted);font-size:13px;line-height:1;cursor:pointer;font-family:Inter,system-ui,sans-serif;box-shadow:0 4px 14px rgba(34,18,51,.1)}
+  .pz-blockctl button:hover{color:var(--purple);border-color:var(--purple)}
+  @media (hover:none){.pz-blockctl{opacity:1;transform:none;pointer-events:auto}}
   .pz-report svg text{font-family:Inter,system-ui,sans-serif;fill:var(--muted)}
   .pz-report svg .lab{font-size:10.5px;fill:var(--ink)}
   .pz-report svg .val{font-size:9px;fill:var(--muted);font-variant-numeric:tabular-nums}
