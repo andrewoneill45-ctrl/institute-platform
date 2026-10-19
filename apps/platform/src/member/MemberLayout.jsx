@@ -16,10 +16,10 @@ export default function MemberLayout() {
         <div className="tabs">
           <NavLink to="." end className={({ isActive }) => (isActive ? "on" : "")}>Home</NavLink>
           <NavLink to="atlas" className={({ isActive }) => (isActive ? "on" : "")}>Atlas</NavLink>
+          <NavLink to="prizm" className={({ isActive }) => (isActive ? "on" : "")}>Prizm</NavLink>
           <NavLink to="lens" className={({ isActive }) => (isActive ? "on" : "")}>Lens</NavLink>
           <NavLink to="orbit" className={({ isActive }) => (isActive ? "on" : "")}>Orbit</NavLink>
           <NavLink to="constellation" className={({ isActive }) => (isActive ? "on" : "")}>Constellation</NavLink>
-          <NavLink to="prizm" className={({ isActive }) => (isActive ? "on" : "")}>Prizm</NavLink>
         </div>
         <span className="spacer" style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{user?.school || user?.email}</span>
