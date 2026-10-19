@@ -71,6 +71,7 @@ function applyFilters(out, scope) {
   if (scope.maxA8 != null) out = out.filter((s) => num(s.attainment8) != null && s.attainment8 <= scope.maxA8);
   if (scope.minDrift != null) out = out.filter((s) => dr(s) != null && dr(s) >= scope.minDrift);
   if (scope.maxDrift != null) out = out.filter((s) => dr(s) != null && dr(s) <= scope.maxDrift);
+  if (scope.noGrammar) out = out.filter((s) => !TYPES.grammar.test(s));
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -152,6 +153,7 @@ export function scopeLabel(scope, n) {
     scope.minNotsust != null ? `not sustained ${scope.minNotsust}%+` : null,
     scope.minRwm != null ? `RWM ${scope.minRwm}%+` : null, scope.maxRwm != null ? `RWM under ${scope.maxRwm}%` : null,
     scope.minRead != null ? `reading ${scope.minRead}+` : null, scope.maxRead != null ? `reading under ${scope.maxRead}` : null,
+    scope.noGrammar ? "grammars set aside" : null,
   ].filter(Boolean);
   const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
@@ -223,6 +225,8 @@ export function parseQuery(raw) {
   eat(/\bgirls?('s)?\b/, () => { f.gender = "Girls"; });
   eat(/\bboys?('s)?\b/, () => { f.gender = f.gender || "Boys"; });
   /* type */
+  eat(/\b(without|excluding|minus|no) (the )?grammars?( schools)?\b/, () => { f.noGrammar = true; });
+  eat(/\bnon-?selective\b/, () => { f.noGrammar = true; });
   eat(/\b(grammar schools?|grammars|selective schools?)\b/, () => { f.schoolType = "grammar"; });
   eat(/\b(voluntary aided|va schools?)\b/, () => { f.schoolType = f.schoolType || "voluntary-aided"; });
   eat(/\bfree schools?\b/, () => { f.schoolType = f.schoolType || "free"; });

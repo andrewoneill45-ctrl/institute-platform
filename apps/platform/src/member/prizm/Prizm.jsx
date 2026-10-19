@@ -59,6 +59,7 @@ const TOKEN_DEFS = [
   ["minNotsust", (sc) => `not sustained ${sc.minNotsust}%+`],
   ["minRwm", (sc) => `RWM ${sc.minRwm}%+`], ["maxRwm", (sc) => `RWM under ${sc.maxRwm}%`],
   ["minRead", (sc) => `reading ${sc.minRead}+`], ["maxRead", (sc) => `reading under ${sc.maxRead}`],
+  ["noGrammar", () => "grammars set aside"],
   ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
 ];
@@ -74,6 +75,7 @@ function removeScopeToken(sc, k) {
   const next = { ...sc };
   if (k === "base") { return { ...next, type: "england", name: undefined, urns: undefined, las: undefined }; }
   if (k === "phase") { delete next.phase; delete next.minRwm; delete next.maxRwm; delete next.minRead; delete next.maxRead; }
+  else if (k === "noGrammar") { delete next.noGrammar; if (next.versus) next.versus = { ...next.versus, noGrammar: undefined }; }
   else delete next[k];
   return next;
 }
@@ -412,16 +414,37 @@ export default function Prizm() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={spec.title} aria-label="Report title"
               style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", fontFamily: "inherit", fontSize: 11.5, color: MUTED, padding: "0 0 10px", outline: "none", borderBottom: `1px dashed ${HAIR}`, marginBottom: 14 }} />
             <div dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) }} />
-            {computed.blocks.map((b) => (
-              <div key={b.type} className="pz-blockwrap">
-                <div className="pz-blockctl">
-                  <button onClick={() => moveBlock(b.type, -1)} title="Move up">↑</button>
-                  <button onClick={() => moveBlock(b.type, 1)} title="Move down">↓</button>
-                  <button onClick={() => removeBlock(b.type)} title="Remove this section">×</button>
-                </div>
-                <div dangerouslySetInnerHTML={{ __html: renderBlock(b, computed) }} />
-              </div>
-            ))}
+            {(() => {
+              let togglePlaced = false;
+              const grammarsIn = !isPrimary && !scope.noGrammar ? computed.schools.filter((s) => /grammar/i.test(s.name || "")).length : 0;
+              const showToggle = !isPrimary && (scope.noGrammar || grammarsIn > 0);
+              return computed.blocks.map((b) => {
+                const ranked = ["cohort", "movement", "gap", "distribution", "league"].includes(b.type);
+                const withToggle = showToggle && ranked && !togglePlaced && (togglePlaced = true);
+                return (
+                  <div key={b.type} className="pz-blockwrap">
+                    <div className="pz-blockctl">
+                      <button onClick={() => moveBlock(b.type, -1)} title="Move up">↑</button>
+                      <button onClick={() => moveBlock(b.type, 1)} title="Move down">↓</button>
+                      <button onClick={() => removeBlock(b.type)} title="Remove this section">×</button>
+                    </div>
+                    <div dangerouslySetInnerHTML={{ __html: renderBlock(b, computed) }} />
+                    {withToggle && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: MUTED, cursor: "pointer", fontFamily: "Inter, system-ui, sans-serif" }}>
+                        <input type="checkbox" checked={!!scope.noGrammar} style={{ accentColor: PURPLE }}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            const next = { ...scope, noGrammar: on || undefined };
+                            if (next.versus) next.versus = { ...next.versus, noGrammar: on || undefined };
+                            setScope(next);
+                          }} />
+                        {scope.noGrammar ? "Grammar schools set aside; untick to return them." : `Set grammar schools aside (${grammarsIn} in scope).`}
+                      </label>
+                    )}
+                  </div>
+                );
+              });
+            })()}
             {BLOCK_TYPES.some((b) => !blocks.includes(b.type) && !(isPrimary && b.type === "destinations")) && (
               <div style={{ marginTop: 44, borderTop: `1px solid ${HAIR}`, paddingTop: 16 }}>
                 <div style={{ fontSize: 10.5, letterSpacing: ".14em", fontWeight: 700, color: GOLD, marginBottom: 10 }}>ADD A SECTION</div>
