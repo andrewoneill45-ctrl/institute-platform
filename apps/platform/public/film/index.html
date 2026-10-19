@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Institute: the film</title>
+<meta name="description" content="A short film on the All Saints Institute and the instruments it builds for schools.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: a cinematic 16:9 stage (9:14 on phones) where one field of particles morphs scene to scene; page chrome stays quiet and light around it. */
+:root{
+  --page:#F1EEF5; --ink:#1B1124; --muted:#5E5368; --rule:#DAD3E2; --purple:#6A0CA0; --gold:#9A7624; --chip:#FFFFFF;
+  --stage:#12071C; --s-ink:#F3EEF8; --s-body:rgba(236,228,244,.78); --s-gold:#DDB65E; --s-lilac:#B57EE6;
+  --f-display:"Fraunces", "Iowan Old Style", Georgia, serif;
+  --f-body:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--page:#0D0812;--ink:#EEE8F3;--muted:#A79CB2;--rule:#2C2236;--purple:#B57EE6;--gold:#DDB65E;--chip:#1A1222;color-scheme:dark}}
+:root[data-theme="dark"]{--page:#0D0812;--ink:#EEE8F3;--muted:#A79CB2;--rule:#2C2236;--purple:#B57EE6;--gold:#DDB65E;--chip:#1A1222;color-scheme:dark}
+
+body{background:var(--page);color:var(--ink);font-family:var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+/* header */
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{text-decoration:none;font-family:var(--f-display);font-weight:400;font-size:30px;line-height:1;letter-spacing:-.01em;color:var(--ink)}
+.brand .i{position:relative;display:inline-block}
+.brand .i svg{position:absolute;left:50%;top:.02em;width:.27em;height:.27em;transform:translateX(-50%);overflow:visible}
+.brand .i svg use{stroke:var(--purple)}
+.head p{margin:0;color:var(--muted);font-size:14px;max-width:46ch;line-height:1.5}
+
+/* stage */
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:var(--stage);border-radius:10px;overflow:hidden;
+  container-type:inline-size;cursor:pointer;isolation:isolate;
+  --h1:4.3cqw;--h2:2.2cqw;--name:8.4cqw;--body:1.42cqw;--eye:.86cqw;--wm:11.5cqw;--lab:1.05cqw;--labs:.82cqw}
+.stage[data-mode="P"]{aspect-ratio:9/14;
+  --h1:7.4cqw;--h2:4.6cqw;--name:14cqw;--body:3.9cqw;--eye:2.7cqw;--wm:21cqw;--lab:3.2cqw;--labs:2.5cqw}
+.stage::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(60% 70% at 72% 42%,rgba(106,12,160,.38),transparent 70%),radial-gradient(50% 60% at 10% 100%,rgba(106,12,160,.18),transparent 70%)}
+.stage::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;box-shadow:inset 0 0 12cqw rgba(0,0,0,.55)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.stage:fullscreen{width:min(100vw,177.78vh);height:auto;aspect-ratio:16/9;margin:auto;border-radius:0}
+.stage:focus-visible{outline:3px solid var(--purple);outline-offset:3px}
+
+.scene{position:absolute;inset:0;z-index:2;pointer-events:none}
+.cap{position:absolute;display:flex;flex-direction:column;gap:1.1cqw}
+.stage[data-mode="P"] .cap{gap:2.4cqw}
+.cap.side{left:6%;top:50%;transform:translateY(-50%);width:40%}
+.cap.top{left:6%;top:7%;width:58%}
+.cap.mid{left:50%;top:50%;transform:translate(-50%,-50%);width:70%;text-align:center;align-items:center}
+.cap.bottom{left:50%;bottom:9%;transform:translateX(-50%);width:84%;text-align:center;align-items:center}
+.stage[data-mode="P"] .cap.side,.stage[data-mode="P"] .cap.top{left:7%;top:5%;width:86%;transform:none}
+.stage[data-mode="P"] .cap.mid{width:86%}
+.stage[data-mode="P"] .cap.bottom{bottom:7%}
+
+.rv{opacity:0;transform:translateY(1.2cqw);filter:blur(4px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform 1.1s cubic-bezier(.2,.7,.2,1),filter .9s}
+.rv.in{opacity:1;transform:none;filter:none}
+.eye{font:600 var(--eye)/1.2 var(--f-body);letter-spacing:.22em;text-transform:uppercase;color:var(--s-gold);margin:0}
+.h1{font:300 var(--h1)/1.06 var(--f-display);font-variation-settings:"opsz" 144;letter-spacing:-.02em;color:var(--s-ink);margin:0;text-wrap:balance}
+.h1 em{font-style:italic;color:var(--s-lilac)}
+.name{font:300 var(--name)/.92 var(--f-display);font-variation-settings:"opsz" 144;letter-spacing:-.03em;color:var(--s-ink);margin:0}
+.h2{font:italic 400 var(--h2)/1.15 var(--f-display);color:var(--s-lilac);margin:0;text-wrap:balance}
+.body{font:400 var(--body)/1.55 var(--f-body);color:var(--s-body);margin:0;max-width:38em;text-wrap:pretty}
+
+/* wordmark */
+.wm{font:300 var(--wm)/1 var(--f-display);font-variation-settings:"opsz" 144;letter-spacing:-.035em;color:var(--s-ink);margin:0}
+.wm .i{position:relative;display:inline-block}
+.wm .i svg{position:absolute;left:50%;top:.02em;width:.26em;height:.26em;transform:translateX(-50%);overflow:visible}
+.wm .i svg use{stroke:var(--s-lilac);stroke-dasharray:140;stroke-dashoffset:140;transition:stroke-dashoffset 2s cubic-bezier(.6,.1,.2,1) .5s}
+.wm.in .i svg use{stroke-dashoffset:0}
+.small-caps{font:500 var(--eye)/1.4 var(--f-body);letter-spacing:.32em;text-transform:uppercase;color:var(--s-body)}
+
+/* placed labels */
+.pl{position:absolute;display:flex;flex-direction:column;gap:.3cqw;width:max-content;max-width:22%}
+.stage[data-mode="P"] .pl{max-width:26%}
+.pl b{font:400 calc(var(--lab)*1.5)/1.05 var(--f-display);color:var(--s-ink)}
+.pl span{font:400 var(--labs)/1.4 var(--f-body);color:var(--s-body)}
+.pl.a-l{transform:translate(0,-50%)} .pl.a-r{transform:translate(-100%,-50%);text-align:right}
+.pl.a-t{transform:translate(-50%,-100%);text-align:center;align-items:center} .pl.a-b{transform:translate(-50%,0);text-align:center;align-items:center}
+.yl{position:absolute;transform:translate(0,-50%);font:600 var(--labs)/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;color:rgba(236,228,244,.55);transition:color .6s}
+.yl.hot{color:var(--s-gold)}
+.yl.in.dim{opacity:.12}
+
+/* Atlas: Prism pill */
+.pill{display:inline-flex;align-items:center;gap:.8cqw;align-self:flex-start;padding:.75cqw 1.3cqw;border-radius:99px;
+  border:1px solid rgba(221,182,94,.45);background:rgba(221,182,94,.08);font:400 var(--body)/1.2 var(--f-body);color:var(--s-ink);min-height:1.2em}
+.pill .tag{font-weight:600;color:var(--s-gold);font-size:.82em;letter-spacing:.08em;text-transform:uppercase}
+.caret{display:inline-block;width:1px;height:1.1em;background:var(--s-gold);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.note{font:400 var(--labs)/1.4 var(--f-body);color:var(--s-gold)}
+.stage[data-mode="P"] .pill{padding:1.6cqw 2.6cqw;gap:1.6cqw}
+
+/* Lens chips */
+.chips{display:flex;gap:.7cqw;flex-wrap:wrap}
+.chip{font:500 var(--labs)/1 var(--f-body);letter-spacing:.06em;padding:.65cqw 1.1cqw;border-radius:99px;border:1px solid rgba(236,228,244,.25);color:var(--s-body);transition:all .5s}
+.chip.on{background:var(--s-ink);color:#2A0F40;border-color:var(--s-ink)}
+.stage[data-mode="P"] .chip{padding:1.4cqw 2.2cqw}
+.stance{position:relative;font:italic 400 var(--body)/1.4 var(--f-display);color:var(--s-ink);min-height:1.5em}
+.stance span{position:absolute;left:0;top:0;transition:opacity .5s} .stance span.off{opacity:0}
+
+/* Orbit legend */
+.legend{display:flex;flex-direction:column;gap:.55cqw;margin:0;padding:0;list-style:none}
+.legend li{display:flex;align-items:center;gap:.8cqw;font:500 var(--labs)/1.3 var(--f-body);color:var(--s-ink);letter-spacing:.02em}
+.legend i{width:.8cqw;height:.8cqw;border-radius:50%;flex:none}
+.stage[data-mode="P"] .legend i{width:2cqw;height:2cqw}
+
+/* Constellation card */
+.ccard{align-self:flex-start;display:flex;gap:1.6cqw;padding:1cqw 1.4cqw;border-radius:.8cqw;border:1px solid rgba(221,182,94,.4);background:rgba(18,7,28,.6)}
+.ccard div{display:flex;flex-direction:column;gap:.2cqw}
+.ccard b{font:400 calc(var(--h2)*1.25)/1 var(--f-display);color:var(--s-gold);font-variant-numeric:tabular-nums}
+.ccard span{font:500 var(--labs)/1.3 var(--f-body);color:var(--s-body)}
+.stage[data-mode="P"] .ccard{padding:2cqw 3cqw;gap:4cqw;border-radius:2cqw}
+
+/* Prizm frame */
+.frame{position:absolute;border:1px solid rgba(236,228,244,.16);border-radius:1cqw;background:linear-gradient(rgba(255,255,255,.035),rgba(255,255,255,0))}
+.frame .ft{position:absolute;left:4%;top:4%;display:flex;flex-direction:column;gap:.3cqw}
+.frame .ft b{font:400 var(--lab)/1.2 var(--f-display);color:var(--s-ink)}
+.frame .ft span{font:500 var(--labs)/1.2 var(--f-body);color:var(--s-body);letter-spacing:.06em}
+.frame .badge{position:absolute;right:4%;top:4%;font:400 var(--lab)/1 var(--f-display);color:var(--s-ink);opacity:.8}
+
+/* Publish papers */
+.papers{position:absolute}
+.paper{position:absolute;left:50%;top:50%;width:46%;aspect-ratio:1/1.414;max-width:100%;background:#F7F4FA;border-radius:.4cqw;padding:5% 5.5%;
+  box-shadow:0 2cqw 4cqw rgba(0,0,0,.45);display:flex;flex-direction:column;gap:4%;opacity:0;
+  transform:translate(-50%,-40%) rotate(0deg);transition:transform 1.3s cubic-bezier(.2,.7,.2,1),opacity .8s}
+.paper .pw{font:300 calc(var(--lab)*1.9)/1 var(--f-display);color:#2A0F40;letter-spacing:-.02em;margin-top:auto}
+.paper .pw .i{position:relative;display:inline-block}
+.paper .pw .i svg{position:absolute;left:50%;top:.02em;width:.26em;height:.26em;transform:translateX(-50%);overflow:visible}
+.paper .pw .i svg use{stroke:#6A0CA0}
+.paper .pn{font:600 var(--labs)/1 var(--f-body);letter-spacing:.24em;color:#6A0CA0}
+.paper .pt{font:400 var(--lab)/1.25 var(--f-display);color:#2A0F40;text-wrap:balance}
+.papers.in .paper{opacity:1}
+.papers.in .paper:nth-child(1){transform:translate(-118%,-46%) rotate(-9deg);transition-delay:0s}
+.papers.in .paper:nth-child(2){transform:translate(-80%,-52%) rotate(-3deg);transition-delay:.15s}
+.papers.in .paper:nth-child(3){transform:translate(-40%,-48%) rotate(3deg);transition-delay:.3s}
+.papers.in .paper:nth-child(4){transform:translate(-2%,-44%) rotate(9deg);transition-delay:.45s}
+
+/* end card */
+.url{font:500 calc(var(--body)*1.15)/1 var(--f-body);letter-spacing:.12em;color:var(--s-gold)}
+
+/* controls */
+.ctrl{display:flex;align-items:center;gap:14px}
+.btn{flex:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--rule);background:var(--chip);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.btn:hover{border-color:var(--purple);color:var(--purple)}
+.btn:focus-visible,.chap:focus-visible,.track:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+.btn svg{width:18px;height:18px;fill:currentColor}
+.track{position:relative;flex:1;min-width:0;height:28px;cursor:pointer;touch-action:none}
+.track .rail{position:absolute;left:0;right:0;top:50%;height:3px;margin-top:-1.5px;border-radius:2px;background:var(--rule)}
+.track .fill{position:absolute;left:0;top:50%;height:3px;margin-top:-1.5px;border-radius:2px;background:var(--purple);width:0}
+.track .tick{position:absolute;top:50%;width:1px;height:9px;margin-top:-4.5px;background:var(--muted);opacity:.5}
+.time{font:500 13px/1 var(--f-body);font-variant-numeric:tabular-nums;color:var(--muted);flex:none;min-width:84px;text-align:right}
+.now{font:400 15px/1.3 var(--f-display);font-style:italic;color:var(--muted);margin:0}
+.chaps{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.chap{font:500 13px/1 var(--f-body);padding:9px 13px;border-radius:99px;border:1px solid var(--rule);background:transparent;color:var(--muted);cursor:pointer}
+.chap:hover{color:var(--ink);border-color:var(--muted)}
+.chap[aria-current="true"]{background:var(--ink);color:var(--page);border-color:var(--ink)}
+@media (max-width:520px){.time{min-width:0}.btn.fs{display:none}}
+@media (prefers-reduced-motion: reduce){.rv,.paper,.wm .i svg use{transition:none}.caret{animation:none}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><path id="qf" d="M10,-10 A10 10 0 0 1 10,10 A10 10 0 0 1 -10,10 A10 10 0 0 1 -10,-10 A10 10 0 0 1 10,-10 Z" fill="none" stroke-width="2.6" stroke-linejoin="round"/></defs>
+</svg>
+
+<div class="wrap">
+  <header class="head">
+    <a class="brand" href="/" aria-label="institute, home">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</a>
+    <p>A short film on what the Institute does and the instruments it builds for schools. Tap the film to pause; jump to any chapter below. <a href="/#join" style="color:var(--purple);font-weight:600;text-decoration:none">Register interest</a></p>
+  </header>
+
+  <div class="stage" id="stage" data-mode="L" tabindex="0" role="img" aria-label="Animated film introducing the Institute">
+    <canvas id="cv"></canvas>
+
+    <section class="scene" data-s="0">
+      <div class="cap mid">
+        <h2 class="h1 rv" data-at="0.3">Every school is <em>a universe.</em></h2>
+        <p class="body rv" data-at="1.6">Hundreds of children. Thousands of decisions. Every single day.</p>
+      </div>
+    </section>
+
+    <section class="scene" data-s="1">
+      <div class="cap top">
+        <h2 class="h1 rv" data-at="0.4">Most of what matters is hidden <em>in plain sight.</em></h2>
+        <p class="body rv" data-at="1.6">In spreadsheets, in folders, in systems that never talk to each other. The pupils who need you most sit in the long tail.</p>
+      </div>
+    </section>
+
+    <section class="scene" data-s="2">
+      <div class="cap bottom">
+        <div class="wm rv" data-at="2.2">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</div>
+        <p class="small-caps rv" data-at="3.4">From All Saints, an exceptional London school</p>
+      </div>
+    </section>
+
+    <section class="scene" data-s="3">
+      <div class="cap top">
+        <p class="eye rv" data-at="0.2">What we do</p>
+        <h2 class="h1 rv" data-at="0.4">Four disciplines. <em>One institute.</em></h2>
+      </div>
+      <div class="pl a-t rv" data-at="1.0" data-place="q-top"><b>Convene</b><span>Seminars and the Education Summit</span></div>
+      <div class="pl a-l rv" data-at="2.1" data-place="q-right"><b>Develop</b><span>Leadership, built on the maximal gains</span></div>
+      <div class="pl a-b rv" data-at="3.2" data-place="q-bottom"><b>Publish</b><span>Position papers and The State of the System</span></div>
+      <div class="pl a-r rv" data-at="4.3" data-place="q-left"><b>Build</b><span>Instruments schools use every day</span></div>
+    </section>
+
+    <section class="scene" data-s="4">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Instrument 1 of 5</p>
+        <h2 class="name rv" data-at="0.35">Atlas</h2>
+        <p class="h2 rv" data-at="0.8">See the whole system.</p>
+        <p class="body rv" data-at="1.3">Every school in England, mapped and measured. Compare any school with the schools most like it, then ask what it means.</p>
+        <div class="pill rv" data-at="2.0"><span class="tag">Ask Prism</span><span id="ptext"></span><span class="caret"></span></div>
+        <p class="note rv" data-at="4.9">Answered live from the national dataset</p>
+      </div>
+    </section>
+
+    <section class="scene" data-s="5">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Instrument 2 of 5</p>
+        <h2 class="name rv" data-at="0.35">Lens</h2>
+        <p class="h2 rv" data-at="0.8">Know your own school.</p>
+        <p class="body rv" data-at="1.3">Bring your evidence into one private room. Lens reads it, tests it and tells you the truth. Your data stays yours.</p>
+        <div class="chips rv" data-at="2.2"><span class="chip on" id="c1">Critical friend</span><span class="chip" id="c2">Advocate</span></div>
+        <p class="stance rv" data-at="2.4"><span id="st1">The honest examiner.</span><span id="st2" class="off">Rehearse your strongest case.</span></p>
+      </div>
+    </section>
+
+    <section class="scene" data-s="6">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Instrument 3 of 5</p>
+        <h2 class="name rv" data-at="0.35">Orbit</h2>
+        <p class="h2 rv" data-at="0.8">A plan you can hold in your head.</p>
+        <p class="body rv" data-at="1.3">No more than three objectives, with clear strategies beneath them. Orbit draws on what Lens has found. The tactics stay yours.</p>
+        <ul class="legend rv" data-at="2.3">
+          <li><i style="background:#9648D2"></i>Outcomes for every pupil</li>
+          <li><i style="background:#C4A4E8"></i>Teaching of the highest quality</li>
+          <li><i style="background:#F3EEF8"></i>Leadership at every level</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="scene" data-s="7">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Instrument 4 of 5</p>
+        <h2 class="name rv" data-at="0.35">Constellation</h2>
+        <p class="h2 rv" data-at="0.8">Every child, live.</p>
+        <p class="body rv" data-at="1.3">Upload what you already have. Constellation turns it into a living picture of the school, then shows you the pupils slipping out of sight.</p>
+        <div class="ccard rv" data-at="6.8"><div><b id="nSer">0</b><span>need attention now</span></div><div><b id="nWat">0</b><span>to watch</span></div><div><b>Year 10</b><span>example cohort</span></div></div>
+      </div>
+      <div class="yl rv" data-at="0.9" data-place="y0">Year 7</div>
+      <div class="yl rv" data-at="1.0" data-place="y1">Year 8</div>
+      <div class="yl rv" data-at="1.1" data-place="y2">Year 9</div>
+      <div class="yl rv" data-at="1.2" data-place="y3" id="y10">Year 10</div>
+      <div class="yl rv" data-at="1.3" data-place="y4">Year 11</div>
+    </section>
+
+    <section class="scene" data-s="8">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Instrument 5 of 5</p>
+        <h2 class="name rv" data-at="0.35">Prizm</h2>
+        <p class="h2 rv" data-at="0.8">Ask for the report you need.</p>
+        <p class="body rv" data-at="1.3">Describe it in a sentence. Prizm builds it there and then, ready to read on screen or take into the room.</p>
+      </div>
+      <div class="frame rv" data-at="0.5" data-place="frame">
+        <div class="ft"><b>Your report</b><span>BUILT ON REQUEST</span></div>
+        <div class="badge">inst<span class="i" style="position:relative;display:inline-block">ı<svg viewBox="-22 -22 44 44" style="position:absolute;left:50%;top:.02em;width:.26em;height:.26em;transform:translateX(-50%);overflow:visible"><use href="#qf" style="stroke:#B57EE6"/></svg></span>tute</div>
+      </div>
+    </section>
+
+    <section class="scene" data-s="9">
+      <div class="cap side">
+        <p class="eye rv" data-at="0.2">Publish</p>
+        <h2 class="h1 rv" data-at="0.4">Ideas with <em>evidence</em> behind them.</h2>
+        <p class="body rv" data-at="1.3">A numbered series of position papers, written by people who run schools and have shaped national policy.</p>
+      </div>
+      <div class="papers rv" data-at="1.0" data-place="papers">
+        <div class="paper"><span class="pn">POSITION 001</span><span class="pt">The state of the system</span><span class="pw">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</span></div>
+        <div class="paper"><span class="pn">POSITION 002</span><span class="pt">Young people not in work or education</span><span class="pw">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</span></div>
+        <div class="paper"><span class="pn">POSITION 003</span><span class="pt">Variation between and within trusts</span><span class="pw">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</span></div>
+        <div class="paper"><span class="pn">POSITION 004</span><span class="pt">The Year 8 reading check</span><span class="pw">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</span></div>
+      </div>
+    </section>
+
+    <section class="scene" data-s="10">
+      <div class="cap top">
+        <p class="eye rv" data-at="0.2">One system</p>
+        <h2 class="h1 rv" data-at="0.4">From insight to action, <em>and back again.</em></h2>
+      </div>
+      <div class="pl a-l rv" data-at="1.2" data-place="n0"><b>Atlas</b><span>See</span></div>
+      <div class="pl a-b rv" data-at="1.7" data-place="n1"><b>Lens</b><span>Understand</span></div>
+      <div class="pl a-r rv" data-at="2.2" data-place="n2"><b>Orbit</b><span>Plan</span></div>
+      <div class="pl a-t rv" data-at="2.7" data-place="n3"><b>Constellation</b><span>Act, and see the difference</span></div>
+    </section>
+
+    <section class="scene" data-s="11">
+      <div class="cap mid">
+        <div class="wm rv" data-at="0.4">inst<span class="i">ı<svg viewBox="-22 -22 44 44"><use href="#qf"/></svg></span>tute</div>
+        <p class="h2 rv" data-at="1.6">Think, and gain insight.</p>
+        <p class="body rv" data-at="2.6">A small group of founding schools is being invited now.</p>
+        <p class="url rv" data-at="3.2">institute.school</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" id="play" type="button" aria-label="Pause"><svg viewBox="0 0 24 24" id="ico"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+    <div class="track" id="track" tabindex="0" role="slider" aria-label="Film position" aria-valuemin="0" aria-valuemax="88" aria-valuenow="0"><div class="rail"></div><div class="fill" id="fill"></div></div>
+    <span class="time" id="time">0:00 / 1:28</span>
+    <button class="btn fs" id="fs" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></svg></button>
+  </div>
+  <p class="now" id="now">Open</p>
+  <ul class="chaps" id="chaps"></ul>
+</div>
+
+<script>
+(function(){
+const SC=[
+ {name:'Open',dur:6,form:'field',box:'full'},
+ {name:'Hidden in plain sight',dur:6,form:'strip',box:'strip'},
+ {name:'The Institute',dur:7,form:'qf',box:'center'},
+ {name:'What we do',dur:8,form:'qf4',box:'four'},
+ {name:'Atlas',dur:8,form:'england',box:'right'},
+ {name:'Lens',dur:7,form:'lens',box:'right'},
+ {name:'Orbit',dur:7,form:'orbit',box:'right'},
+ {name:'Constellation',dur:10,form:'shoal',box:'right'},
+ {name:'Prizm',dur:7,form:'bars',box:'right'},
+ {name:'Publish',dur:7,form:'faint',box:'right'},
+ {name:'One system',dur:7,form:'loop',box:'pipe'},
+ {name:'Join',dur:8,form:'end',box:'full'}];
+let acc=0; SC.forEach(s=>{s.start=acc;acc+=s.dur}); const TOTAL=acc;
+const BOX={
+ L:{W:1600,H:900,full:[0,0,1600,900],strip:[160,540,1280,260],center:[500,90,600,480],four:[500,230,600,560],right:[820,90,720,720],pipe:[200,280,1200,560]},
+ P:{W:900,H:1400,full:[0,0,900,1400],strip:[60,780,780,400],center:[150,180,600,620],four:[100,600,700,620],right:[60,700,780,660],pipe:[110,560,680,760]}};
+const IV=[243,238,248],LI=[196,164,232],PU=[150,72,210],GO=[222,182,96],LG=[236,208,146];
+const stage=document.getElementById('stage'),cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const scenes=[...stage.querySelectorAll('.scene')];
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* seeds */
+const N=900; let s0=20261016; const rnd=()=>{s0=(s0*1664525+1013904223)>>>0;return s0/4294967296};
+const rA=new Float32Array(N),rB=new Float32Array(N),rC=new Float32Array(N),rD=new Float32Array(N),score=new Float32Array(N),yr=new Uint8Array(N);
+for(let i=0;i<N;i++){rA[i]=rnd();rB[i]=rnd();rC[i]=rnd();rD[i]=rnd();yr[i]=i%5;
+  let u=Math.max(1e-6,rnd()),v=rnd(),z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);score[i]=Math.max(-2.6,Math.min(2.6,z));}
+/* England sampling */
+const POLY=[[-2.03,55.77],[-1.6,55.6],[-1.55,55.25],[-1.4,54.95],[-1.15,54.6],[-0.6,54.48],[-0.2,54.15],[-0.15,53.95],[0.12,53.6],[0.35,53.2],[0.33,52.95],[0.6,52.97],[1.3,52.93],[1.75,52.6],[1.72,52.3],[1.4,51.95],[0.9,51.78],[0.8,51.55],[1.0,51.45],[1.42,51.38],[1.35,51.13],[0.95,50.95],[0.55,50.85],[-0.1,50.8],[-0.8,50.75],[-1.3,50.78],[-1.95,50.6],[-2.45,50.6],[-3.0,50.7],[-3.45,50.6],[-3.6,50.25],[-4.2,50.33],[-4.75,50.25],[-5.2,49.96],[-5.7,50.06],[-5.45,50.2],[-5.0,50.42],[-4.55,50.9],[-4.2,51.07],[-3.6,51.2],[-3.0,51.25],[-2.7,51.5],[-2.7,51.8],[-3.05,52.0],[-3.1,52.3],[-3.0,52.6],[-3.1,52.95],[-2.95,53.2],[-3.1,53.38],[-3.0,53.55],[-3.05,53.8],[-2.85,54.0],[-3.2,54.1],[-3.4,54.3],[-3.6,54.5],[-3.4,54.8],[-3.1,54.95],[-2.85,55.05],[-2.45,55.2],[-2.2,55.4]];
+const inside=(x,y)=>{let c=false;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){const[xi,yi]=POLY[i],[xj,yj]=POLY[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c};
+const CITY=[[-0.12,51.5,.3],[-1.9,52.48,.12],[-2.24,53.48,.12],[-1.55,53.8,.1],[-2.95,53.42,.07],[-1.6,54.97,.07],[-2.6,51.46,.06],[-1.47,53.38,.05],[-1.15,52.95,.05],[-1.4,50.92,.06]];
+const XMIN=-5.7*0.6,WX=7.45*0.6,YMAX=55.85,HY=5.89; const eu=new Float32Array(N),ev=new Float32Array(N);
+for(let i=0;i<N;i++){let lon,lat,ok=false,g=0;
+  while(!ok&&g++<400){ if(rnd()<.5){let r=rnd(),k=0;for(;k<CITY.length-1;k++){r-=CITY[k][2]/0.9;if(r<0)break}
+      const a=rnd()*6.283,d=Math.sqrt(-2*Math.log(Math.max(1e-6,rnd())))*0.22;lon=CITY[k][0]+Math.cos(a)*d/0.6;lat=CITY[k][1]+Math.sin(a)*d}
+    else{lon=-5.7+rnd()*7.45;lat=49.96+rnd()*5.89} ok=inside(lon,lat)}
+  eu[i]=(lon*0.6-XMIN)/WX;ev[i]=(YMAX-lat)/HY;}
+/* Constellation mandala zones for Year 10 */
+const zone=new Uint8Array(N),zrank=new Float32Array(N),zcount=[0,0,0];
+{const L=[[],[],[]];for(let i=0;i<N;i++){if(yr[i]!==3)continue;const z=score[i]>-0.55?0:(score[i]>-1.25?1:2);zone[i]=z;L[z].push(i)}
+ L.forEach((arr,z)=>{arr.sort((a,b)=>score[b]-score[a]);arr.forEach((i,k)=>zrank[i]=k);zcount[z]=arr.length})}
+document.getElementById('nSer').textContent=zcount[2];document.getElementById('nWat').textContent=zcount[1];
+
+/* particle state */
+const px=new Float32Array(N),py=new Float32Array(N),pr=new Float32Array(N),pa=new Float32Array(N),pc=new Float32Array(N*3);
+const tx=new Float32Array(N),ty=new Float32Array(N),tr=new Float32Array(N),ta=new Float32Array(N),tc=new Float32Array(N*3),snap=new Uint8Array(N);
+let mode='L',W=1600,H=900;
+for(let i=0;i<N;i++){px[i]=rA[i]*W;py[i]=rB[i]*H;pr[i]=1;pa[i]=0;pc[i*3]=243;pc[i*3+1]=238;pc[i*3+2]=248}
+function setT(i,x,y,r,a,c){tx[i]=x;ty[i]=y;tr[i]=r;ta[i]=a;tc[i*3]=c[0];tc[i*3+1]=c[1];tc[i*3+2]=c[2];snap[i]=0}
+const cl=v=>v<0?0:v>1?1:v, ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2, mix=(a,b,p)=>a+(b-a)*p;
+
+/* formations */
+function field(B,T,m){for(let i=0;i<N;i++){const x=B[0]+((rA[i]+T*0.0035*(0.4+rC[i]))%1)*B[2],y=B[1]+rB[i]*B[3]+Math.sin(T*.25+rC[i]*6.28)*5;
+  const tw=.5+.5*Math.sin(T*(.8+rD[i]*2)+rA[i]*40);setT(i,x,y,.9+rC[i]*1.5,(.18+.55*tw)*m,rD[i]<.07?GO:(rC[i]<.5?IV:LI))}}
+function stripPos(i,B){const d=Math.exp(-score[i]*score[i]/2);return[B[0]+B[2]*((score[i]+2.6)/5.2),B[1]+B[3]*.5+(rB[i]-.5)*B[3]*.9*d]}
+function qfPt(s,cx,cy,r,j){const lobe=Math.floor(s*4)%4,u=s*4-Math.floor(s*4),ph=lobe*Math.PI/2,th=ph-Math.PI/2+u*Math.PI,rr=r+j;
+  return[cx+r*Math.cos(ph)+rr*Math.cos(th),cy+r*Math.sin(ph)+rr*Math.sin(th)]}
+function qfGeom(B,q){return{cx:B[0]+B[2]/2,cy:B[1]+B[3]/2,r:Math.min(B[2],B[3])*q}}
+function fitEng(B){const s=Math.min(B[2]/WX,B[3]/HY)*.96;return{s,ox:B[0]+(B[2]-WX*s)/2,oy:B[1]+(B[3]-HY*s)/2}}
+function shoalY(B,g){return B[1]+B[3]*(.1+g*.2)}
+function shoalPos(i,B){const d=Math.exp(-score[i]*score[i]/2);return[B[0]+B[2]*(.14+.86*(score[i]+2.6)/5.2),shoalY(B,yr[i])+(rB[i]-.5)*B[3]*.12*d]}
+function mandalaPos(i,B){const cx=B[0]+B[2]/2,cy=B[1]+B[3]/2,R=Math.min(B[2],B[3])*.46,z=zone[i],k=zrank[i],n=zcount[z];let r,th;
+  if(z===0){r=.5*R*Math.sqrt((k+.5)/n);th=k*2.39996}else if(z===1){th=k/n*6.2832-1.5708;r=R*(.66+(rB[i]-.5)*.06)}else{th=k/n*6.2832-1.5708;r=R*.93}
+  return[cx+r*Math.cos(th),cy+r*Math.sin(th)]}
+const BARS=[.38,.46,.52,.49,.63,.71,.78,.92];
+function loopGeom(B){const cx=B[0]+B[2]/2,cy=B[1]+B[3]/2,rx=B[2]*.4,ry=B[3]*.38,rn=Math.min(B[2],B[3])*.075;
+  return{cx,cy,rx,ry,rn,nodes:[[cx-rx,cy],[cx,cy-ry],[cx+rx,cy],[cx,cy+ry]]}}
+
+const F={
+ field(B,lt,T){field(B,T,1)},
+ faint(B,lt,T){field(BOX[mode].full,T,.32)},
+ end(B,lt,T){field(B,T,.55)},
+ strip(B,lt,T){const pulse=lt>2.4?.5+.5*Math.sin(T*3):0;
+  for(let i=0;i<N;i++){const[x,y]=stripPos(i,B),tail=score[i]<-1.3;setT(i,x,y,tail?2.2+pulse*1.2:1.8,tail?.95:.62,tail?GO:LI)}},
+ qf(B,lt,T){const g=qfGeom(B,.22),p=ease(cl(lt/2.4)),head=qfPt(p*.9999,g.cx,g.cy,g.r,0);
+  for(let i=0;i<N;i++){if(rA[i]>p){setT(i,head[0],head[1],1.6,0,LI)}else{const[x,y]=qfPt(rA[i],g.cx,g.cy,g.r,(rB[i]-.5)*7);setT(i,x,y,1.7,.88,rC[i]<.15?IV:LI)}}},
+ qf4(B,lt,T){const g=qfGeom(B,mode==='P'?.13:.2),at=[2.1,3.2,4.3,1.0];
+  for(let i=0;i<N;i++){const lobe=Math.floor(rA[i]*4)%4,lit=lt>=at[lobe];const[x,y]=qfPt(rA[i],g.cx,g.cy,g.r,(rB[i]-.5)*8);setT(i,x,y,lit?2.1:1.5,lit?.95:.5,lit?GO:LI)}},
+ england(B,lt,T){const f=fitEng(B);
+  for(let i=0;i<N;i++){const dyn=lt>4.8&&rC[i]<.09,x=f.ox+eu[i]*WX*f.s,y=f.oy+ev[i]*HY*f.s;setT(i,x,y,dyn?2.9:1.45,dyn?1:.72,dyn?GO:LI)}},
+ lens(B,lt,T){const cx=B[0]+B[2]/2,cy=B[1]+B[3]/2,R=Math.min(B[2],B[3])*.46,f=ease(cl((lt-2.2)/1.6));
+  for(let i=0;i<N;i++){const s=Math.sqrt(rA[i]),q=Math.round(s*6)/6,rn=mix(.12+.88*s,.12+.88*q,f),r=rn*R,th=rB[i]*6.2832+T*(.5-.34*rn)*(Math.round(s*6)%2?1:-1)*(0.4+0.6*f);
+   setT(i,cx+r*Math.cos(th),cy+r*Math.sin(th),rn<.32?2:1.4,.82,rn<.32?GO:(rn>.85?IV:LI))}},
+ orbit(B,lt,T){const cx=B[0]+B[2]/2,cy=B[1]+B[3]/2,R=Math.min(B[2],B[3])*.48,tl=-.22,ct=Math.cos(tl),st=Math.sin(tl),RX=[.36,.66,.96],SP=[.45,.28,.17],CO=[PU,LI,IV];
+  for(let i=0;i<N;i++){if(i%12===0){const r=R*.09*Math.sqrt(rB[i]),th=rA[i]*6.28+T;setT(i,cx+r*Math.cos(th),cy+r*Math.sin(th),2.4,1,GO);continue}
+   const k=i%3,rx=R*RX[k],ry=rx*.4,th=rA[i]*6.2832+T*SP[k],lx=rx*Math.cos(th),ly=ry*Math.sin(th),dp=.5+.5*Math.sin(th);
+   setT(i,cx+lx*ct-ly*st,cy+lx*st+ly*ct,1.1+dp*1.3,.35+.6*dp,CO[k])}},
+ shoal(B,lt,T){const c=[B[0]+B[2]/2,B[1]+B[3]/2];
+  for(let i=0;i<N;i++){const[sx,sy]=shoalPos(i,B),z=score[i]<-1.25?2:(score[i]<-.55?1:0),col=z===2?GO:(z===1?LG:LI);
+   if(yr[i]!==3){setT(i,sx,sy,z===2?2:1.5,lt>4.2?.07:(z===0?.6:.9),col);continue}
+   const d=.7*((sx-B[0])/B[2]),p=ease(cl((lt-4.2-d)/1.5));
+   if(p<=0){setT(i,sx,sy,z===2?2:1.5,z===0?.75:.95,col);continue}
+   const[mx,my]=mandalaPos(i,B),x0=mix(sx,mx,p)-c[0],y0=mix(sy,my,p)-c[1],a=Math.sin(p*Math.PI)*1.3,ca=Math.cos(a),sa=Math.sin(a);
+   setT(i,c[0]+x0*ca-y0*sa,c[1]+x0*sa+y0*ca,mix(1.6,z===2?3.4:(z===1?2.2:1.8),p),z===0?.8:1,col);snap[i]=1}},
+ bars(B,lt,T){const g=ease(cl((lt-.8)/2.6)),cx0=B[0]+B[2]*.1,cw=B[2]*.8,base=B[1]+B[3]*.86,ch=B[3]*.62,rowsMax=Math.floor(N/8/3)/.92,s=Math.min(ch/rowsMax,cw/8*.62/3);
+  for(let i=0;i<N;i++){const b=i%8,idx=Math.floor(i/8),col=idx%3,row=Math.floor(idx/3),cap=Math.floor(BARS[b]*rowsMax),bx=cx0+cw*(b+.5)/8-s;
+   if(row>=cap){const fx=BOX[mode].full;setT(i,fx[0]+rA[i]*fx[2],fx[1]+rB[i]*fx[3],1,.08,LI);continue}
+   const vis=row<cap*g,x=bx+col*s,y=base-row*s;setT(i,x,vis?y:base,s*.36,vis?(b===7?1:.8):0,b===7?GO:(row>cap-3?IV:LI))}},
+ loop(B,lt,T){const g=loopGeom(B),CO=[LI,IV,PU,GO];
+  for(let i=0;i<N;i++){if(i%9<5){const k=i%4,r=g.rn*Math.sqrt(rB[i]),th=rA[i]*6.28+T*.6,[nx,ny]=g.nodes[k];setT(i,nx+r*Math.cos(th),ny+r*Math.sin(th),1.7,.9,CO[k]);continue}
+   const th=rA[i]*6.2832+T*.32,j=(rB[i]-.5)*12;setT(i,g.cx+(g.rx+j)*Math.cos(th),g.cy+(g.ry+j)*Math.sin(th),1.2,.5,LI)}}
+};
+
+/* placement of labelled elements */
+function place(el,x,y){el.style.left=(x/W*100)+'%';el.style.top=(y/H*100)+'%'}
+function layout(){
+ const B=BOX[mode];
+ {const g=qfGeom(B.four,mode==='P'?.13:.2),o=2*g.r+22;
+  const q=k=>stage.querySelector('[data-place="'+k+'"]');
+  place(q('q-top'),g.cx,g.cy-o);place(q('q-right'),g.cx+o,g.cy);place(q('q-bottom'),g.cx,g.cy+o);place(q('q-left'),g.cx-o,g.cy);}
+ for(let k=0;k<5;k++)place(stage.querySelector('[data-place="y'+k+'"]'),B.right[0],shoalY(B.right,k));
+ {const f=stage.querySelector('[data-place="frame"]'),R=B.right;place(f,R[0]-R[2]*.02,R[1]+R[3]*.02);f.style.width=(R[2]*1.04/W*100)+'%';f.style.height=(R[3]*.96/H*100)+'%'}
+ {const p=stage.querySelector('[data-place="papers"]'),R=B.right;place(p,R[0]+R[2]*.08,R[1]);p.style.width=(R[2]*.92/W*100)+'%';p.style.height=(R[3]/H*100)+'%'}
+ {const g=loopGeom(B.pipe),d=g.rn+16;
+  place(stage.querySelector('[data-place="n0"]'),g.nodes[0][0]+d,g.nodes[0][1]);
+  place(stage.querySelector('[data-place="n1"]'),g.nodes[1][0],g.nodes[1][1]+d);
+  place(stage.querySelector('[data-place="n2"]'),g.nodes[2][0]-d,g.nodes[2][1]);
+  place(stage.querySelector('[data-place="n3"]'),g.nodes[3][0],g.nodes[3][1]-d);}
+}
+function resize(){
+ const w=stage.clientWidth,nm=(w<700&&!document.fullscreenElement)?'P':'L';
+ if(nm!==mode){const sx=BOX[nm].W/W,sy=BOX[nm].H/H;for(let i=0;i<N;i++){px[i]*=sx;py[i]*=sy}mode=nm;stage.dataset.mode=nm}
+ W=BOX[mode].W;H=BOX[mode].H;const dpr=Math.min(2,window.devicePixelRatio||1);
+ cv.width=Math.round(stage.clientWidth*dpr);cv.height=Math.round(stage.clientHeight*dpr);layout();
+}
+new ResizeObserver(resize).observe(stage);
+
+/* timeline */
+let t=0,playing=!reduce,cur=-1,last=performance.now();
+const fill=document.getElementById('fill'),timeEl=document.getElementById('time'),nowEl=document.getElementById('now'),track=document.getElementById('track'),ico=document.getElementById('ico'),playBtn=document.getElementById('play');
+const chaps=document.getElementById('chaps');
+SC.forEach((s,k)=>{const tk=document.createElement('div');tk.className='tick';tk.style.left=(s.start/TOTAL*100)+'%';track.appendChild(tk);
+ const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.className='chap';b.textContent=s.name;b.onclick=()=>seek(s.start+.01,true);li.appendChild(b);chaps.appendChild(li)});
+const chapBtns=[...chaps.querySelectorAll('.chap')];
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+function setIcon(){const ended=t>=TOTAL;ico.innerHTML=playing?'<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>':(ended?'<path d="M12 5a7 7 0 1 1-6.6 4.7l1.9.6A5 5 0 1 0 12 7v3L7.5 6 12 2z"/>':'<path d="M8 5v14l11-7z"/>');
+ playBtn.setAttribute('aria-label',playing?'Pause':(ended?'Replay':'Play'))}
+function toggle(){if(t>=TOTAL){seek(0,false);playing=true}else playing=!playing;setIcon()}
+function seek(nt,keep){t=Math.max(0,Math.min(TOTAL,nt));if(keep&&t<TOTAL&&!reduce)playing=true;setIcon()}
+function sceneAt(x){for(let k=SC.length-1;k>=0;k--)if(x>=SC[k].start)return k;return 0}
+function setScene(k){cur=k;scenes.forEach((s,j)=>{if(j!==k)s.querySelectorAll('.rv').forEach(e=>e.classList.remove('in'))});
+ chapBtns.forEach((b,j)=>b.setAttribute('aria-current',j===k?'true':'false'));nowEl.textContent=SC[k].name}
+const Q='Where are schools improving fastest?',ptext=document.getElementById('ptext');
+const c1=document.getElementById('c1'),c2=document.getElementById('c2'),st1=document.getElementById('st1'),st2=document.getElementById('st2'),y10=document.getElementById('y10');
+
+function frame(now){
+ let dt=Math.min(.05,(now-last)/1000);last=now;
+ if(playing){t+=dt;if(t>=TOTAL){t=TOTAL;playing=false;setIcon()}}
+ const k=sceneAt(Math.min(t,TOTAL-1e-3));if(k!==cur)setScene(k);
+ const s=SC[k],lt=t-s.start,B=BOX[mode][s.box];
+ F[s.form](B,lt,t);
+ /* reveals */
+ const fadeOut=k<SC.length-1?s.dur-.45:1e9;
+ scenes[k].querySelectorAll('.rv').forEach(e=>{const on=lt>=+e.dataset.at&&lt<fadeOut;e.classList.toggle('in',on)});
+ if(k===4){const n=Math.max(0,Math.min(Q.length,Math.floor((lt-2.4)*24)));ptext.textContent=Q.slice(0,n)}
+ if(k===5){const adv=lt>=4.3;c1.classList.toggle('on',!adv);c2.classList.toggle('on',adv);st1.classList.toggle('off',adv);st2.classList.toggle('off',!adv)}
+ if(k===7){y10.classList.toggle('hot',lt>=3.4);scenes[7].querySelectorAll('.yl').forEach(e=>{if(e!==y10)e.classList.toggle('dim',lt>=4.2)})}
+ /* springs */
+ const sk=reduce?1:0;
+ for(let i=0;i<N;i++){
+  if(snap[i]||sk){px[i]=tx[i];py[i]=ty[i];pr[i]=tr[i];pa[i]=mix(pa[i],ta[i],sk?1:1-Math.exp(-dt*6))}else{
+   const e=1-Math.exp(-dt*(2.2+rD[i]*2.2));px[i]+=(tx[i]-px[i])*e;py[i]+=(ty[i]-py[i])*e;pr[i]+=(tr[i]-pr[i])*e;pa[i]+=(ta[i]-pa[i])*Math.min(1,e*1.6)}
+  const ec=sk?1:1-Math.exp(-dt*4);for(let c=0;c<3;c++)pc[i*3+c]+=(tc[i*3+c]-pc[i*3+c])*ec}
+ /* draw */
+ const sc=cv.width/W;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.setTransform(sc,0,0,sc,0,0);
+ for(let i=0;i<N;i++){const a=pa[i];if(a<.01)continue;const col='rgb('+(pc[i*3]|0)+','+(pc[i*3+1]|0)+','+(pc[i*3+2]|0)+')';
+  ctx.fillStyle=col;if(pr[i]>2.3){ctx.globalAlpha=a*.13;ctx.beginPath();ctx.arc(px[i],py[i],pr[i]*3.2,0,6.2832);ctx.fill()}
+  ctx.globalAlpha=a;ctx.beginPath();ctx.arc(px[i],py[i],pr[i],0,6.2832);ctx.fill()}
+ ctx.globalAlpha=1;
+ fill.style.width=(t/TOTAL*100)+'%';timeEl.textContent=fmt(t)+' / '+fmt(TOTAL);track.setAttribute('aria-valuenow',Math.round(t));
+ requestAnimationFrame(frame);
+}
+
+/* input */
+playBtn.onclick=toggle;stage.addEventListener('click',toggle);
+stage.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();toggle()}});
+document.getElementById('fs').onclick=()=>{try{const p=document.fullscreenElement?document.exitFullscreen():stage.requestFullscreen();p&&p.catch&&p.catch(()=>{})}catch(e){}};
+let drag=false;const tAt=e=>{const r=track.getBoundingClientRect();return cl((e.clientX-r.left)/r.width)*TOTAL};
+track.addEventListener('pointerdown',e=>{drag=true;track.setPointerCapture(e.pointerId);seek(tAt(e),false)});
+track.addEventListener('pointermove',e=>{if(drag)seek(tAt(e),false)});
+track.addEventListener('pointerup',()=>{drag=false});
+track.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){seek(SC[Math.min(SC.length-1,cur+1)].start+.01,false);e.preventDefault()}
+ if(e.key==='ArrowLeft'){seek(SC[Math.max(0,cur-1)].start+.01,false);e.preventDefault()}});
+
+resize();setIcon();requestAnimationFrame(t0=>{last=t0;frame(t0)});
+})();
+</script>
+
+</body>
+</html>

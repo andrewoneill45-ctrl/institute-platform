@@ -1,6 +1,6 @@
 /* platform-level styles on top of the tokens */
 .nav{position:sticky;top:0;z-index:10;background:rgba(251,250,247,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--hair)}
-.nav-in{display:flex;align-items:center;gap:28px;padding:16px 0}
+.nav-in{display:flex;align-items:center;gap:28px;padding-block:16px}
 .nav a{color:var(--ink);text-decoration:none;font-size:13.5px;font-weight:500}
 .nav .spacer{flex:1}
 .hero{padding:110px 0 70px}
@@ -79,3 +79,6 @@
 .reg-bar .fl{position:absolute;top:0;bottom:0}
 .reg-row .dv{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
 @media(max-width:900px){.nstrip{grid-template-columns:1fr}.fw-h{font-size:38px}.fieldwall{padding:30px 26px}.ins-grid{grid-template-columns:1fr}.fw-marg{grid-template-columns:1fr 1fr;row-gap:16px}.fw-marg div{border-right:none;padding:0}}
+/* the nav on phones: keep the wordmark whole */
+.nav-in > a:first-child{white-space:nowrap;flex:none}
+@media(max-width:520px){.nav .container{padding-inline:18px}.nav-in{gap:14px}.nav-in .btn.line{padding:8px 14px!important;white-space:nowrap}}
