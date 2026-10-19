@@ -82,12 +82,26 @@ export default function Home() {
   const { user } = useAuth();
   const [me, setMe] = useState(undefined); // undefined = loading, null = not found
   const [nat, setNat] = useState(null);
+  const [sys, setSys] = useState(null);
+  const system = user?.accountType && user.accountType !== "school";
   useEffect(ensureMotionCss, []);
 
   useEffect(() => {
     let live = true;
     getDataset().then(({ raw: all }) => {
       if (!live) return;
+      if (system) {
+        /* the bird's eye: England itself is this account's school */
+        const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+        const med = (xs) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+        const state = all.filter((s) => !/independent/i.test(s.type || ""));
+        const a8 = state.map((s) => s.attainment8).filter((x) => typeof x === "number");
+        const rwm = state.map((s) => s.ks2_rwm_exp).filter((x) => typeof x === "number");
+        const abs = state.map((s) => s.abs_overall_pct).filter((x) => typeof x === "number");
+        setSys({ n: state.length, a8: mean(a8), secN: a8.length, rwm: mean(rwm), priN: rwm.length, abs: med(abs) });
+        setMe(null);
+        return;
+      }
       /* find the school by URN, or by exact name when the account carries no URN */
       const byUrn = user?.urn ? all.find((s) => Number(s.urn) === Number(user.urn)) : null;
       const byName = !byUrn && user?.school ? all.find((s) => (s.name || "").trim().toLowerCase() === user.school.trim().toLowerCase()) : null;
@@ -103,12 +117,20 @@ export default function Home() {
       }
     }).catch(() => live && setMe(null));
     return () => { live = false; };
-  }, [user?.urn]);
+  }, [user?.urn, system]);
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = (user?.fullName || "").trim().split(/\s+/)[0] || null;
 
-  const stats = me && [
+  const sysStats = sys && [
+    ["State-funded schools", sys.n.toLocaleString("en-GB"), null],
+    ["Attainment 8, England mean", fmt(sys.a8), null],
+    ["KS2 expected standard, mean", sys.rwm != null ? Math.round(sys.rwm) + "%" : "–", null],
+    ["Overall absence, median", sys.abs != null ? fmt(sys.abs) + "%" : "–", null],
+  ].filter((s) => s[1] !== "–");
+
+  const stats = system ? sysStats : me && [
     ["Attainment 8", fmt(me.attainment8), nat?.attainment8 != null && me.attainment8 != null ? me.attainment8 - nat.attainment8 : null],
     ["Attendance", me.abs_overall_pct != null ? fmt(100 - me.abs_overall_pct) + "%" : "–", nat?.abs != null && me.abs_overall_pct != null ? nat.abs - me.abs_overall_pct : null],
     ["Teacher retention", me.turn_retained_pct != null ? fmt(me.turn_retained_pct) + "%" : "–", nat?.ret != null && me.turn_retained_pct != null ? me.turn_retained_pct - nat.ret : null],
@@ -123,18 +145,25 @@ export default function Home() {
         <Rise>
           <p style={{ fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, margin: "0 0 10px" }}>The Fellowship</p>
           <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: "clamp(26px,3.6vw,38px)", letterSpacing: "-.015em", color: "#221233", margin: 0, lineHeight: 1.15 }}>
-            {greet}, {user?.school || "colleague"}.
+            {greet}, {firstName || user?.school || "colleague"}.
           </h1>
+          {(user?.roleTitle || user?.scopeName) && (
+            <p style={{ fontSize: 13.5, color: "#6F6580", margin: "8px 0 0", fontWeight: 500 }}>
+              {[user?.roleTitle, user?.scopeName].filter(Boolean).join(" · ")}
+              <Link to="/members/profile" style={{ marginLeft: 10, fontSize: 12, color: "#4B0875" }}>your profile</Link>
+            </p>
+          )}
         </Rise>
         <Rise delay={200}>
           <p style={{ color: "#6F6580", fontSize: 15, maxWidth: 560, margin: "12px 0 0", lineHeight: 1.55 }}>
-            {me === undefined ? "Reading your school from the Institute dataset…"
-              : me ? <>Your numbers below are read live from the same dataset every instrument shares{me.la ? <>, alongside every school in {me.la}</> : null}: joined, not judged.</>
+            {system ? <>The whole system is your scope: here is England this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}, read live from the dataset every instrument shares.</>
+              : me === undefined ? "Reading your school from the Institute dataset…"
+              : me ? <>Here is {user?.school ? "your school" : "the picture"} at a glance{me.la ? <>, read live alongside every school in {me.la}</> : null}: joined, not judged.</>
               : "Your school's published data joins the dataset as the DfE releases it; the instruments are ready in the meantime."}
           </p>
         </Rise>
 
-        {me && stats?.length > 0 && (
+        {stats && stats.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, margin: "28px 0 8px" }}>
             {stats.map(([label, val, delta], i) => (
               <div key={label} className="asi-rise" style={{ ...card, padding: "18px 22px", "--asi-d": `${340 + i * 150}ms` }}>

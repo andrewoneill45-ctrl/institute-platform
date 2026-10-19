@@ -24,14 +24,29 @@ export function AuthProvider({ children }) {
     if (!su) return null;
     let school = su.user_metadata?.school_name || "";
     let urn = su.user_metadata?.urn ? Number(su.user_metadata.urn) : null;
+    let fullName = null, roleTitle = null, accountType = "school", orgName = null, isAdmin = false;
     try {
-      const { data: prof } = await supabase.from("profiles").select("school_name,urn").eq("id", su.id).maybeSingle();
-      if (prof) { school = prof.school_name || school; urn = prof.urn ?? urn; }
-      else if (school) await supabase.from("profiles").upsert({ id: su.id, school_name: school, urn });
-    } catch {}
+      const { data: prof } = await supabase.from("profiles")
+        .select("school_name,urn,full_name,role_title,account_type,org_name,is_admin").eq("id", su.id).maybeSingle();
+      if (prof) {
+        school = prof.school_name || school; urn = prof.urn ?? urn;
+        fullName = prof.full_name || null; roleTitle = prof.role_title || null;
+        accountType = prof.account_type || "school"; orgName = prof.org_name || null;
+        isAdmin = prof.is_admin === true;
+      } else {
+        /* every signed-in person gets a profile row, school or not */
+        await supabase.from("profiles").insert({ id: su.id, school_name: school || null, urn });
+      }
+    } catch { /* profile columns may predate accounts.sql; the session still works */ }
     /* URN is the identity; the name fallback survives only for pre-URN accounts. */
     const lens = urn === 100503 || (!urn && /^all saints catholic college$/i.test((school || "").trim())) ? "ascc" : "new";
-    return { id: su.id, email: su.email, school: school || "Your school", urn, lens };
+    const system = accountType !== "school";
+    return {
+      id: su.id, email: su.email, urn, lens,
+      school: school || (system ? "" : "Your school"),
+      fullName, roleTitle, accountType, orgName, isAdmin,
+      scopeName: accountType === "school" ? (school || "Your school") : accountType === "system" ? "England, whole system" : (orgName || "Your organisation"),
+    };
   }
 
   useEffect(() => {
@@ -70,13 +85,19 @@ export function AuthProvider({ children }) {
     return { error: null, needsConfirm: !data.session };
   }
 
+  async function refresh() {
+    if (DEMO) return;
+    const { data } = await supabase.auth.getSession();
+    setUser(await enrich(data.session?.user ?? null));
+  }
+
   async function signOut() {
     if (DEMO) localStorage.removeItem("asi-demo-user");
     else await supabase.auth.signOut();
     setUser(null);
   }
 
-  return <Ctx.Provider value={{ user, ready, signIn, signUp, signOut, demo: DEMO }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, ready, signIn, signUp, signOut, refresh, demo: DEMO }}>{children}</Ctx.Provider>;
 }
 
 export function RequireMember({ children }) {

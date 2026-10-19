@@ -22,7 +22,12 @@ export default function MemberLayout() {
           <NavLink to="constellation" className={({ isActive }) => (isActive ? "on" : "")}>Constellation</NavLink>
         </div>
         <span className="spacer" style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>{user?.school || user?.email}</span>
+        {user?.isAdmin && (
+          <NavLink to="admin" className={({ isActive }) => (isActive ? "on" : "")} style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textDecoration: "none", marginRight: 12 }}>Accounts</NavLink>
+        )}
+        <Link to="/members/profile" style={{ fontSize: 12, color: "var(--muted)", textDecoration: "none" }} title="Your profile">
+          {user?.fullName || user?.school || user?.email}
+        </Link>
         <button className="btn line" style={{ padding: "8px 16px", fontSize: 12 }} onClick={signOut}>Sign out</button>
       </div></div>
       {fullBleed ? (
