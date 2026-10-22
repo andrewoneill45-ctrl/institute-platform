@@ -2,6 +2,7 @@
    query with a chart switcher; exports as an Institute-badged briefing via print. */
 import React, { useEffect, useRef, useState } from "react";
 import { runBlock, normaliseChart, CHART_ALTS, FIELDS, localPlan, insightFor } from "./engine.js";
+import { getDataset } from "../../lib/dataset.js";
 import { Bars, DotPlot, Scatter, Ring, Stat, DataTable } from "./charts.jsx";
 
 const QUATREFOIL = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
@@ -89,8 +90,8 @@ export default function PrismCanvas() {
 
   async function ensureData() {
     if (data) return data;
-    const d = await fetch("/data/schools.json").then((r) => r.json());
-    setData(d); return d;
+    const { raw } = await getDataset(); /* the shared copy: core + detail merged */
+    setData(raw); return raw;
   }
 
   async function ask(question) {

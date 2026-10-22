@@ -9,7 +9,7 @@ import ComparePanel from './components/ComparePanel';
 import SimilarSchoolsPanel from './components/SimilarSchoolsPanel';
 import StatsPanel from './components/StatsPanel';
 import { parseSearchQuery, applyFilters } from './utils/searchParser';
-import { getDataset, datasetProgress } from '../lib/dataset.js';
+import { getDataset, getDatasetCore, datasetProgress } from '../lib/dataset.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.your_token_here';
 const REDUCE = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -154,10 +154,10 @@ const App = () => {
       setLoadNote(phase === "parsing" ? "reading " + Math.round(received / 1048576) + " MB of England…"
         : phase === "downloading" && received ? (received / 1048576).toFixed(1) + " MB of the dataset received…" : "");
     });
-    getDataset().then(({ raw, ofsted }) => {
+    const GRADE = { 1: 'Outstanding', 2: 'Good', 3: 'Requires improvement', 4: 'Inadequate', 0: 'Not judged' };
+    const absorb = ({ raw, ofsted }) => {
       initData(raw);
-      // Merge Ofsted sub-judgements by URN
-      const GRADE = { 1: 'Outstanding', 2: 'Good', 3: 'Requires improvement', 4: 'Inadequate', 0: 'Not judged' };
+      // Merge Ofsted sub-judgements by URN (idempotent: safe on core and again on full)
       _schoolsData.forEach(s => {
         const o = ofsted[String(s.urn)];
         if (!o) return;
@@ -170,11 +170,15 @@ const App = () => {
         if (o.sf) s.ofsted_sixth_form = GRADE[o.sf] || null;
         if (o.sg != null) s.ofsted_safeguarding = o.sg === 1 ? 'Effective' : 'Not effective';
         if (o.id) s.ofsted_date = o.id;
-        // Update main ofsted field if we have a more current one
         if (o.oe && GRADE[o.oe]) s.ofsted = GRADE[o.oe];
       });
       setSchoolsData(_schoolsData);
-      setSchoolsByUrn(_schoolsByUrn);
+      setSchoolsByUrn({ ..._schoolsByUrn });
+    };
+    /* the map opens on the slim core; the detail merges into the same rows
+       and a second absorb rebuilds the deciles once everything is present */
+    getDatasetCore().then((d) => {
+      absorb(d);
       setLoading(false);
       /* deep link: /members/atlas?urn=100503 opens that school's profile
          (Prizm's charts click through here) */
@@ -191,6 +195,7 @@ const App = () => {
       console.error('Failed to load data:', err);
       setLoadNote('The dataset could not be loaded (' + (err && err.message ? err.message : err) + '). Check the connection and reload to try again.');
     });
+    getDataset().then(absorb).catch(() => { /* the core already answered; detail retries on next visit */ });
     return off;
   }, []);
 

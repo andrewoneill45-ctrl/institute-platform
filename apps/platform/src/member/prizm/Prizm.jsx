@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDataset } from "../../lib/dataset.js";
+import { getDataset, getDatasetCore } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary } from "./engine.js";
@@ -126,7 +126,12 @@ export default function Prizm() {
   const boxRef = useRef(null);
 
   useEffect(ensureMotionCss, []);
-  useEffect(() => { getDataset().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted))); }, []);
+  /* the door opens on the core; the detail merges into the same rows behind it */
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    getDatasetCore().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted)));
+    getDataset().then(() => setFull(true));
+  }, []);
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   useEffect(() => { setForeword(null); }, [scope, blocks]);
@@ -192,8 +197,9 @@ export default function Prizm() {
       scope, blocks: blocks.map((type) => ({ type })),
     };
   }, [title, scope, blocks, all]);
-  const computed = useMemo(() => (all && scope ? computeReport(all, spec) : null), [all, spec, scope]);
-  const dash = useMemo(() => (all && dashUrn ? computeSchoolDash(all, dashUrn) : null), [all, dashUrn]);
+  /* reports and dashes compute only once every figure is present */
+  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec) : null), [all, full, spec, scope]);
+  const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn) : null), [all, full, dashUrn]);
   /* one school is not a cohort: a single-school scope pivots to the full picture */
   const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn) : null), [all, computed]);
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
@@ -478,6 +484,8 @@ export default function Prizm() {
             </div>
             <div className="pz-report" style={{ borderRadius: 4 }} dangerouslySetInnerHTML={{ __html: schoolDashHtml(dash) }} />
           </div>
+        ) : (scope || dashUrn) && !full ? (
+          <Loading title="Prizm" label="the detail is arriving…" />
         ) : computed ? (
           <div className="asi-rise pz-report" style={{ borderRadius: 4 }}>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={spec.title} aria-label="Report title"
