@@ -19,6 +19,7 @@ function Row({ a, onSaved }) {
   const [name, setName] = useState(a.full_name || "");
   const [role, setRole] = useState(a.role_title || "");
   const [admin, setAdmin] = useState(a.is_admin === true);
+  const [sysView, setSysView] = useState(a.system_access === true);
   const [state, setState] = useState("");
 
   async function save() {
@@ -29,6 +30,7 @@ function Row({ a, onSaved }) {
       p_urn: t === "school" && urn.trim() !== "" && Number.isFinite(Number(urn)) ? Number(urn) : null,
       p_school_name: t === "school" ? (school.trim() || null) : null,
       p_full_name: name.trim() || null, p_role_title: role.trim() || null, p_is_admin: admin,
+      p_system_access: sysView,
     });
     if (error) { setState(error.message); return; }
     setState("Saved."); onSaved && onSaved();
@@ -75,6 +77,13 @@ function Row({ a, onSaved }) {
           <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} style={{ accentColor: "#6A0CA0" }} />
           Administrator
         </label>
+        {t === "school" && (
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, color: INK, fontWeight: 600, cursor: "pointer" }}>
+            <input type="checkbox" checked={sysView} onChange={(e) => setSysView(e.target.checked)} style={{ accentColor: "#6A0CA0" }} />
+            System view
+            <span style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>sees England as well as the school</span>
+          </label>
+        )}
         <button onClick={save} style={{ marginLeft: "auto", border: "none", background: "#6A0CA0", color: "#fff", borderRadius: 999, padding: "8px 18px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Save</button>
         {state && <span style={{ fontSize: 12, color: state === "Saved." ? "#2F7A39" : "#B3261E" }}>{state}</span>}
       </div>

@@ -90,6 +90,11 @@ export default function Home() {
   const [patch, setPatch] = useState(null);
   const [vault, setVault] = useState([]);
   const system = user?.accountType && user.accountType !== "school";
+  /* a school account granted the system view (administrators have it implicitly)
+     stands in both rooms: a toggle chooses which one this page shows */
+  const dual = user?.accountType === "school" && (user.isAdmin || user.systemAccess);
+  const [view, setView] = useState("school");
+  const showSystem = system || (dual && view === "system");
   useEffect(ensureMotionCss, []);
   useEffect(() => { listReports(user?.urn).then((r) => setVault(r.slice(0, 4))).catch(() => {}); }, [user?.urn]);
 
@@ -97,7 +102,7 @@ export default function Home() {
     let live = true;
     getDataset().then(({ raw: all, ofsted }) => {
       if (!live) return;
-      if (system) {
+      if (system || dual) {
         /* the bird's eye: England itself is this account's school */
         const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
         const med = (xs) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
@@ -124,8 +129,8 @@ export default function Home() {
             setPatch({ n: mineAll.length, a8: mean(pa8), rwm: mean(prwm), abs: med(pabs), scope: user.accountType === "la" ? { type: "la", name: user.orgName } : { type: "trust", name: user.orgName } });
           }
         }
-        setMe(null);
-        return;
+        if (system) { setMe(null); return; }
+        /* a dual account carries on: its school view needs the school too */
       }
       /* find the school by URN, or by exact name when the account carries no URN */
       const byUrn = user?.urn ? all.find((s) => Number(s.urn) === Number(user.urn)) : null;
@@ -143,7 +148,7 @@ export default function Home() {
       }
     }).catch(() => live && setMe(null));
     return () => { live = false; };
-  }, [user?.urn, system]);
+  }, [user?.urn, system, dual]);
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -159,14 +164,14 @@ export default function Home() {
   ].filter((s) => s[1] !== "–");
 
   /* one-click national questions for the bird's-eye account */
-  const sysAsks = system && sys && [
+  const sysAsks = showSystem && sys && [
     ["The report cards so far", { type: "england", hasCard: true }, ["headlines", "ofsted", "cohort"]],
     [`${sys.deficits ? sys.deficits.toLocaleString("en-GB") + " schools" : "Schools"} in deficit`, { type: "england", deficit: true }, ["headlines", "finance", "cohort"]],
     ["Where the highest needs learn", { type: "england", minEhcp: 10 }, ["headlines", "inclusion", "scatter"]],
     ["Which authorities hold the widest gaps", { type: "england" }, ["headlines", "league", "gap"]],
   ];
 
-  const stats = system ? sysStats : me && [
+  const stats = showSystem ? sysStats : me && [
     ["Attainment 8", fmt(me.attainment8), nat?.attainment8 != null && me.attainment8 != null ? me.attainment8 - nat.attainment8 : null],
     ["Attendance", me.abs_overall_pct != null ? fmt(100 - me.abs_overall_pct) + "%" : "–", nat?.abs != null && me.abs_overall_pct != null ? nat.abs - me.abs_overall_pct : null],
     ["Teacher retention", me.wf_turnover_pct != null ? fmt(100 - me.wf_turnover_pct) + "%" : "–", nat?.ret != null && me.wf_turnover_pct != null ? (100 - me.wf_turnover_pct) - nat.ret : null],
@@ -192,7 +197,7 @@ export default function Home() {
         </Rise>
         <Rise delay={200}>
           <p style={{ color: "#6F6580", fontSize: 15, maxWidth: 560, margin: "12px 0 0", lineHeight: 1.55 }}>
-            {system ? (user?.orgName && (user.accountType === "la" || user.accountType === "trust")
+            {showSystem ? (user?.orgName && (user.accountType === "la" || user.accountType === "trust")
               ? <>England first, {user.orgName} beneath it: both read live this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"} from the dataset every instrument shares.</>
               : <>The whole system is your scope: here is England this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}, read live from the dataset every instrument shares.</>)
               : me === undefined ? "Reading your school from the Institute dataset…"
@@ -200,6 +205,19 @@ export default function Home() {
               : "Your school's published data joins the dataset as the DfE releases it; the instruments are ready in the meantime."}
           </p>
         </Rise>
+
+        {dual && (
+          <Rise delay={300}>
+            <div style={{ display: "inline-flex", gap: 4, marginTop: 18, background: "#fff", border: "1px solid rgba(34,18,51,.12)", borderRadius: 999, padding: 4, boxShadow: shadow }}>
+              {[["school", user?.school || "Your school"], ["system", "The system"]].map(([v, label]) => (
+                <button key={v} onClick={() => setView(v)}
+                  style={{ fontFamily: "inherit", border: "none", borderRadius: 999, padding: "7px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: view === v ? "#6A0CA0" : "transparent", color: view === v ? "#fff" : "#6F6580" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Rise>
+        )}
 
         {stats && stats.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, margin: "28px 0 8px" }}>
@@ -217,7 +235,7 @@ export default function Home() {
           </div>
         )}
 
-        {patch && (
+        {showSystem && patch && (
           <Rise delay={420}>
             <div style={{ ...card, marginTop: 18, display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
               <div style={{ minWidth: 200, flex: 1 }}>
