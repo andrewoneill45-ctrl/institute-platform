@@ -4,7 +4,10 @@
    column and dumbbell charts with reference lines and tooltips, computed
    narrative headlines, and collapsible tables for the full data. */
 
-import { VINTAGE, VINTAGE_KS2, scopeLabel, r1 } from "./engine.js";
+import { VINTAGE, VINTAGE_KS2, scopeLabel, r1, RC_GRADES, RC_AREAS } from "./engine.js";
+
+/* the renewed framework's five-point ramp: deep purple to red, gold for attention */
+const RC_COLS = ["#3D0661", "#6A0CA0", "#B18FD0", "#C6A035", "#B4475A"];
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const f1 = (v) => (v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1));
@@ -337,6 +340,28 @@ function distributionHtml(d, ctx) {
     + (vs ? legend([["var(--gold)", L.a || "Scope"], ["var(--purple)", L.b || "Comparison"]]) : ""));
 }
 
+/* the report cards across a scope: one 100%-stacked strip per evaluation area,
+   with England's strip beneath when the scope is narrower than England */
+function cardStacksHtml(cards, natCards) {
+  if (!cards || !cards.n) return "";
+  const sameAsEngland = natCards && cards.n === natCards.n;
+  const strip = (dist, thin) => {
+    const total = dist.reduce((a, b) => a + b, 0);
+    if (!total) return "";
+    return `<div class="pz-stack${thin ? " pz-stack-thin" : ""}">${dist.map((v, i) => (v ? `<span style="width:${(v / total) * 100}%;background:${RC_COLS[i]}" title="${escA(RC_GRADES[i])}: ${v} school${v === 1 ? "" : "s"}"></span>` : "")).join("")}</div>`;
+  };
+  const rows = RC_AREAS.filter(([k]) => cards.areas[k]).map(([k, label]) => {
+    const dist = cards.areas[k];
+    const total = dist.reduce((a, b) => a + b, 0);
+    const good = total ? Math.round(((dist[0] + dist[1] + dist[2]) / total) * 100) : 0;
+    const natDist = natCards && natCards.areas[k];
+    return `<div class="pz-rcarea"><span class="k">${esc(label)}</span><div class="s">${strip(dist)}${!sameAsEngland && natDist ? strip(natDist, true) : ""}</div><span class="v">${good}% at expected+</span></div>`;
+  }).join("");
+  const sgLine = cards.sgNot > 0 ? ` Safeguarding was not met in ${cards.sgNot} school${cards.sgNot === 1 ? "" : "s"}.` : " Safeguarding was met in every report-carded school in scope.";
+  return `<p class="pz-note" style="margin:26px 0 8px"><strong>The report cards so far.</strong> ${cards.n.toLocaleString("en-GB")} school${cards.n === 1 ? " in scope has" : "s in scope have"} been inspected under the renewed framework; each strip is one evaluation area${!sameAsEngland ? ", with England's strip beneath it" : ""}.${sgLine}</p>
+    <div class="pz-rcwrap">${rows}</div>` + legend(RC_GRADES.map((g, i) => [RC_COLS[i], g]));
+}
+
 function ofstedHtml(d, ctx) {
   const L = (ctx && ctx.labels) || {};
   const vs = ctx && ctx.vs ? ctx.vs : null;
@@ -351,8 +376,9 @@ function ofstedHtml(d, ctx) {
   const headline = vs
     ? `${Math.round(((out + good) / (d.n || 1)) * 100)}% of ${esc(L.a)} holds Good or Outstanding against ${Math.round((((vs.scope["Outstanding"] || 0) + (vs.scope["Good"] || 0)) / (vs.n || 1)) * 100)}% of ${esc(L.b)}.`
     : `${out + good} of ${d.n} schools hold Good or Outstanding judgements.`;
-  return section("Inspection profile", headline, "Current Ofsted judgements against the national picture.",
-    `<table class="pz-table"><thead><tr><th>Judgement</th><th>Schools</th><th></th><th>${vs ? esc(L.a || "Scope") : "Scope"}</th>${vs ? `<th>${esc(L.b || "Comparison")}</th>` : ""}<th>England</th></tr></thead><tbody>${rows}</tbody></table>`);
+  return section("Inspection profile", headline, "Legacy judgements from the previous framework against the national picture; single grades are no longer awarded, so these age in place as report cards replace them.",
+    `<table class="pz-table"><thead><tr><th>Judgement</th><th>Schools</th><th></th><th>${vs ? esc(L.a || "Scope") : "Scope"}</th>${vs ? `<th>${esc(L.b || "Comparison")}</th>` : ""}<th>England</th></tr></thead><tbody>${rows}</tbody></table>`
+    + cardStacksHtml(d.cards, d.natCards));
 }
 
 function attendanceHtml(d, ctx) {
@@ -644,6 +670,29 @@ function similarHtml(sim, pri, name) {
       ${XT.map((v) => `<text class="tick" x="${px(v)}" y="${H - 14}" text-anchor="middle">${v}${pri ? "%" : ""}</text>`).join("")}</svg>`);
 }
 
+/* the school's report card: each evaluation area on the five-step scale, the
+   graded step filled in its colour; legacy-only schools get an honest line */
+function reportCardHtml(s) {
+  const c = s.ofstedCard;
+  if (!c) {
+    if (!s.ofstedGrade) return "";
+    return section("The inspection", `${esc(s.ofstedGrade)}, under the previous framework.`,
+      "Not yet inspected under the renewed framework; when the report card arrives it will replace this judgement here.", "");
+  }
+  const dt = c.d ? new Date(c.d + "T12:00:00") : null;
+  const when = dt ? dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  const head = `<div class="pz-rcrow pz-rchead"><span class="k"></span><div class="steps">${RC_GRADES.map((g) => `<span class="h">${esc(g)}</span>`).join("")}</div><span class="v"></span></div>`;
+  const rows = RC_AREAS.filter(([k]) => c[k]).map(([k, label]) => {
+    const g = c[k];
+    return `<div class="pz-rcrow"><span class="k">${esc(label)}</span><div class="steps">${RC_GRADES.map((_, i) => `<span class="c${i + 1 === g ? " on" : ""}"${i + 1 === g ? ` style="background:${RC_COLS[i]}"` : ""}></span>`).join("")}</div><span class="v" style="color:${RC_COLS[g - 1]}">${esc(RC_GRADES[g - 1])}</span></div>`;
+  }).join("");
+  const sg = c.sg != null ? `<span class="pz-rcpill" style="background:${c.sg === 1 ? "var(--lilac)" : "#F6E3E7"};color:${c.sg === 1 ? "var(--purple-deep)" : "var(--down)"}">Safeguarding ${c.sg === 1 ? "met" : "not met"}</span>` : "";
+  const cc = c.cc ? `<span class="pz-rcpill" style="background:#F6E3E7;color:var(--down)">${esc(c.cc === "SM" ? "Special measures" : c.cc === "RSI" ? "Requires significant improvement" : c.cc)}</span>` : "";
+  return section("The report card", `Inspected under the renewed framework${when ? `, ${when}` : ""}.`,
+    "Each evaluation area on Ofsted's five-point scale; the previous framework's single judgement no longer applies.",
+    `<div class="pz-rcwrap">${head}${rows}</div><div style="margin-top:12px">${sg}${cc}</div>`);
+}
+
 /* inclusion on the school dash: who this school teaches, and its specialist places */
 function inclusionGroup(s, bench, n) {
   if (n(s.sen_ehcp_pct) == null) return "";
@@ -778,6 +827,7 @@ export function schoolDashHtml(d) {
   <p class="pz-sub">${esc(meta.join(" · "))}</p>
   <div class="pz-vintage">${esc(pri ? VINTAGE_KS2 : VINTAGE)}</div>
   <section class="pz-block">${tileHtml}</section>
+  ${reportCardHtml(s)}
   ${standingHtml(d.standing, pri)}
   ${similarHtml(d.similar, pri, s.name)}
   ${trendSection}
@@ -863,6 +913,20 @@ export const PZ_CSS = `
   .pz-prow .tr i{position:absolute;top:-3.5px;width:15px;height:15px;border-radius:50%;background:var(--purple);border:2.5px solid var(--paper);box-shadow:0 1px 5px rgba(34,18,51,.3);transform:translateX(-50%);box-sizing:border-box}
   .pz-prow .v{font-size:12.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
   .pz-plegend{display:flex;justify-content:space-between;margin:4px 108px 0 236px;font-size:10.5px;color:var(--muted);font-family:Inter,system-ui,sans-serif}
+  .pz-rcwrap{margin-top:10px;font-family:Inter,system-ui,sans-serif}
+  .pz-rcrow{display:grid;grid-template-columns:minmax(150px,230px) 1fr 150px;gap:14px;align-items:center;margin:8px 0}
+  .pz-rcrow .k{font-size:12.5px;color:var(--muted)}
+  .pz-rcrow .steps{display:flex;gap:5px}
+  .pz-rcrow .steps .c{flex:1;height:24px;background:var(--lilac);border-radius:5px;opacity:.55}
+  .pz-rcrow .steps .c.on{opacity:1;box-shadow:0 2px 8px rgba(34,18,51,.22)}
+  .pz-rcrow .v{font-size:12px;font-weight:700;text-align:left}
+  .pz-rchead .steps .h{flex:1;font-size:9.5px;letter-spacing:.02em;color:var(--muted);text-align:center;line-height:1.15}
+  .pz-rcpill{display:inline-block;border-radius:999px;padding:6px 13px;font-size:11.5px;font-weight:700;font-family:Inter,system-ui,sans-serif;margin-right:8px}
+  .pz-rcarea{display:grid;grid-template-columns:minmax(150px,230px) 1fr 120px;gap:14px;align-items:center;margin:9px 0;font-family:Inter,system-ui,sans-serif}
+  .pz-rcarea .k{font-size:12.5px;color:var(--muted)}
+  .pz-rcarea .v{font-size:11.5px;font-weight:600;text-align:right;color:var(--ink)}
+  .pz-rcarea .pz-stack{margin:0}
+  .pz-rcarea .pz-stack-thin{height:5px;margin-top:3px;opacity:.55}
   .pz-stack{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:4px 0 8px}
   .pz-stack span{display:block;height:100%}
   .pz-blockwrap{position:relative}

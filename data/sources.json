@@ -86,10 +86,10 @@
       "route": "manual",
       "catalogueUrl": "https://www.gov.uk/government/statistical-data-sets/monthly-management-information-ofsteds-school-inspections-outcomes",
       "cadence": "Monthly",
-      "lastVersion": "state-funded schools MI, autumn 2026",
-      "lastPulled": "2026-10-11",
+      "lastVersion": "latest inspections as at 30 Sep 2026 (report cards + legacy judgements)",
+      "lastPulled": "2026-10-22",
       "output": "apps/platform/public/data/ofsted.json",
-      "notes": "Published as an ODS/XLSX on gov.uk, no API. Monthly refresh is a hand pull until Ofsted's new report-card data settles into a stable download."
+      "notes": "The monthly 'latest inspections' CSV now carries the renewed framework's report cards (per-area five-point grades, safeguarding, category of concern) alongside each school's last legacy judgement. Merged additively: the legacy base is kept, report cards ride on top as rc. Hand pull, monthly."
     },
     {
       "key": "ks2",

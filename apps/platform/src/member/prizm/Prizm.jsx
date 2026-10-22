@@ -36,7 +36,7 @@ const KS2_DESCS = {
 const EXAMPLES = [
   { t: "Catholic secondaries in the north east, set against London", sub: "a comparison, side by side", sc: { type: "region", name: "North East", faith: "catholic", versus: { type: "region", name: "London" } } },
   { t: "Which authorities have the widest disadvantage gaps?", sub: "the league, ranked with England's line through it", sc: { type: "england" }, blocks: ["headlines", "league", "gap"] },
-  { t: "Schools where one leaver in ten doesn't sustain a destination", sub: "the NEET risk register", sc: { type: "england", minNotsust: 10 }, blocks: ["headlines", "cohort", "destinations", "scatter"] },
+  { t: "The report cards so far: how England is scoring", sub: "every school inspected under the renewed framework", sc: { type: "england", hasCard: true }, blocks: ["headlines", "ofsted", "cohort"] },
   { t: "The primary picture in the north west", sub: "KS2 2024/25, the latest published", sc: { type: "region", name: "North West", phase: "primary" } },
   { t: "Secondary schools in deficit — does money buy outcomes?", sub: "the 2024-25 accounts, spend set against attainment", sc: { type: "england", deficit: true }, blocks: ["headlines", "finance", "cohort"] },
   { t: "Where do the children with the highest needs learn?", sub: "EHC plans across England, the January 2026 census", sc: { type: "england", minEhcp: 10 }, blocks: ["headlines", "inclusion", "scatter"] },
@@ -69,6 +69,7 @@ const TOKEN_DEFS = [
   ["deficit", () => "in deficit"],
   ["minEhcp", (sc) => `EHCP ${sc.minEhcp}%+`], ["maxEhcp", (sc) => `EHCP under ${sc.maxEhcp}%`],
   ["senUnit", () => "with SEN units"], ["senRp", () => "with resourced provision"],
+  ["hasCard", () => "with report cards"],
   ["noGrammar", () => "grammars set aside"],
   ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend", ehcp: "EHCP" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
@@ -182,6 +183,7 @@ export default function Prizm() {
     if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
+    if (sc.hasCard || sc.ofsted || /\b(report card|ofsted|inspect)/i.test(text || "")) want.push("ofsted");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }

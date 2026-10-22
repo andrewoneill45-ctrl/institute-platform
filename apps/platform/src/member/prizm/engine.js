@@ -29,9 +29,14 @@ export function attachOfsted(all, ofstedMap) {
   for (const s of all) if (s.ofstedGrade === undefined) {
     const e = ofstedMap[String(s.urn)];
     s.ofstedGrade = e && OE[e.oe] ? OE[e.oe] : null;
+    s.ofstedCard = e && e.rc ? e.rc : null;
   }
   return all;
 }
+
+/* the renewed framework's five-point scale and its evaluation areas */
+export const RC_GRADES = ["Exceptional", "Strong standard", "Expected standard", "Needs attention", "Urgent improvement"];
+export const RC_AREAS = [["inc", "Inclusion"], ["ct", "Curriculum and teaching"], ["ach", "Achievement"], ["ab", "Attendance and behaviour"], ["pdw", "Personal development and wellbeing"], ["ey", "Early years"], ["p16", "Post-16 provision"], ["lg", "Leadership and governance"]];
 
 /* ── attribute filters: faith and gender live on every scope ── */
 export const FAITHS = {
@@ -85,6 +90,7 @@ function applyFilters(out, scope) {
   if (scope.maxEhcp != null) out = out.filter((s) => num(s.sen_ehcp_pct) != null && s.sen_ehcp_pct <= scope.maxEhcp);
   if (scope.senUnit) out = out.filter((s) => s.sen_unit === true);
   if (scope.senRp) out = out.filter((s) => s.sen_rp === true);
+  if (scope.hasCard) out = out.filter((s) => s.ofstedCard != null);
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -177,6 +183,7 @@ export function scopeLabel(scope, n) {
     scope.deficit ? "in deficit" : null,
     scope.minEhcp != null ? `EHCP ${scope.minEhcp}%+` : null, scope.maxEhcp != null ? `EHCP under ${scope.maxEhcp}%` : null,
     scope.senUnit ? "with SEN units" : null, scope.senRp ? "with resourced provision" : null,
+    scope.hasCard ? "with report cards" : null,
   ].filter(Boolean);
   const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend per pupil", ehcp: "EHC plan share" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
@@ -311,6 +318,7 @@ export function parseQuery(raw) {
   eat(/\b(high ehcp|high(est)? needs?)\b/, () => { f.minEhcp = f.minEhcp ?? 6; });
   eat(/\bwith (a |an )?sen units?\b/, () => { f.senUnit = true; });
   eat(/\bwith (a |an )?(resourced provisions?|rps?)\b/, () => { f.senRp = true; });
+  eat(/\b(with (a )?report cards?|report[- ]carded|inspected under the (new|renewed) framework)\b/, () => { f.hasCard = true; });
   /* finance */
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(over|above|at least) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.minSpend = +m[2].replace(/,/g, ""); });
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(under|below) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.maxSpend = +m[2].replace(/,/g, ""); });
@@ -612,8 +620,20 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
   if (PRI && type === "destinations") return { rows: [], destMean: null, highNotsust: 0, bench };
   if (type === "ofsted") {
     const count = (list) => { const m = {}; list.forEach((s) => { const k = s.ofstedGrade || "Not yet inspected"; m[k] = (m[k] || 0) + 1; }); return m; };
+    /* the renewed framework: per-area grade distributions for report-carded schools */
+    const tally = (list) => {
+      const t = { n: 0, sgMet: 0, sgNot: 0, areas: {} };
+      for (const s of list) {
+        const c = s.ofstedCard;
+        if (!c) continue;
+        t.n++;
+        if (c.sg === 1) t.sgMet++; else if (c.sg === 0) t.sgNot++;
+        for (const [k] of RC_AREAS) if (c[k]) { (t.areas[k] = t.areas[k] || [0, 0, 0, 0, 0])[c[k] - 1]++; }
+      }
+      return t;
+    };
     const est = estate();
-    return { scope: count(schools), nat: count(est), n: schools.length, natN: est.length };
+    return { scope: count(schools), nat: count(est), n: schools.length, natN: est.length, cards: tally(schools), natCards: tally(est) };
   }
   if (type === "headlines") {
     const a8s = vals((s) => num(s.attainment8));
