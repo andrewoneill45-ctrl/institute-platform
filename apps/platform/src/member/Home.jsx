@@ -113,7 +113,8 @@ export default function Home() {
           const v = peers.map((s) => s[f]).filter((x) => typeof x === "number").sort((a, b) => a - b);
           return v.length ? v[Math.floor(v.length / 2)] : null;
         };
-        setNat({ attainment8: med("attainment8"), abs: med("abs_overall_pct"), ret: med("turn_retained_pct"), dest: med("dest_sustained") });
+        const turnMed = med("wf_turnover_pct");
+        setNat({ attainment8: med("attainment8"), abs: med("abs_overall_pct"), ret: turnMed != null ? 100 - turnMed : null, dest: med("dest_sustained") });
       }
     }).catch(() => live && setMe(null));
     return () => { live = false; };
@@ -133,7 +134,7 @@ export default function Home() {
   const stats = system ? sysStats : me && [
     ["Attainment 8", fmt(me.attainment8), nat?.attainment8 != null && me.attainment8 != null ? me.attainment8 - nat.attainment8 : null],
     ["Attendance", me.abs_overall_pct != null ? fmt(100 - me.abs_overall_pct) + "%" : "–", nat?.abs != null && me.abs_overall_pct != null ? nat.abs - me.abs_overall_pct : null],
-    ["Teacher retention", me.turn_retained_pct != null ? fmt(me.turn_retained_pct) + "%" : "–", nat?.ret != null && me.turn_retained_pct != null ? me.turn_retained_pct - nat.ret : null],
+    ["Teacher retention", me.wf_turnover_pct != null ? fmt(100 - me.wf_turnover_pct) + "%" : "–", nat?.ret != null && me.wf_turnover_pct != null ? (100 - me.wf_turnover_pct) - nat.ret : null],
     ["Sustained destinations", me.dest_sustained != null ? fmt(me.dest_sustained) + "%" : "–", nat?.dest != null && me.dest_sustained != null ? me.dest_sustained - nat.dest : null],
   ].filter((s) => s[1] !== "–");
 

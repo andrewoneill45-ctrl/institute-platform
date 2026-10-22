@@ -19,7 +19,7 @@
 const WEIGHTS = {
   fsm_pct: 0.25,
   sen_ehcp_pct: 0.12,
-  sen_k_pct: 0.13,
+  sen_support_pct: 0.13,
   eal_pct: 0.15,
   pupils: 0.10,
   stability_pct: 0.10,
@@ -45,7 +45,7 @@ let normCache = {};
 function buildNormRanges(schools) {
   normCache = {};
   const phases = ['Primary', 'Secondary', 'All-through', 'Special'];
-  const fields = ['fsm_pct', 'sen_ehcp_pct', 'sen_k_pct', 'eal_pct', 'pupils', 'stability_pct'];
+  const fields = ['fsm_pct', 'sen_ehcp_pct', 'sen_support_pct', 'eal_pct', 'pupils', 'stability_pct'];
   
   phases.forEach(phase => {
     const group = schools.filter(s => s.phase === phase);
@@ -104,7 +104,7 @@ export function findSimilarSchools(target, allSchools, n = 10) {
   );
   
   // Check target has enough data
-  const tFields = ['fsm_pct', 'sen_ehcp_pct', 'sen_k_pct', 'eal_pct', 'pupils', 'stability_pct'];
+  const tFields = ['fsm_pct', 'sen_ehcp_pct', 'sen_support_pct', 'eal_pct', 'pupils', 'stability_pct'];
   const tAvailable = tFields.filter(f => target[f] != null);
   if (tAvailable.length < 3) return []; // Need at least 3 dimensions
   

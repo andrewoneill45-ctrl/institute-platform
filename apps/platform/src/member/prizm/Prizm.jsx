@@ -23,6 +23,7 @@ const KS2_DESCS = {
   attendance: "overall and persistent absence against primary England",
   behaviour: "suspension rates and permanent exclusions (primary)",
   workforce: "teacher turnover, ratios and unfilled posts in primaries",
+  inclusion: "SEN support, EHC plans and specialist places in primaries",
   finance: "spend per pupil, reserves and deficits in primaries",
   destinations: "secondary only — KS4 leavers' destinations",
   scatter: "FSM against RWM, the scope against England's primaries",
@@ -37,8 +38,8 @@ const EXAMPLES = [
   { t: "Which authorities have the widest disadvantage gaps?", sub: "the league, ranked with England's line through it", sc: { type: "england" }, blocks: ["headlines", "league", "gap"] },
   { t: "Schools where one leaver in ten doesn't sustain a destination", sub: "the NEET risk register", sc: { type: "england", minNotsust: 10 }, blocks: ["headlines", "cohort", "destinations", "scatter"] },
   { t: "The primary picture in the north west", sub: "KS2 2024/25, the latest published", sc: { type: "region", name: "North West", phase: "primary" } },
-  { t: "London schools with no permanent exclusions", sub: "behaviour, composed in one breath", sc: { type: "region", name: "London", maxPex: 0 }, blocks: ["headlines", "cohort", "behaviour"] },
   { t: "Secondary schools in deficit — does money buy outcomes?", sub: "the 2024-25 accounts, spend set against attainment", sc: { type: "england", deficit: true }, blocks: ["headlines", "finance", "cohort"] },
+  { t: "Where do the children with the highest needs learn?", sub: "EHC plans across England, the January 2026 census", sc: { type: "england", minEhcp: 10 }, blocks: ["headlines", "inclusion", "scatter"] },
 ];
 
 /* the scope, taken apart: every piece removable on its own */
@@ -66,8 +67,10 @@ const TOKEN_DEFS = [
   ["minVac", () => "with unfilled posts"], ["maxVac", () => "no unfilled posts"],
   ["minSpend", (sc) => `spend £${sc.minSpend.toLocaleString("en-GB")}+`], ["maxSpend", (sc) => `spend under £${sc.maxSpend.toLocaleString("en-GB")}`],
   ["deficit", () => "in deficit"],
+  ["minEhcp", (sc) => `EHCP ${sc.minEhcp}%+`], ["maxEhcp", (sc) => `EHCP under ${sc.maxEhcp}%`],
+  ["senUnit", () => "with SEN units"], ["senRp", () => "with resourced provision"],
   ["noGrammar", () => "grammars set aside"],
-  ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend" }[sc.order.by] || sc.order.by}`],
+  ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend", ehcp: "EHCP" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
 ];
 function scopeTokens(sc) {
@@ -148,6 +151,7 @@ export default function Prizm() {
     (hits.regions || []).forEach((r) => c.push({ k: "r" + r.name, group: "Regions", label: r.name, tag: `${r.n} schools`, sc: { type: "region", name: r.name } }));
     hits.las.forEach((l) => c.push({ k: "l" + l.name, group: "Authorities", label: l.name, tag: `${l.n} schools`, sc: { type: "la", name: l.name } }));
     hits.trusts.forEach((t) => c.push({ k: "t" + t.name, group: "Trusts", label: t.name, tag: `${t.n} schools`, sc: { type: "trust", name: t.name } }));
+    (hits.pcons || []).forEach((p) => c.push({ k: "p" + p.name, group: "Constituencies", label: p.name, tag: `${p.n} schools`, sc: { type: "pcon", name: p.name } }));
     (hits.towns || []).forEach((t) => c.push({ k: "w" + t.name, group: "Towns", label: t.name, tag: `${t.n} schools`, sc: { type: "town", name: t.name } }));
     hits.schools.forEach((s) => c.push({ k: "s" + s.urn, group: "Schools", label: s.name, tag: s.la, sc: scope && scope.type === "urns" ? { type: "urns", urns: [...new Set([...scope.urns, String(s.urn)])] } : { type: "urns", urns: [String(s.urn)] } }));
     return c.slice(0, 8);
@@ -177,6 +181,7 @@ export default function Prizm() {
     if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
     if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
+    if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
@@ -459,7 +464,7 @@ export default function Prizm() {
               const grammarsIn = !isPrimary && !scope.noGrammar ? computed.schools.filter((s) => /grammar/i.test(s.name || "")).length : 0;
               const showToggle = !isPrimary && (scope.noGrammar || grammarsIn > 0);
               return computed.blocks.map((b) => {
-                const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce", "finance"].includes(b.type);
+                const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce", "finance", "inclusion"].includes(b.type);
                 const withToggle = showToggle && ranked && !togglePlaced && (togglePlaced = true);
                 return (
                   <div key={b.type} className="pz-blockwrap">

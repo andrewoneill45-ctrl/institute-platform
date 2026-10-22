@@ -67,6 +67,19 @@
       "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to £1,000s at source."
     },
     {
+      "key": "send",
+      "name": "Special educational needs in England (EHC plans, SEN support, units and resourced provision)",
+      "publisher": "Department for Education",
+      "route": "release-zip",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/special-educational-needs-in-england",
+      "apiDataSetId": null,
+      "cadence": "Annual, from the January census (published the following June)",
+      "lastVersion": "2025/26 (January 2026 census; published 30 June 2026)",
+      "lastPulled": "2026-10-22",
+      "output": "apps/platform/public/data/schools.json (sen_* fields, plus pcon constituency)",
+      "notes": "The release's school-level underlying data file: pupils with an EHC plan and on SEN support, primary need by school, SEN unit and resourced provision flags. The same file carries each school's parliamentary constituency (2024 boundaries), which feeds the pcon scope. Pulled by hand via browser."
+    },
+    {
       "key": "ofsted",
       "name": "Ofsted inspection outcomes (management information)",
       "publisher": "Ofsted",

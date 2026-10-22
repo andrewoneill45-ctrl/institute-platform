@@ -6,12 +6,12 @@ export const FIELDS = {
   a8_nondisadv: ["Non-disadvantaged Attainment 8", 1], a8_2019: ["Attainment 8 (2019)", 1],
   a8_prev: ["Attainment 8 (previous year)", 1], p8_prev: ["Progress 8 (last published)", 2],
   basics_94: ["Basics 9-4 En&Ma %", 1], basics_95: ["Basics 9-5 En&Ma %", 1],
-  fsm_pct: ["FSM6 %", 1], eal_pct: ["EAL %", 1], sen_ehcp_ws_pct: ["EHCP %", 1], sen_k_ws_pct: ["SEN Support %", 1],
+  fsm_pct: ["FSM6 %", 1], eal_pct: ["EAL %", 1], sen_ehcp_pct: ["EHCP %", 1], sen_support_pct: ["SEN Support %", 1],
   abs_overall_pct: ["Overall absence %", 1], abs_persistent_pct: ["Persistent absence %", 1],
   abs_severe_pct: ["Severe absence %", 2], susp_rate: ["Suspensions per 100", 1],
   susp_one_plus_pct: ["Pupils suspended 1+ %", 1], permex_rate: ["Permanent exclusions per 100", 2],
-  ptr: ["Pupils per teacher", 1], teachers_fte: ["Teachers (FTE)", 1],
-  vac_rate: ["Teacher vacancy rate", 1], turn_retained_pct: ["Teacher retention %", 1],
+  wf_ptr: ["Pupils per teacher", 1], wf_teachers_fte: ["Teachers (FTE)", 1],
+  wf_vac_rate: ["Teacher vacancy rate", 1], wf_turnover_pct: ["Teacher turnover %", 1],
   dest_sustained: ["Sustained destination %", 1], dest_edu: ["Sustained education %", 1],
   dest_appren: ["Apprenticeship %", 1], dest_work: ["Sustained employment %", 1],
   dest_notsust: ["Destination not sustained %", 1],
@@ -118,12 +118,12 @@ export function runBlock(block, data) {
 
 
 export const RELATED = {
-  turn_retained_pct: ["vac_rate", "ptr"], vac_rate: ["turn_retained_pct", "ptr"], ptr: ["turn_retained_pct", "vac_rate"],
+  wf_turnover_pct: ["wf_vac_rate", "wf_ptr"], wf_vac_rate: ["wf_turnover_pct", "wf_ptr"], wf_ptr: ["wf_turnover_pct", "wf_vac_rate"],
   abs_overall_pct: ["abs_persistent_pct", "susp_rate"], abs_persistent_pct: ["abs_severe_pct", "susp_rate"],
   abs_severe_pct: ["abs_persistent_pct", "susp_rate"], susp_rate: ["abs_persistent_pct", "susp_one_plus_pct"],
   attainment8: ["a8_disadv", "abs_persistent_pct"], basics_94: ["attainment8", "abs_persistent_pct"],
   dest_sustained: ["dest_notsust", "attainment8"], dest_notsust: ["dest_sustained", "abs_persistent_pct"],
-  sen_k_ws_pct: ["sen_ehcp_ws_pct", "abs_persistent_pct"], eal_pct: ["fsm_pct", "attainment8"],
+  sen_support_pct: ["sen_ehcp_pct", "abs_persistent_pct"], eal_pct: ["fsm_pct", "attainment8"],
 };
 
 export function insightFor(block, res) {
@@ -166,10 +166,10 @@ export function localPlan(q) {
   const metric = pick([
     ["persistent", "abs_persistent_pct"], ["severe", "abs_severe_pct"], ["absen", "abs_overall_pct"], ["attend", "abs_overall_pct"],
     ["suspen", "susp_rate"], ["permanent exclu", "permex_rate"], ["exclu", "susp_rate"],
-    ["retention", "turn_retained_pct"], ["retain", "turn_retained_pct"], ["turnover", "turn_retained_pct"],
-    ["vacanc", "vac_rate"], ["pupil-teacher", "ptr"], ["pupils per teacher", "ptr"], ["staffing", "ptr"], ["teacher", "turn_retained_pct"],
+    ["retention", "wf_turnover_pct"], ["retain", "wf_turnover_pct"], ["turnover", "wf_turnover_pct"],
+    ["vacanc", "wf_vac_rate"], ["pupil-teacher", "wf_ptr"], ["pupils per teacher", "wf_ptr"], ["staffing", "wf_ptr"], ["teacher", "wf_turnover_pct"],
     ["destination", "dest_sustained"], ["neet", "dest_notsust"], ["apprentice", "dest_appren"],
-    ["basics", "basics_94"], ["progress", "p8_prev"], ["ehcp", "sen_ehcp_ws_pct"], ["send", "sen_k_ws_pct"], ["sen", "sen_k_ws_pct"], ["eal", "eal_pct"],
+    ["basics", "basics_94"], ["progress", "p8_prev"], ["ehcp", "sen_ehcp_pct"], ["send", "sen_support_pct"], ["sen", "sen_support_pct"], ["eal", "eal_pct"],
     ["attainment", "attainment8"], ["a8", "attainment8"],
   ], null);
   const MISSING = [["financ","school finance"],["fund","funding"],["budget","budgets"],["spend","spending"],["money","school finance"],["salar","pay"],[" pay","pay"],["admission","admissions"],["ehe","home education"],["home educ","home education"],["mobility","pupil movement"],["stability","pupil movement"]];
@@ -177,7 +177,7 @@ export function localPlan(q) {
   if (!metric && !/recover|2019|pandemic/.test(ql)) {
     const topic = miss ? miss[1] : "that";
     return { source: "local", coverage: "miss",
-      answer: `The Institute dataset does not yet carry ${topic}${miss && miss[1]==="school finance" ? " (the financial benchmarking layer is queued)" : ""}. It does hold attainment and progress, disadvantage and SEN, absence and suspensions, teacher numbers, retention and vacancies, and KS4 destinations, for 26,553 schools. Ask within those and Prism will answer with evidence rather than improvisation.`,
+      answer: `The Institute dataset does not yet carry ${topic}. It does hold attainment and progress, disadvantage and SEN, absence and suspensions, teacher numbers, retention and vacancies, and KS4 destinations, for 26,553 schools. Ask within those and Prism will answer with evidence rather than improvisation.`,
       blocks: [],
       followups: ["Teacher retention by region", "Who is actually in the room?", "Rank schools by severe absence", "How have schools recovered since 2019?"] };
   }

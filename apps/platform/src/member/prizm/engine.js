@@ -81,6 +81,10 @@ function applyFilters(out, scope) {
   if (scope.minSpend != null) out = out.filter((s) => num(s.fin_spend_pp) != null && s.fin_spend_pp >= scope.minSpend);
   if (scope.maxSpend != null) out = out.filter((s) => num(s.fin_spend_pp) != null && s.fin_spend_pp <= scope.maxSpend);
   if (scope.deficit) out = out.filter((s) => num(s.fin_reserve_pp) != null && s.fin_reserve_pp < 0);
+  if (scope.minEhcp != null) out = out.filter((s) => num(s.sen_ehcp_pct) != null && s.sen_ehcp_pct >= scope.minEhcp);
+  if (scope.maxEhcp != null) out = out.filter((s) => num(s.sen_ehcp_pct) != null && s.sen_ehcp_pct <= scope.maxEhcp);
+  if (scope.senUnit) out = out.filter((s) => s.sen_unit === true);
+  if (scope.senRp) out = out.filter((s) => s.sen_rp === true);
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -97,8 +101,8 @@ function applyFilters(out, scope) {
   if (scope.minNotsust != null) out = out.filter((s) => num(s.dest_notsust) != null && s.dest_notsust >= scope.minNotsust);
   if (scope.order && scope.order.by) {
     const key = (PRI
-      ? { a8: (s) => num(s.ks2_rwm_exp) ?? -99, rwm: (s) => num(s.ks2_rwm_exp) ?? -99, reading: (s) => num(s.ks2_read_avg) ?? -99, improvement: (s) => pdrift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1 }
-      : { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1 })[scope.order.by];
+      ? { a8: (s) => num(s.ks2_rwm_exp) ?? -99, rwm: (s) => num(s.ks2_rwm_exp) ?? -99, reading: (s) => num(s.ks2_read_avg) ?? -99, improvement: (s) => pdrift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1, ehcp: (s) => num(s.sen_ehcp_pct) ?? -1 }
+      : { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1, ehcp: (s) => num(s.sen_ehcp_pct) ?? -1 })[scope.order.by];
     if (key) {
       out = [...out].sort((a, b) => key(b) - key(a));
       if (scope.order.limit) out = out.slice(0, scope.order.limit);
@@ -128,6 +132,9 @@ export function resolveScope(all, scope) {
   } else if (scope.type === "town" && scope.name) {
     const t = scope.name.trim().toLowerCase();
     out = sec.filter((s) => (s.town || "").trim().toLowerCase() === t);
+  } else if (scope.type === "pcon" && scope.name) {
+    const p = scope.name.trim().toLowerCase();
+    out = sec.filter((s) => (s.pcon || "").trim().toLowerCase() === p);
   } else if (scope.type === "urns" && Array.isArray(scope.urns)) {
     const set = new Set(scope.urns.map(String));
     out = sec.filter((s) => set.has(String(s.urn)));
@@ -168,8 +175,10 @@ export function scopeLabel(scope, n) {
     scope.minVac != null ? "with unfilled posts" : null, scope.maxVac === 0 ? "no unfilled posts" : null,
     scope.minSpend != null ? `spend £${scope.minSpend.toLocaleString("en-GB")}+ per pupil` : null, scope.maxSpend != null ? `spend under £${scope.maxSpend.toLocaleString("en-GB")}` : null,
     scope.deficit ? "in deficit" : null,
+    scope.minEhcp != null ? `EHCP ${scope.minEhcp}%+` : null, scope.maxEhcp != null ? `EHCP under ${scope.maxEhcp}%` : null,
+    scope.senUnit ? "with SEN units" : null, scope.senRp ? "with resourced provision" : null,
   ].filter(Boolean);
-  const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend per pupil" }[scope.order.by] : null;
+  const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend per pupil", ehcp: "EHC plan share" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
   const pre = bits.join(" ");
   const vs = scope.versus && scope.versus.type ? ` vs ${scopeShort(scope.versus)}` : "";
@@ -178,6 +187,7 @@ export function scopeLabel(scope, n) {
   if (scope.type === "la") return wrap(scope.name);
   if (scope.type === "region") return wrap(scope.name);
   if (scope.type === "town") return wrap(scope.name);
+  if (scope.type === "pcon") return wrap(scope.name);
   if (scope.type === "england") return wrap("England");
   if (scope.type === "catholicLa") return "Catholic schools · " + scope.las.join(", ") + c;
   if (scope.type === "urns") return pre ? wrap("selected schools") : "Selected schools" + c;
@@ -295,6 +305,12 @@ export function parseQuery(raw) {
   eat(/\bptr (under|below) (\d{1,2})\b/, (m) => { f.maxPtr = +m[2]; });
   eat(/\b(with|carrying) (teacher )?vacanc(y|ies)\b/, () => { f.minVac = 0.01; });
   eat(/\b(no|without) (teacher )?vacanc(y|ies)\b/, () => { f.maxVac = 0; });
+  /* inclusion */
+  eat(/\behcp? (?:share |rate )?(over|above|at least) (\d{1,2}(?:\.\d)?)\s*%?/, (m) => { f.minEhcp = +m[2]; });
+  eat(/\behcp? (?:share |rate )?(under|below) (\d{1,2}(?:\.\d)?)\s*%?/, (m) => { f.maxEhcp = +m[2]; });
+  eat(/\b(high ehcp|high(est)? needs?)\b/, () => { f.minEhcp = f.minEhcp ?? 6; });
+  eat(/\bwith (a |an )?sen units?\b/, () => { f.senUnit = true; });
+  eat(/\bwith (a |an )?(resourced provisions?|rps?)\b/, () => { f.senRp = true; });
   /* finance */
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(over|above|at least) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.minSpend = +m[2].replace(/,/g, ""); });
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(under|below) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.maxSpend = +m[2].replace(/,/g, ""); });
@@ -329,7 +345,7 @@ function placeNames(all) {
   if (PLACE_CACHE.has(all)) return PLACE_CACHE.get(all);
   const sec = secondaries(all);
   const grab = (k) => { const m = {}; sec.forEach((s) => { if (s[k]) m[s[k]] = (m[s[k]] || 0) + 1; }); return m; };
-  const v = { region: grab("region"), la: grab("la"), town: grab("town") };
+  const v = { region: grab("region"), la: grab("la"), town: grab("town"), pcon: grab("pcon") };
   PLACE_CACHE.set(all, v);
   return v;
 }
@@ -338,7 +354,7 @@ function fuzzyPlaces(all, rest) {
   if (!qt.length) return [];
   const names = placeNames(all);
   const out = [];
-  for (const kind of ["region", "la", "town"]) {
+  for (const kind of ["region", "la", "town", "pcon"]) {
     for (const [name, n] of Object.entries(names[kind])) {
       const nt = toks(name);
       if (!nt.length) continue;
@@ -354,6 +370,7 @@ function bestScope(res) {
   if (res.composed && res.composed.length) return res.composed[0].sc;
   if (res.regions.length) return { type: "region", name: res.regions[0].name };
   if (res.las.length) return { type: "la", name: res.las[0].name };
+  if (res.pcons && res.pcons.length) return { type: "pcon", name: res.pcons[0].name };
   if (res.towns && res.towns.length) return { type: "town", name: res.towns[0].name };
   if (res.trusts.length) return { type: "trust", name: res.trusts[0].name };
   return null;
@@ -361,7 +378,7 @@ function bestScope(res) {
 
 export function searchEntities(all, q) {
   const raw = (q || "").trim().toLowerCase();
-  if (raw.length < 2) return { trusts: [], las: [], regions: [], schools: [], composed: [] };
+  if (raw.length < 2) return { trusts: [], las: [], regions: [], towns: [], pcons: [], schools: [], composed: [] };
   /* "A vs B", "A against B": two scopes, one report */
   const VS = /\s+(?:vs\.?|versus|against|compared (?:to|with))\s+/;
   if (VS.test(raw)) {
@@ -386,7 +403,7 @@ export function searchEntities(all, q) {
   const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
   const pass = (needle) => {
     const qTokens = toks(needle);
-    const trusts = {}, las = {}, regions = {}, towns = {};
+    const trusts = {}, las = {}, regions = {}, towns = {}, pcons = {};
     const schools = [];
     const add = (m, name, sc) => { const e = m[name] || (m[name] = { n: 0, sc }); e.n++; };
     if (needle.length >= 2) for (const s of sec) {
@@ -395,9 +412,10 @@ export function searchEntities(all, q) {
       if (s.la && (sc = matchScore(s.la, needle, qTokens))) add(las, s.la, sc);
       if (s.region && (sc = matchScore(s.region, needle, qTokens))) add(regions, s.region, sc);
       if (s.town && s.town !== s.la && (sc = matchScore(s.town, needle, qTokens))) add(towns, s.town, sc);
+      if (s.pcon && s.pcon !== s.la && s.pcon !== s.town && (sc = matchScore(s.pcon, needle, qTokens))) add(pcons, s.pcon, sc);
       if ((s.name || "").toLowerCase().includes(needle) && schools.length < 8) schools.push({ urn: s.urn, name: s.name, la: s.la });
     }
-    return { trusts: top(trusts), las: top(las), regions: top(regions), towns: top(towns), schools };
+    return { trusts: top(trusts), las: top(las), regions: top(regions), towns: top(towns), pcons: top(pcons), schools };
   };
   /* plain entities always match the query as typed - names may contain the
      filter words ("All Saints Catholic College") */
@@ -406,6 +424,7 @@ export function searchEntities(all, q) {
   let bases = [
     ...baseHits.regions.slice(0, 2).map((r) => ({ type: "region", name: r.name })),
     ...baseHits.las.slice(0, 2).map((l) => ({ type: "la", name: l.name })),
+    ...(baseHits.pcons || []).slice(0, 1).map((p) => ({ type: "pcon", name: p.name })),
     ...(baseHits.towns || []).slice(0, 1).map((t) => ({ type: "town", name: t.name })),
     ...baseHits.trusts.slice(0, 1).map((t) => ({ type: "trust", name: t.name })),
   ];
@@ -413,7 +432,7 @@ export function searchEntities(all, q) {
   if (!bases.length && !out.schools.length) {
     const fz = fuzzyPlaces(all, hasF ? rest : raw);
     bases = fz.map((p) => ({ type: p.kind, name: p.name }));
-    if (!hasF) fz.forEach((p) => { const list = p.kind === "region" ? out.regions : p.kind === "la" ? out.las : out.towns; if (!list.some((x) => x.name === p.name)) list.push({ name: p.name, n: p.n }); });
+    if (!hasF) fz.forEach((p) => { const list = p.kind === "region" ? out.regions : p.kind === "la" ? out.las : p.kind === "pcon" ? (out.pcons = out.pcons || []) : out.towns; if (!list.some((x) => x.name === p.name)) list.push({ name: p.name, n: p.n }); });
   }
   if (hasF) {
     if (!bases.length) bases.push({ type: "england" });
@@ -460,6 +479,8 @@ export function benchmarks(all) {
     vacMean: r1(mean(ptake((s) => num(s.wf_vac_rate)))),
     sickDaysMed: r1(med(ptake((s) => num(s.wf_sick_days)))),
     payMed: r1(med(ptake((s) => num(s.wf_pay_mean)))),
+    ehcpMed: r1(med(ptake((s) => num(s.sen_ehcp_pct)))),
+    senSupMed: r1(med(ptake((s) => num(s.sen_support_pct)))),
     spendMed: r0(med(ptake((s) => num(s.fin_spend_pp)))),
     incomeMed: r0(med(ptake((s) => num(s.fin_income_pp)))),
     teachPpMed: r0(med(ptake((s) => num(s.fin_teach_pp)))),
@@ -487,6 +508,8 @@ export function benchmarks(all) {
     vacMean: r1(mean(take((s) => num(s.wf_vac_rate)))),
     sickDaysMed: r1(med(take((s) => num(s.wf_sick_days)))),
     payMed: r1(med(take((s) => num(s.wf_pay_mean)))),
+    ehcpMed: r1(med(take((s) => num(s.sen_ehcp_pct)))),
+    senSupMed: r1(med(take((s) => num(s.sen_support_pct)))),
     spendMed: r0(med(take((s) => num(s.fin_spend_pp)))),
     incomeMed: r0(med(take((s) => num(s.fin_income_pp)))),
     teachPpMed: r0(med(take((s) => num(s.fin_teach_pp)))),
@@ -503,6 +526,7 @@ export const BLOCK_TYPES = [
   { type: "cohort", name: "The cohort", desc: "every school in scope, headline by headline" },
   { type: "movement", name: "Movement", desc: "this year against last, school by school" },
   { type: "gap", name: "The disadvantage gap", desc: "disadvantaged and other pupils, side by side" },
+  { type: "inclusion", name: "Inclusion", desc: "SEN support, EHC plans, units and resourced provision against England" },
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
@@ -647,6 +671,28 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
       ptrMean: r1(mean(rows.map((r) => r.ptr).filter((v) => v != null))),
       vacCount: rows.filter((r) => r.vac != null && r.vac > 0).length,
       bench,
+    };
+  }
+  if (type === "inclusion") {
+    /* who teaches the children with the highest needs; both phases */
+    const outcome = PRI ? (s) => num(s.ks2_rwm_exp) : (s) => num(s.attainment8);
+    const rows = schools.filter((s) => num(s.sen_ehcp_pct) != null)
+      .map((s) => ({ urn: s.urn, name: s.name, sup: num(s.sen_support_pct), ehcp: num(s.sen_ehcp_pct), ehcpN: num(s.sen_ehcp_n), top: s.sen_top_need || null, unit: s.sen_unit === true, rp: s.sen_rp === true, unitN: num(s.sen_unit_pupils), rpN: num(s.sen_rp_pupils) }))
+      .sort((a, b) => (b.ehcp ?? -1) - (a.ehcp ?? -1));
+    const needs = {};
+    rows.forEach((r) => { if (r.top) needs[r.top] = (needs[r.top] || 0) + 1; });
+    const topNeeds = Object.entries(needs).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([need, n]) => ({ need, n }));
+    const nat = estate().filter((s) => num(s.sen_ehcp_pct) != null && outcome(s) != null);
+    const step = Math.max(1, Math.floor(nat.length / 1400));
+    const cloud = nat.filter((_, i) => i % step === 0).map((s) => [r1(s.sen_ehcp_pct), r1(outcome(s))]);
+    const marks = schools.filter((s) => num(s.sen_ehcp_pct) != null && outcome(s) != null)
+      .map((s) => ({ urn: s.urn, name: s.name, ehcp: r1(s.sen_ehcp_pct), y: r1(outcome(s)) }));
+    return {
+      kind: PRI ? "ks2" : "ks4", rows,
+      ehcpMean: r1(mean(rows.map((r) => r.ehcp).filter((v) => v != null))),
+      supMean: r1(mean(rows.map((r) => r.sup).filter((v) => v != null))),
+      units: rows.filter((r) => r.unit).length, rps: rows.filter((r) => r.rp).length,
+      topNeeds, cloud, marks, bench,
     };
   }
   if (type === "finance") {

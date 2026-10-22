@@ -400,6 +400,52 @@ function workforceHtml(d, ctx) {
     columnsSvg({ rows: shown, min: 0, max: Math.min(80, Math.ceil((hi + 4) / 10) * 10), unit: "%", refs: [{ v: d.bench.turnMed, label: "England", color: "var(--nat)" }, { v: d.turnMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
 }
 
+function inclusionHtml(d, ctx) {
+  if (!d.rows.length) return "";
+  const KS2 = d.kind === "ks2";
+  const LBL = (ctx && ctx.labels) || {};
+  const vsLine = ctx && ctx.vs && ctx.vs.ehcpMean != null ? ` ${esc(LBL.b || "The comparison")} averages ${f1(ctx.vs.ehcpMean)}%.` : "";
+  const { rows: shown, capped } = capRows(d.rows.filter((r) => r.ehcp != null).map((r) => ({
+    label: r.name, v: r.ehcp, urn: r.urn,
+    tipLines: [r.name, `EHC plans ${f1(r.ehcp)}% (${r.ehcpN ?? "–"} pupils) · SEN support ${f1(r.sup)}%`, r.top ? `Most common need: ${r.top}` : "", r.unit || r.rp ? [r.unit ? `SEN unit${r.unitN ? ` (${r.unitN} pupils)` : ""}` : "", r.rp ? `resourced provision${r.rpN ? ` (${r.rpN} pupils)` : ""}` : ""].filter(Boolean).join(" · ") : ""].filter(Boolean),
+  })));
+  if (!shown.length) return "";
+  const hi = Math.max(...d.rows.map((r) => r.ehcp ?? 0));
+  const headline = `EHC plans average ${f1(d.ehcpMean)}% of pupils against England's median ${f1(d.bench.ehcpMed)}%, with SEN support at ${f1(d.supMean)}%; ${d.units} school${d.units === 1 ? " runs" : "s run"} a SEN unit and ${d.rps} ${d.rps === 1 ? "has" : "have"} resourced provision.${vsLine}`;
+  const cols = columnsSvg({ rows: shown, min: 0, max: Math.min(60, Math.ceil((hi + 2) / 5) * 5), unit: "%", dp: 1, refs: [{ v: d.bench.ehcpMed, label: "England", color: "var(--nat)" }, ...(d.ehcpMean != null ? [{ v: d.ehcpMean, label: "Scope", color: "var(--gold)" }] : [])] });
+
+  const needsHtml = d.topNeeds && d.topNeeds.length ? `<p class="pz-note" style="margin:16px 0 0">The most common primary need, school by school: ${d.topNeeds.map((t) => `${esc(t.need)} in ${t.n}`).join("; ")}.</p>` : "";
+
+  /* inclusion against outcomes: the question the system is arguing about */
+  let scat = "";
+  if (d.marks.length && d.cloud.length) {
+    const TOP = KS2 ? 100 : 80, MEASURE = KS2 ? "RWM expected standard" : "Attainment 8", PHASE = KS2 ? "primary" : "secondary";
+    const W = 1000, H = 420, L = 54, B = 44, XMAX = 15;
+    const x = (v) => L + (Math.max(0, Math.min(XMAX, v)) / XMAX) * (W - L - 20);
+    const y = (a) => (H - B) - (Math.max(0, Math.min(TOP, a)) / TOP) * (H - B - 20);
+    const cloud = d.cloud.map(([e, a]) => `<circle cx="${x(e).toFixed(1)}" cy="${y(a).toFixed(1)}" r="2" fill="var(--slo)"/>`).join("");
+    const vsMarks = ctx && ctx.vs ? ctx.vs.marks : null;
+    const dot = (m, color) => `<circle cx="${x(m.ehcp).toFixed(1)}" cy="${y(m.y).toFixed(1)}" r="5.2" fill="${color}" stroke="var(--paper)" stroke-width="1.4"${hit([m.name, `EHC plans ${f1(m.ehcp)}% · ${KS2 ? "RWM " + f0(m.y) : "A8 " + f1(m.y)}`], m.urn)}/>`;
+    const marks = (vsMarks ? vsMarks.map((m) => dot(m, "var(--gold)")).join("") : "") + d.marks.map((m) => dot(m, "var(--purple)")).join("");
+    const yTicks = KS2 ? [25, 50, 75, 100] : [20, 40, 60, 80];
+    const axes = `<line x1="${L}" y1="${H - B}" x2="${W - 20}" y2="${H - B}" stroke="var(--grid)"/><line x1="${L}" y1="20" x2="${L}" y2="${H - B}" stroke="var(--grid)"/>
+      ${[0, 5, 10, 15].map((v) => `<text class="tick" x="${x(v)}" y="${H - B + 16}" text-anchor="middle">${v}%</text>`).join("")}
+      ${yTicks.map((v) => `<text class="tick" x="${L - 8}" y="${y(v) + 3}" text-anchor="end">${v}${KS2 ? "%" : ""}</text>`).join("")}
+      <text class="tick" x="${(W + L) / 2}" y="${H - 6}" text-anchor="middle">share of pupils with an EHC plan</text>
+      <text class="tick" x="16" y="${(H - B) / 2}" transform="rotate(-90 16 ${(H - B) / 2})" text-anchor="middle">${MEASURE}</text>`;
+    scat = `<p class="pz-note" style="margin:22px 0 4px">Inclusion and outcomes together: each mark is a scope school on the national cloud; association, not causation.</p>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${axes}${cloud}${marks}</svg>` + legend(vsMarks
+      ? [["var(--purple)", LBL.a || "Scope"], ["var(--gold)", LBL.b || "Comparison"], ["var(--slo)", `Every other state-funded ${PHASE}`]]
+      : [["var(--purple)", "Scope school"], ["var(--slo)", `Every other state-funded ${PHASE}`]]);
+  }
+
+  const mark = (b) => (b ? "●" : "–");
+  const tbl = `<details class="pz-fold"><summary>Inclusion, school by school<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>SEN support</th><th>EHC plans</th><th>EHC pupils</th><th>Most common need</th><th>SEN unit</th><th>Resourced provision</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.sup)}%</td><td class="num">${f1(r.ehcp)}%</td><td class="num">${r.ehcpN ?? "–"}</td><td>${esc(r.top || "–")}</td><td class="num">${mark(r.unit)}${r.unitN ? ` ${r.unitN}` : ""}</td><td class="num">${mark(r.rp)}${r.rpN ? ` ${r.rpN}` : ""}</td></tr>`).join("")}</tbody></table></details>`;
+  return section("Inclusion", headline,
+    (capped ? `Showing the two ends of ${d.rows.length} schools. ` : "") + "The January 2026 school census: pupils with an EHC plan and on SEN support, each school's most common primary need, and specialist places. Sorted highest EHC plan share first.",
+    cols + needsHtml + scat + tbl);
+}
+
 function financeHtml(d, ctx) {
   if (!d.rows.length) return "";
   const KS2 = d.kind === "ks2";
@@ -598,6 +644,22 @@ function similarHtml(sim, pri, name) {
       ${XT.map((v) => `<text class="tick" x="${px(v)}" y="${H - 14}" text-anchor="middle">${v}${pri ? "%" : ""}</text>`).join("")}</svg>`);
 }
 
+/* inclusion on the school dash: who this school teaches, and its specialist places */
+function inclusionGroup(s, bench, n) {
+  if (n(s.sen_ehcp_pct) == null) return "";
+  const bits = [
+    s.sen_top_need ? `Most common primary need: ${esc(s.sen_top_need)}.` : "",
+    s.sen_unit ? `Runs a SEN unit${n(s.sen_unit_pupils) ? ` of ${s.sen_unit_pupils} pupils` : ""}.` : "",
+    s.sen_rp ? `Has resourced provision${n(s.sen_rp_pupils) ? ` for ${s.sen_rp_pupils} pupils` : ""}.` : "",
+  ].filter(Boolean).join(" ");
+  const note = `<p class="pz-note" style="margin-top:8px">${bits || "No specialist SEN places recorded."} January 2026 census.</p>`;
+  return mgroup("Inclusion", [
+    mrow("Pupils with an EHC plan", n(s.sen_ehcp_pct), bench.ehcpMed, 25, "%"),
+    mrow("Pupils on SEN support", n(s.sen_support_pct), bench.senSupMed, 40, "%"),
+    note,
+  ]);
+}
+
 /* the money on the school dash: per-pupil bars, reserve and balance spelt out */
 function moneyGroup(s, bench, n) {
   if (n(s.fin_spend_pp) == null) return "";
@@ -620,7 +682,7 @@ export function schoolDashHtml(d) {
   const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : (v != null && v !== "" && Number.isFinite(parseFloat(v)) ? parseFloat(v) : null));
   const drift = pri ? (n(s.ks2_rwm_exp) != null && n(s.ks2_rwm_prev) != null ? s.ks2_rwm_exp - s.ks2_rwm_prev : null)
     : (n(s.attainment8) != null && n(s.a8_prev) != null ? s.attainment8 - s.a8_prev : null);
-  const meta = [s.la, s.region, s.type, s.religiousCharacter && !/does not apply|none/i.test(s.religiousCharacter) ? s.religiousCharacter : null,
+  const meta = [s.la, s.pcon && s.pcon !== s.la ? s.pcon : null, s.region, s.type, s.religiousCharacter && !/does not apply|none/i.test(s.religiousCharacter) ? s.religiousCharacter : null,
     s.gender && s.gender !== "Mixed" ? s.gender : null, n(s.pupils) != null ? `${s.pupils} pupils` : null, s.ofstedGrade || null].filter(Boolean);
 
   const tiles = pri ? [
@@ -671,6 +733,7 @@ export function schoolDashHtml(d) {
       mrow("Vacancy rate", n(s.wf_vac_rate), bench.vacMean, 10, "%"),
       mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
     ]),
+    inclusionGroup(s, bench, n),
     moneyGroup(s, bench, n),
   ].join("") : [
     mgroup("Outcomes", [
@@ -697,6 +760,7 @@ export function schoolDashHtml(d) {
       mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
       mrow("Mean teacher pay (£000)", n(s.wf_pay_mean) != null ? n(s.wf_pay_mean) / 1000 : null, bench.payMed != null ? bench.payMed / 1000 : null, 90),
     ]),
+    inclusionGroup(s, bench, n),
     moneyGroup(s, bench, n),
   ].join("");
 
@@ -729,7 +793,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};
