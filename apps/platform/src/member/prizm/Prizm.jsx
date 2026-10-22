@@ -22,6 +22,7 @@ const KS2_DESCS = {
   gap: "disadvantaged and other pupils at the expected standard",
   attendance: "overall and persistent absence against primary England",
   behaviour: "suspension rates and permanent exclusions (primary)",
+  workforce: "teacher turnover, ratios and unfilled posts in primaries",
   destinations: "secondary only — KS4 leavers' destinations",
   scatter: "FSM against RWM, the scope against England's primaries",
   distribution: "the national RWM distribution, scope schools marked",
@@ -59,6 +60,9 @@ const TOKEN_DEFS = [
   ["minNotsust", (sc) => `not sustained ${sc.minNotsust}%+`],
   ["minRwm", (sc) => `RWM ${sc.minRwm}%+`], ["maxRwm", (sc) => `RWM under ${sc.maxRwm}%`],
   ["minRead", (sc) => `reading ${sc.minRead}+`], ["maxRead", (sc) => `reading under ${sc.maxRead}`],
+  ["minTurnover", (sc) => `turnover ${sc.minTurnover}%+`], ["maxTurnover", (sc) => `turnover under ${sc.maxTurnover}%`],
+  ["minPtr", (sc) => `PTR ${sc.minPtr}+`], ["maxPtr", (sc) => `PTR under ${sc.maxPtr}`],
+  ["minVac", () => "with unfilled posts"], ["maxVac", () => "no unfilled posts"],
   ["noGrammar", () => "grammars set aside"],
   ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
@@ -162,6 +166,7 @@ export default function Prizm() {
     if (sc.minAbs != null || sc.maxAbs != null || sc.minPA != null || sc.maxPA != null) want.push("attendance");
     if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null) want.push("behaviour");
     if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
+    if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
@@ -419,7 +424,7 @@ export default function Prizm() {
               const grammarsIn = !isPrimary && !scope.noGrammar ? computed.schools.filter((s) => /grammar/i.test(s.name || "")).length : 0;
               const showToggle = !isPrimary && (scope.noGrammar || grammarsIn > 0);
               return computed.blocks.map((b) => {
-                const ranked = ["cohort", "movement", "gap", "distribution", "league"].includes(b.type);
+                const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce"].includes(b.type);
                 const withToggle = showToggle && ranked && !togglePlaced && (togglePlaced = true);
                 return (
                   <div key={b.type} className="pz-blockwrap">

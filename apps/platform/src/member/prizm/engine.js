@@ -72,6 +72,12 @@ function applyFilters(out, scope) {
   if (scope.minDrift != null) out = out.filter((s) => dr(s) != null && dr(s) >= scope.minDrift);
   if (scope.maxDrift != null) out = out.filter((s) => dr(s) != null && dr(s) <= scope.maxDrift);
   if (scope.noGrammar) out = out.filter((s) => !TYPES.grammar.test(s));
+  if (scope.minTurnover != null) out = out.filter((s) => num(s.wf_turnover_pct) != null && s.wf_turnover_pct >= scope.minTurnover);
+  if (scope.maxTurnover != null) out = out.filter((s) => num(s.wf_turnover_pct) != null && s.wf_turnover_pct <= scope.maxTurnover);
+  if (scope.minPtr != null) out = out.filter((s) => num(s.wf_ptr) != null && s.wf_ptr >= scope.minPtr);
+  if (scope.maxPtr != null) out = out.filter((s) => num(s.wf_ptr) != null && s.wf_ptr <= scope.maxPtr);
+  if (scope.minVac != null) out = out.filter((s) => num(s.wf_vac_rate) != null && s.wf_vac_rate >= scope.minVac);
+  if (scope.maxVac != null) out = out.filter((s) => num(s.wf_vac_rate) != null && s.wf_vac_rate <= scope.maxVac);
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -154,6 +160,9 @@ export function scopeLabel(scope, n) {
     scope.minRwm != null ? `RWM ${scope.minRwm}%+` : null, scope.maxRwm != null ? `RWM under ${scope.maxRwm}%` : null,
     scope.minRead != null ? `reading ${scope.minRead}+` : null, scope.maxRead != null ? `reading under ${scope.maxRead}` : null,
     scope.noGrammar ? "grammars set aside" : null,
+    scope.minTurnover != null ? `turnover ${scope.minTurnover}%+` : null, scope.maxTurnover != null ? `turnover under ${scope.maxTurnover}%` : null,
+    scope.minPtr != null ? `PTR ${scope.minPtr}+` : null, scope.maxPtr != null ? `PTR under ${scope.maxPtr}` : null,
+    scope.minVac != null ? "with unfilled posts" : null, scope.maxVac === 0 ? "no unfilled posts" : null,
   ].filter(Boolean);
   const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
@@ -272,6 +281,15 @@ export function parseQuery(raw) {
   eat(/\b(strong|good) destinations\b/, () => { f.minDest = f.minDest ?? 95; });
   eat(/\b(weak|poor) destinations\b/, () => { f.maxDest = f.maxDest ?? 88; });
   eat(/\b(high neet|neet risk|neet)\b/, () => { f.minNotsust = f.minNotsust ?? 10; });
+  /* workforce */
+  eat(/\bturnover (over|above) (\d{1,2})\s*%?/, (m) => { f.minTurnover = +m[2]; });
+  eat(/\bturnover (under|below) (\d{1,2})\s*%?/, (m) => { f.maxTurnover = +m[2]; });
+  eat(/\bhigh (teacher )?turnover\b/, () => { f.minTurnover = f.minTurnover ?? 20; });
+  eat(/\b(low (teacher )?turnover|stable staffing|stable staff)\b/, () => { f.maxTurnover = f.maxTurnover ?? 10; });
+  eat(/\bptr (over|above) (\d{1,2})\b/, (m) => { f.minPtr = +m[2]; });
+  eat(/\bptr (under|below) (\d{1,2})\b/, (m) => { f.maxPtr = +m[2]; });
+  eat(/\b(with|carrying) (teacher )?vacanc(y|ies)\b/, () => { f.minVac = 0.01; });
+  eat(/\b(no|without) (teacher )?vacanc(y|ies)\b/, () => { f.maxVac = 0; });
   /* movement */
   eat(/\b(?:the )?(\d{1,3})? ?most improved\b/, (m) => { order = { by: "improvement", limit: m[1] ? +m[1] : 20 }; });
   eat(/\bimproving\b/, () => { f.minDrift = f.minDrift ?? 0.05; });
@@ -423,6 +441,11 @@ export function benchmarks(all) {
     paMed: r1(med(ptake((s) => num(s.abs_persistent_pct)))),
     suspMed: r1(med(ptake((s) => num(s.susp_rate)))),
     pexMean: r1(mean(ptake((s) => num(s.permex_rate)))),
+    ptrMed: r1(med(ptake((s) => num(s.wf_ptr)))),
+    turnMed: r1(med(ptake((s) => num(s.wf_turnover_pct)))),
+    vacMean: r1(mean(ptake((s) => num(s.wf_vac_rate)))),
+    sickDaysMed: r1(med(ptake((s) => num(s.wf_sick_days)))),
+    payMed: r1(med(ptake((s) => num(s.wf_pay_mean)))),
   };
   return {
     pri: priBench,
@@ -438,6 +461,11 @@ export function benchmarks(all) {
     pexMean: r1(mean(take((s) => num(s.permex_rate)))),
     destMed: r1(med(take((s) => num(s.dest_sustained)))),
     notsustMed: r1(med(take((s) => num(s.dest_notsust)))),
+    ptrMed: r1(med(take((s) => num(s.wf_ptr)))),
+    turnMed: r1(med(take((s) => num(s.wf_turnover_pct)))),
+    vacMean: r1(mean(take((s) => num(s.wf_vac_rate)))),
+    sickDaysMed: r1(med(take((s) => num(s.wf_sick_days)))),
+    payMed: r1(med(take((s) => num(s.wf_pay_mean)))),
   };
 }
 
@@ -449,6 +477,7 @@ export const BLOCK_TYPES = [
   { type: "gap", name: "The disadvantage gap", desc: "disadvantaged and other pupils, side by side" },
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
+  { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
   { type: "destinations", name: "Destinations", desc: "where leavers went, and who wasn't sustained" },
   { type: "scatter", name: "Context and outcomes", desc: "FSM against Attainment 8, the scope against England" },
   { type: "distribution", name: "Where they sit", desc: "the national Attainment 8 distribution, scope schools marked" },
@@ -578,6 +607,18 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
       .map((s) => ({ urn: s.urn, name: s.name, susp: r1(s.susp_rate), s1: r1(s.susp_one_plus_pct), pex: num(s.permex_rate) }))
       .sort((a, b) => a.susp - b.susp);
     return { rows, suspMean: r1(mean(rows.map((r) => r.susp))), pexZero: rows.filter((r) => r.pex === 0).length, bench };
+  }
+  if (type === "workforce") {
+    const rows = schools.filter((s) => num(s.wf_turnover_pct) != null || num(s.wf_ptr) != null)
+      .map((s) => ({ urn: s.urn, name: s.name, turn: r1(num(s.wf_turnover_pct)), ptr: r1(num(s.wf_ptr)), vac: r1(num(s.wf_vac_rate)), sick: r1(num(s.wf_sick_days)), pay: num(s.wf_pay_mean) != null ? Math.round(num(s.wf_pay_mean)) : null }))
+      .sort((a, b) => (b.turn ?? -1) - (a.turn ?? -1));
+    const withTurn = rows.filter((r) => r.turn != null);
+    return {
+      rows, turnMean: r1(mean(withTurn.map((r) => r.turn))),
+      ptrMean: r1(mean(rows.map((r) => r.ptr).filter((v) => v != null))),
+      vacCount: rows.filter((r) => r.vac != null && r.vac > 0).length,
+      bench,
+    };
   }
   if (type === "destinations") {
     const rows = schools.filter((s) => num(s.dest_sustained) != null)

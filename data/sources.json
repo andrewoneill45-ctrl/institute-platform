@@ -26,7 +26,7 @@
       "lastVersion": null,
       "lastPulled": null,
       "output": "apps/platform/public/data/pulse.json",
-      "notes": "National, regional and LA-level only — NOT school-level — so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
+      "notes": "National, regional and LA-level only \u2014 NOT school-level \u2014 so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
     },
     {
       "key": "gias",
@@ -39,6 +39,19 @@
       "lastPulled": null,
       "output": "data/registry/gias-latest.csv (working copy, not shipped)",
       "notes": "The canonical registry: every school's URN, status, opens, closures and successor URNs. The refresh uses it to catch converted academies (URN changes) and newly opened schools before a performance release names them."
+    },
+    {
+      "key": "workforce",
+      "name": "School workforce in England (teachers, ratios, vacancies, absence)",
+      "publisher": "Department for Education",
+      "route": "release-zip",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/school-workforce-in-england",
+      "apiDataSetId": null,
+      "cadence": "Annual, from the November census (published the following June)",
+      "lastVersion": "2025 release (Nov 2025 census; turnover and sickness to 2024/25)",
+      "lastPulled": "2026-10-22",
+      "output": "apps/platform/public/data/schools.json (wf_* fields)",
+      "notes": "School-level CSVs inside the release zip: size of workforce, pupil-teacher ratios, vacancies, sickness absence. Pulled by hand via browser; the tripwire watches for an API id."
     },
     {
       "key": "ofsted",

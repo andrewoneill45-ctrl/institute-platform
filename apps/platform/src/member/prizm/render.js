@@ -384,6 +384,22 @@ function behaviourHtml(d, ctx) {
     columnsSvg({ rows: shown, min: 0, max: Math.ceil((hi + 3) / 10) * 10, refs: [{ v: d.bench.suspMed, label: "England", color: "var(--nat)" }] }));
 }
 
+function workforceHtml(d, ctx) {
+  if (!d.rows.length) return "";
+  const vsLine = ctx && ctx.vs && ctx.vs.turnMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}'s turnover averages ${f1(ctx.vs.turnMean)}%.` : "";
+  const { rows: shown, capped } = capRows(d.rows.filter((r) => r.turn != null).map((r) => ({
+    label: r.name, v: r.turn, urn: r.urn,
+    tipLines: [r.name, `Teacher turnover ${f1(r.turn)}%`, `PTR ${f1(r.ptr)} · vacancy rate ${f1(r.vac)}% · ${r.pay != null ? "mean pay £" + r.pay.toLocaleString("en-GB") : "pay withheld"}`],
+  })));
+  if (!shown.length) return "";
+  const hi = Math.max(...d.rows.map((r) => r.turn ?? 0));
+  const headline = `Teacher turnover averages ${f1(d.turnMean)}% against England's median ${f1(d.bench.turnMed)}%, and ${d.vacCount} of ${d.rows.length} schools carried unfilled posts in the November census.${vsLine}`;
+  const tbl = `<details class="pz-fold"><summary>The workforce, school by school<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Turnover</th><th>PTR</th><th>Vacancy rate</th><th>Sick days / teacher</th><th>Mean pay</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.turn)}%</td><td class="num">${f1(r.ptr)}</td><td class="num">${f1(r.vac)}%</td><td class="num">${f1(r.sick)}</td><td class="num">${r.pay != null ? "£" + r.pay.toLocaleString("en-GB") : "–"}</td></tr>`).join("")}</tbody></table></details>`;
+  return section("The workforce", headline,
+    (capped ? `Showing the two ends of ${d.rows.length} schools. ` : "") + "Sorted highest turnover first: the share of teachers who left their school between the last two censuses. Ratios, vacancies and pay in the tooltips and the table.",
+    columnsSvg({ rows: shown, min: 0, max: Math.min(80, Math.ceil((hi + 4) / 10) * 10), unit: "%", refs: [{ v: d.bench.turnMed, label: "England", color: "var(--nat)" }, { v: d.turnMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
+}
+
 function destinationsHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.destMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")} sustains ${f1(ctx.vs.destMean)}%.` : "";
@@ -540,6 +556,12 @@ export function schoolDashHtml(d) {
       mrow("Persistent absence", n(s.abs_persistent_pct), bench.paMed, 60, "%"),
       mrow("Suspensions per 100", n(s.susp_rate), bench.suspMed, Math.max(25, (n(s.susp_rate) || 0) + 5), "", 1),
     ]),
+    mgroup("The workforce", [
+      mrow("Teacher turnover", n(s.wf_turnover_pct), bench.turnMed, 60, "%"),
+      mrow("Pupil-teacher ratio", n(s.wf_ptr), bench.ptrMed, 35),
+      mrow("Vacancy rate", n(s.wf_vac_rate), bench.vacMean, 10, "%"),
+      mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
+    ]),
   ].join("") : [
     mgroup("Outcomes", [
       mrow("Attainment 8", n(s.attainment8), bench.a8Med, 90),
@@ -557,6 +579,13 @@ export function schoolDashHtml(d) {
       mrow("Severe absence", n(s.abs_severe_pct), null, 25, "%"),
       mrow("Suspensions per 100", n(s.susp_rate), bench.suspMed, Math.max(40, (n(s.susp_rate) || 0) + 5), "", 1),
       mrow("Permanent exclusion rate", n(s.permex_rate), bench.pexMean, 2, "", 1),
+    ]),
+    mgroup("The workforce", [
+      mrow("Teacher turnover", n(s.wf_turnover_pct), bench.turnMed, 60, "%"),
+      mrow("Pupil-teacher ratio", n(s.wf_ptr), bench.ptrMed, 30),
+      mrow("Vacancy rate", n(s.wf_vac_rate), bench.vacMean, 10, "%"),
+      mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
+      mrow("Mean teacher pay (£000)", n(s.wf_pay_mean) != null ? n(s.wf_pay_mean) / 1000 : null, bench.payMed != null ? bench.payMed / 1000 : null, 90),
     ]),
   ].join("");
 
@@ -587,7 +616,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};
