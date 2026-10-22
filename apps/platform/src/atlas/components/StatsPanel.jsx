@@ -9,7 +9,7 @@ const p10 = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x
 const p90 = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length * 0.9)]; };
 const pctAbove = (a, v) => a.length ? Math.round(a.filter(x => x > v).length / a.length * 100) : null;
 
-const PHASE_COLORS = { Primary: '#6A0CA0', Secondary: '#b91c4a', Special: '#5b3fa0', 'All-through': '#2F7A39' };
+const PHASE_COLORS = { Primary: '#6A0CA0', Secondary: '#3E5F8A', Special: '#B3532A', 'All-through': '#C6A035' };
 const OFSTED_COLORS = { Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' };
 
 const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
@@ -214,7 +214,7 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
               <StatStrip data={s.p8} national={s.p8All} label="P8" dp={2} prefix />
 
               <SectionTitle>4+ English & Maths</SectionTitle>
-              <Histogram data={s.b94} national={s.b94All} bins={12} color="#b91c4a" label="4+%" />
+              <Histogram data={s.b94} national={s.b94All} bins={12} color="#3E5F8A" label="4+%" />
               <StatStrip data={s.b94} national={s.b94All} label="4+" suffix="%" />
             </>}
             {s.rwm.length > 0 && <>
@@ -238,7 +238,7 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
 
             {s.sen.length > 0 && <>
               <SectionTitle>SEN % Distribution</SectionTitle>
-              <Histogram data={s.sen} national={s.senAll} bins={12} color="#5b3fa0" label="SEN%" />
+              <Histogram data={s.sen} national={s.senAll} bins={12} color="#B3532A" label="SEN%" />
               <StatStrip data={s.sen} national={s.senAll} label="SEN" suffix="%" />
             </>}
 

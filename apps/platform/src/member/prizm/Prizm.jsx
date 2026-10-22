@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDataset, getDatasetCore } from "../../lib/dataset.js";
+import { getDataset, getDatasetCore, getEarly } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary } from "./engine.js";
@@ -134,7 +134,7 @@ export default function Prizm() {
   useEffect(() => {
     getDatasetCore().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted)));
     getDataset().then(() => setFull(true));
-    fetch("/data/early.json").then((r) => r.json()).then(setEarly).catch(() => setEarly({}));
+    getEarly().then(setEarly);
   }, []);
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);

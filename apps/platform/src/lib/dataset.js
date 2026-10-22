@@ -88,6 +88,13 @@ export function getDatasetCore() {
   return corePromise;
 }
 
+/* the early-years layer (authority level): small, cached, shared */
+let earlyPromise = null;
+export function getEarly() {
+  if (!earlyPromise) earlyPromise = fetch("/data/early.json" + V()).then((r) => r.json()).catch(() => ({}));
+  return earlyPromise;
+}
+
 export function getDataset() {
   if (!fullPromise) {
     fullPromise = loadFull().catch((e) => {

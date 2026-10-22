@@ -11,3 +11,6 @@ data/registry/gias-latest.csv
 # served dataset split: generated from schools.json at build (data/pipeline/split.mjs)
 apps/platform/public/data/schools-core.json
 apps/platform/public/data/schools-detail.json
+
+# parallel-session scratch, never committed
+.stm-tmp/

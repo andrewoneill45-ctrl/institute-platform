@@ -14,7 +14,9 @@ import { getDataset, getDatasetCore, datasetProgress } from '../lib/dataset.js';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.your_token_here';
 const REDUCE = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MAP_STYLES = { light: 'mapbox://styles/mapbox/light-v11', dark: 'mapbox://styles/mapbox/dark-v11', satellite: 'mapbox://styles/mapbox/satellite-streets-v12' };
-const PHASE_COLORS = { Primary: '#2672c0', Secondary: '#b91c4a', Special: '#5b3fa0', Nursery: '#64748b', 'All-through': '#0d7a42', '16 plus': '#64748b' };
+/* the house on a map: purple for primaries, navy for secondaries, rust for
+   special, gold for all-through — Atlas speaks the same palette as every room */
+const PHASE_COLORS = { Primary: '#6A0CA0', Secondary: '#3E5F8A', Special: '#B3532A', Nursery: '#A79FB5', 'All-through': '#C6A035', '16 plus': '#A79FB5' };
 
 let _schoolsData = null, _schoolsByUrn = {}, _decileArrays = {};
 
@@ -52,30 +54,30 @@ const HoverCard = ({ school, onViewProfile }) => {
   const s = school;
   const isSec = s.phase === 'Secondary' || s.phase === 'All-through';
   const isPri = s.phase === 'Primary';
-  const oC = { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' };
+  const oC = { Outstanding: '#4B0875', Good: '#6A0CA0', 'Requires improvement': '#C6A035', Inadequate: '#B4475A' };
 
   const truncStyle = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
   return (
-    <div style={{ fontFamily: "'Source Sans 3', sans-serif" }}>
-      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', lineHeight: 1.25, marginBottom: 4, ...truncStyle }}>{s.name}</div>
+    <div style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#221233', lineHeight: 1.25, marginBottom: 4, ...truncStyle }}>{s.name}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: PHASE_COLORS[s.phase] || '#64748b', color: 'white' }}>{s.phase}</span>
+        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: PHASE_COLORS[s.phase] || '#6F6580', color: 'white' }}>{s.phase}</span>
         {s.ofsted && s.ofsted !== 'Not inspected' && (
-          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: oC[s.ofsted] || '#94a3b8', color: 'white' }}>{s.ofsted}</span>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: oC[s.ofsted] || '#A79FB5', color: 'white' }}>{s.ofsted}</span>
         )}
       </div>
       <div style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.5 }}>
         {s.la && <div style={truncStyle}>{s.la}{s.town && s.town !== s.la ? ` · ${s.town}` : ''}</div>}
-        <div style={{ color: '#94a3b8', fontSize: '0.7rem', ...truncStyle }}>{s.type}</div>
+        <div style={{ color: '#A79FB5', fontSize: '0.7rem', ...truncStyle }}>{s.type}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '3px 12px', marginTop: 7, paddingTop: 7, borderTop: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '3px 12px', marginTop: 7, paddingTop: 7, borderTop: '1px solid #EAE4F1' }}>
         {s.pupils != null && <HM label="Pupils" value={s.pupils.toLocaleString()} />}
         {s.fsm_pct != null && <HM label="FSM" value={s.fsm_pct + '%'} />}
       </div>
 
       {s.ofsted_qoe && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '2px 10px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '2px 10px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #EAE4F1' }}>
           <OJ label="Quality of Ed" grade={s.ofsted_qoe} />
           <OJ label="Behaviour" grade={s.ofsted_behaviour} />
           <OJ label="Personal Dev" grade={s.ofsted_personal_dev} />
@@ -84,7 +86,7 @@ const HoverCard = ({ school, onViewProfile }) => {
       )}
 
       {isSec && (s.attainment8 != null || s.p8_prev != null) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 12px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 12px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #EAE4F1' }}>
           {s.attainment8 != null && <HM label="Attainment 8" value={s.attainment8.toFixed(1)} color={decileColor(quickDecile(s.attainment8, s.phase, 'attainment8'))} big />}
           {s.p8_prev != null && <HM label="P8 (2024)" value={(s.p8_prev > 0 ? '+' : '') + s.p8_prev.toFixed(2)} color={decileColor(quickDecile(s.p8_prev, s.phase, 'p8_prev'))} big />}
           {s.basics_94 != null && <HM label="4+ Eng & Ma" value={s.basics_94 + '%'} color={decileColor(quickDecile(s.basics_94, s.phase, 'basics_94'))} />}
@@ -93,7 +95,7 @@ const HoverCard = ({ school, onViewProfile }) => {
       )}
 
       {isPri && (s.ks2_rwm_exp != null || s.ks2_read_avg != null) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 12px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 12px', marginTop: 6, paddingTop: 6, borderTop: '1px solid #EAE4F1' }}>
           {s.ks2_rwm_exp != null && <HM label="RWM Expected" value={s.ks2_rwm_exp + '%'} color={decileColor(quickDecile(s.ks2_rwm_exp, s.phase, 'ks2_rwm_exp'))} big />}
           {s.ks2_rwm_high != null && <HM label="RWM Higher" value={s.ks2_rwm_high + '%'} color={decileColor(quickDecile(s.ks2_rwm_high, s.phase, 'ks2_rwm_high'))} />}
           {s.ks2_read_avg != null && <HM label="Reading" value={s.ks2_read_avg.toFixed(0)} color={decileColor(quickDecile(s.ks2_read_avg, s.phase, 'ks2_read_avg'))} />}
@@ -104,8 +106,8 @@ const HoverCard = ({ school, onViewProfile }) => {
 
       <button onClick={(e) => { e.stopPropagation(); onViewProfile(); }}
         style={{
-          width: '100%', marginTop: 8, padding: '8px', background: '#1d5a9e', color: 'white',
-          border: 'none', borderRadius: 8, fontFamily: "'Source Sans 3', sans-serif",
+          width: '100%', marginTop: 8, padding: '8px', background: '#6A0CA0', color: 'white',
+          border: 'none', borderRadius: 8, fontFamily: "Inter, system-ui, sans-serif",
           fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
         }}>
         View full profile →
@@ -114,18 +116,18 @@ const HoverCard = ({ school, onViewProfile }) => {
   );
 };
 
-const OJ_COLORS = { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' };
+const OJ_COLORS = { Outstanding: '#4B0875', Good: '#6A0CA0', 'Requires improvement': '#C6A035', Inadequate: '#B4475A' };
 const OJ = ({ label, grade }) => grade ? (
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>{label}</span>
-    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: OJ_COLORS[grade] || '#94a3b8' }}>{grade === 'Requires improvement' ? 'RI' : grade}</span>
+    <span style={{ fontSize: '0.62rem', color: '#A79FB5' }}>{label}</span>
+    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: OJ_COLORS[grade] || '#A79FB5' }}>{grade === 'Requires improvement' ? 'RI' : grade}</span>
   </div>
 ) : null;
 
 const HM = ({ label, value, big, color }) => (
   <div>
-    <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1 }}>{label}</div>
-    <div style={{ fontSize: big ? '1rem' : '0.85rem', fontWeight: big ? 800 : 700, color: color || '#0f172a', lineHeight: 1.3 }}>{value}</div>
+    <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#A79FB5', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1 }}>{label}</div>
+    <div style={{ fontSize: big ? '1rem' : '0.85rem', fontWeight: big ? 800 : 700, color: color || '#221233', lineHeight: 1.3 }}>{value}</div>
   </div>
 );
 
@@ -206,7 +208,7 @@ const App = () => {
     features: filtered.filter(s => s.latitude && s.longitude).map(s => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.longitude, s.latitude] },
-      properties: { urn: String(s.urn), color: PHASE_COLORS[s.phase] || '#64748b' },
+      properties: { urn: String(s.urn), color: PHASE_COLORS[s.phase] || '#6F6580' },
     })),
   }), [filtered]);
 
@@ -317,7 +319,7 @@ const App = () => {
     if (hoveredSchool) { setSelectedSchool(hoveredSchool); setHoveredSchool(null); }
   }, [hoveredSchool]);
 
-  const ofstedColors = { Outstanding: '#0d7a42', Good: '#1d5a9e', 'Requires improvement': '#e8920e', Inadequate: '#cc3333' };
+  const ofstedColors = { Outstanding: '#4B0875', Good: '#6A0CA0', 'Requires improvement': '#C6A035', Inadequate: '#B4475A' };
   const ofstedOrder = ['Outstanding', 'Good', 'Requires improvement', 'Inadequate'];
 
   if (loading) return (
@@ -365,7 +367,7 @@ const App = () => {
       )}
 
       {!showLanding && <SearchBar schools={schoolsData} query={searchQuery} onQueryChange={setSearchQuery} onSearch={handleSearch} onAiSearch={handleAiSearch} resultCount={activeFilters ? filtered.length : null} activeFilters={activeFilters} onClearFilters={handleClearFilters} />}
-      {selectedSchool && <SchoolProfile school={{...selectedSchool, onFindSimilar: (s) => { setSimilarTarget(s); setSelectedSchool(null); }}} allSchools={schoolsData} onClose={() => setSelectedSchool(null)} onCompare={handleAddCompare} />}
+      {selectedSchool && <SchoolProfile school={{...selectedSchool, onFindSimilar: (s) => { setSimilarTarget(s); setSelectedSchool(null); }}} allSchools={schoolsData} onClose={() => setSelectedSchool(null)} onCompare={handleAddCompare} onOpenSchool={(u) => { const hit = schoolsByUrn[String(u)]; if (hit) setSelectedSchool(hit); }} />}
       {similarTarget && <SimilarSchoolsPanel school={similarTarget} allSchools={schoolsData} onClose={() => setSimilarTarget(null)} onSelectSchool={(s) => { setSimilarTarget(null); setSelectedSchool(s); }} />}
       {!showLanding && !showCompare && <ComparisonTray schools={compareList} onRemove={(urn) => setCompareList(prev => prev.filter(s => s.urn !== urn))} onCompare={() => setShowCompare(true)} />}
       {showCompare && <ComparePanel schools={compareList} allSchools={schoolsData} onRemove={(urn) => { setCompareList(prev => { const n = prev.filter(s => s.urn !== urn); if (n.length < 2) setShowCompare(false); return n; }); }} onClose={() => setShowCompare(false)} />}
