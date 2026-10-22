@@ -441,6 +441,39 @@ function workforceHtml(d, ctx) {
     columnsSvg({ rows: shown, min: 0, max: Math.min(80, Math.ceil((hi + 4) / 10) * 10), unit: "%", refs: [{ v: d.bench.turnMed, label: "England", color: "var(--nat)" }, { v: d.turnMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
 }
 
+/* the early years: GLD and phonics, authority by authority — the DfE
+   publishes no school-level EYFSP or phonics, and the block says so */
+function earlyHtml(d) {
+  if (!d || !d.rows || !d.rows.length) return "";
+  const NOTE = "Reception (EYFSP good level of development) and the Year 1 phonics check, 2025/26. Published at authority level only: the DfE releases no school-level early years figures, so the scope's authorities stand in for its schools.";
+  const sign2 = (v) => (v == null ? null : (v >= 0 ? "+" : "") + (Math.round(v * 10) / 10));
+  if (d.mode === "one") {
+    const r = d.rows[0];
+    const dGld = r.gldPrev != null && r.gld != null ? r.gld - r.gldPrev : null;
+    const dPh = r.ph1Prev != null && r.ph1 != null ? r.ph1 - r.ph1Prev : null;
+    const headline = `In ${esc(r.name)}, ${f1(r.gld)}% of children reached a good level of development${dGld != null ? ` (${sign2(dGld)} on last year)` : ""} and ${f0(r.ph1)} passed the Year 1 phonics check, against England's ${f1(d.nat ? d.nat.gld : null)}% and ${f0(d.nat ? d.nat.ph1 : null)}.`;
+    const bars = `<div class="pz-mwrap"><div class="pz-mgroup"><h3>${esc(r.name)}, against England's marker</h3>
+      ${mrow("Good level of development", r.gld, d.nat ? d.nat.gld : null, 100, "%")}
+      ${mrow("Expected level, all early learning goals", r.allElg, d.nat ? d.nat.allElg : null, 100, "%")}
+      ${mrow("Phonics expected standard, Year 1", r.ph1, d.nat ? d.nat.ph1 : null, 100, "%", 0)}
+      ${mrow("Phonics by the end of Year 2", r.ph2, d.nat ? d.nat.ph2 : null, 100, "%", 0)}
+      ${dPh != null ? `<p class="pz-note" style="margin-top:8px">Phonics ${sign2(dPh)} points on 2024/25; average early learning goals per child ${f1(r.elg)} against England's ${f1(d.nat ? d.nat.elg : null)}.</p>` : ""}
+    </div></div>`;
+    const tr = d.trend.filter((t) => t.gld != null).map((t) => ({ t: t.label, v: t.gld }));
+    const trendSection = tr.length > 2 ? `<p class="pz-note" style="margin:20px 0 4px">England's good level of development, year on year; the national recovery this authority sits inside.</p>` + trendSvg(tr, null, { min: 50, max: 85, unit: "%", dp: 1 }) : "";
+    return section("The early years", headline, NOTE, bars + trendSection);
+  }
+  const { rows: shown, capped, segNote } = capRows(d.rows.map((r) => ({
+    label: r.name, v: r.gld, urn: null,
+    tipLines: [r.name, `GLD ${f1(r.gld)}%${r.gldPrev != null ? ` (${sign2(r.gld - r.gldPrev)} on last year)` : ""} · avg ELGs ${f1(r.elg)}`, `Phonics Y1 ${f0(r.ph1)} · by end of Y2 ${f0(r.ph2)}`, `${r.n} school${r.n === 1 ? "" : "s"} in scope`],
+  })));
+  const lo = Math.min(...d.rows.map((r) => r.gld ?? 99));
+  const headline = `${d.rows.length} authorit${d.rows.length === 1 ? "y" : "ies"} teach this scope's children: good level of development runs from ${f1(d.rows[d.rows.length - 1].gld)}% to ${f1(d.rows[0].gld)}% against England's ${f1(d.nat ? d.nat.gld : null)}%.`;
+  const tbl = `<details class="pz-fold"><summary>The early years, authority by authority<span>${d.rows.length} authorities</span></summary><table class="pz-table"><thead><tr><th>Authority</th><th>GLD</th><th>On last year</th><th>Avg ELGs</th><th>Phonics Y1</th><th>By end of Y2</th><th>Scope schools</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.gld)}%</td><td class="num">${r.gldPrev != null && r.gld != null ? sign2(r.gld - r.gldPrev) : "–"}</td><td class="num">${f1(r.elg)}</td><td class="num">${f0(r.ph1)}</td><td class="num">${f0(r.ph2)}</td><td class="num">${r.n}</td></tr>`).join("")}</tbody></table></details>`;
+  return section("The early years", headline, (segNote || "") + (capped ? `Showing the two ends of ${d.rows.length} authorities. ` : "") + NOTE,
+    columnsSvg({ rows: shown, min: Math.max(0, Math.floor((lo - 5) / 10) * 10), max: 90, unit: "%", dp: 1, refs: d.nat && d.nat.gld != null ? [{ v: d.nat.gld, label: "England", color: "var(--nat)" }] : [] }) + tbl);
+}
+
 function inclusionHtml(d, ctx) {
   if (!d.rows.length) return "";
   const KS2 = d.kind === "ks2";
@@ -724,6 +757,18 @@ function inclusionGroup(s, bench, n) {
   ]);
 }
 
+/* the early-years context on a primary's dash: its authority's GLD and phonics,
+   because the DfE publishes no school-level figures */
+function earlyGroup(e) {
+  if (!e || e.gld == null) return "";
+  const note = `<p class="pz-note" style="margin-top:8px">${esc(e.la)}, 2025/26: no school-level EYFSP or phonics is published, so this is the authority its reception children grow up in. Phonics by the end of Year 2: ${e.ph2 != null ? Math.round(e.ph2) + "%" : "–"}.</p>`;
+  return mgroup("The early years (authority)", [
+    mrow("Good level of development", e.gld, e.nat ? e.nat.gld : null, 100, "%"),
+    mrow("Phonics expected, Year 1", e.ph1, e.nat ? e.nat.ph1 : null, 100, "%", 0),
+    note,
+  ]);
+}
+
 /* the money on the school dash: per-pupil bars, reserve and balance spelt out */
 function moneyGroup(s, bench, n) {
   if (n(s.fin_spend_pp) == null) return "";
@@ -746,7 +791,7 @@ export function schoolDashHtml(d) {
   const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : (v != null && v !== "" && Number.isFinite(parseFloat(v)) ? parseFloat(v) : null));
   const drift = pri ? (n(s.ks2_rwm_exp) != null && n(s.ks2_rwm_prev) != null ? s.ks2_rwm_exp - s.ks2_rwm_prev : null)
     : (n(s.attainment8) != null && n(s.a8_prev) != null ? s.attainment8 - s.a8_prev : null);
-  const meta = [s.la, s.pcon && s.pcon !== s.la ? s.pcon : null, s.region, s.type, s.religiousCharacter && !/does not apply|none/i.test(s.religiousCharacter) ? s.religiousCharacter : null,
+  const meta = [s.la, s.pcon && s.pcon !== s.la ? s.pcon : null, s.region, s.type, s.idaci ? `IDACI quintile ${s.idaci} of 5${s.idaci === 5 ? " (most deprived)" : s.idaci === 1 ? " (least deprived)" : ""}` : null, s.religiousCharacter && !/does not apply|none/i.test(s.religiousCharacter) ? s.religiousCharacter : null,
     s.gender && s.gender !== "Mixed" ? s.gender : null, n(s.pupils) != null ? `${s.pupils} pupils` : null, s.ofstedGrade || null].filter(Boolean);
 
   const tiles = pri ? [
@@ -799,6 +844,7 @@ export function schoolDashHtml(d) {
     ]),
     inclusionGroup(s, bench, n),
     moneyGroup(s, bench, n),
+    earlyGroup(d.early),
   ].join("") : [
     mgroup("Outcomes", [
       mrow("Attainment 8", n(s.attainment8), bench.a8Med, 90),
@@ -858,7 +904,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};

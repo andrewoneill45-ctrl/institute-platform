@@ -80,6 +80,19 @@
       "notes": "The release's school-level underlying data file: pupils with an EHC plan and on SEN support, primary need by school, SEN unit and resourced provision flags. The same file carries each school's parliamentary constituency (2024 boundaries), which feeds the pcon scope. Pulled by hand via browser."
     },
     {
+      "key": "early-years",
+      "name": "Early years: EYFSP results and the phonics screening check",
+      "publisher": "Department for Education",
+      "route": "release-zip",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/early-years-foundation-stage-profile-results",
+      "apiDataSetId": null,
+      "cadence": "Annual, each October (EYFSP and phonics publish separately)",
+      "lastVersion": "2025/26 (EYFSP published 22 Oct 2026; phonics provisional, 8 Oct 2026)",
+      "lastPulled": "2026-10-22",
+      "output": "apps/platform/public/data/early.json",
+      "notes": "Authority level by necessity: the DfE publishes no school-level EYFSP or phonics. Holds GLD, average ELGs, all-ELG expected and phonics Y1/end-of-Y2 for every LA and region (latest plus previous year) and the national trend. Phonics catalogue: explore-education-statistics.service.gov.uk/find-statistics/phonics-screening-check-attainment."
+    },
+    {
       "key": "ofsted",
       "name": "Ofsted inspection outcomes (management information)",
       "publisher": "Ofsted",

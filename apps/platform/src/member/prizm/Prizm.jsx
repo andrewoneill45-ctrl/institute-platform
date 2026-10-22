@@ -24,6 +24,7 @@ const KS2_DESCS = {
   behaviour: "suspension rates and permanent exclusions (primary)",
   workforce: "teacher turnover, ratios and unfilled posts in primaries",
   inclusion: "SEN support, EHC plans and specialist places in primaries",
+  early: "reception and phonics for the scope's authorities (no school-level exists)",
   finance: "spend per pupil, reserves and deficits in primaries",
   destinations: "secondary only — KS4 leavers' destinations",
   scatter: "FSM against RWM, the scope against England's primaries",
@@ -70,6 +71,7 @@ const TOKEN_DEFS = [
   ["minEhcp", (sc) => `EHCP ${sc.minEhcp}%+`], ["maxEhcp", (sc) => `EHCP under ${sc.maxEhcp}%`],
   ["senUnit", () => "with SEN units"], ["senRp", () => "with resourced provision"],
   ["hasCard", () => "with report cards"],
+  ["idaci", (sc) => (sc.idaci === 5 ? "most deprived fifth" : sc.idaci === 1 ? "least deprived fifth" : `IDACI Q${sc.idaci}`)],
   ["noGrammar", () => "grammars set aside"],
   ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend", ehcp: "EHCP" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
@@ -128,9 +130,11 @@ export default function Prizm() {
   useEffect(ensureMotionCss, []);
   /* the door opens on the core; the detail merges into the same rows behind it */
   const [full, setFull] = useState(false);
+  const [early, setEarly] = useState(null);
   useEffect(() => {
     getDatasetCore().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted)));
     getDataset().then(() => setFull(true));
+    fetch("/data/early.json").then((r) => r.json()).then(setEarly).catch(() => setEarly({}));
   }, []);
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
@@ -198,10 +202,10 @@ export default function Prizm() {
     };
   }, [title, scope, blocks, all]);
   /* reports and dashes compute only once every figure is present */
-  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec) : null), [all, full, spec, scope]);
-  const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn) : null), [all, full, dashUrn]);
+  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early }) : null), [all, full, spec, scope, early]);
+  const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn, { early }) : null), [all, full, dashUrn, early]);
   /* one school is not a cohort: a single-school scope pivots to the full picture */
-  const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn) : null), [all, computed]);
+  const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early }) : null), [all, computed, early]);
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
   const isPrimary = scope && scope.phase === "primary";
 
@@ -214,6 +218,7 @@ export default function Prizm() {
     if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
+    if (/\b(early years|eyfsp|gld|good level of development|phonics|reception)\b/i.test(text || "")) want.push("early");
     if (sc.hasCard || sc.ofsted || /\b(report card|ofsted|inspect)/i.test(text || "")) want.push("ofsted");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);

@@ -91,6 +91,7 @@ function applyFilters(out, scope) {
   if (scope.senUnit) out = out.filter((s) => s.sen_unit === true);
   if (scope.senRp) out = out.filter((s) => s.sen_rp === true);
   if (scope.hasCard) out = out.filter((s) => s.ofstedCard != null);
+  if (scope.idaci != null) out = out.filter((s) => s.idaci === scope.idaci);
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -184,6 +185,7 @@ export function scopeLabel(scope, n) {
     scope.minEhcp != null ? `EHCP ${scope.minEhcp}%+` : null, scope.maxEhcp != null ? `EHCP under ${scope.maxEhcp}%` : null,
     scope.senUnit ? "with SEN units" : null, scope.senRp ? "with resourced provision" : null,
     scope.hasCard ? "with report cards" : null,
+    scope.idaci != null ? (scope.idaci === 5 ? "most deprived fifth" : scope.idaci === 1 ? "least deprived fifth" : `IDACI quintile ${scope.idaci}`) : null,
   ].filter(Boolean);
   const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend per pupil", ehcp: "EHC plan share" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
@@ -276,6 +278,10 @@ export function parseQuery(raw) {
   eat(/\b(large|big) (schools?|secondaries)\b/, () => { f.minPupils = f.minPupils ?? 1200; });
   eat(/\bsmall (schools?|secondaries)\b/, () => { f.maxPupils = f.maxPupils ?? 650; });
   /* context */
+  /* IDACI quintiles claim "deprived" first when a fifth or quintile is named */
+  eat(/\b(in )?the most deprived (fifth|quintile|areas?)\b/, () => { f.idaci = 5; });
+  eat(/\b(in )?the least deprived (fifth|quintile|areas?)\b/, () => { f.idaci = 1; });
+  eat(/\bidaci (quintile )?([1-5])\b/, (m) => { f.idaci = +m[2]; });
   eat(/\b(high[- ]fsm|deprived|disadvantaged (areas?|intakes?|communities))\b/, () => { f.minFsm = f.minFsm ?? 35; });
   eat(/\b(low[- ]fsm|affluent|leafy)\b/, () => { f.maxFsm = f.maxFsm ?? 15; });
   eat(/\bfsm (over|above|at least) (\d{1,2})\s*%?/, (m) => { f.minFsm = +m[2]; });
@@ -535,6 +541,7 @@ export const BLOCK_TYPES = [
   { type: "movement", name: "Movement", desc: "this year against last, school by school" },
   { type: "gap", name: "The disadvantage gap", desc: "disadvantaged and other pupils, side by side" },
   { type: "inclusion", name: "Inclusion", desc: "SEN support, EHC plans, units and resourced provision against England" },
+  { type: "early", name: "The early years", desc: "reception and phonics, authority by authority (school-level is not published)" },
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
@@ -546,7 +553,7 @@ export const BLOCK_TYPES = [
   { type: "league", name: "The league", desc: "authorities or trusts ranked by what their schools achieve" },
 ];
 
-export function computeBlock(type, schools, all, bench, phase, blockSpec) {
+export function computeBlock(type, schools, all, bench, phase, blockSpec, extras) {
   const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const vals = (f) => schools.map(f).filter((v) => v != null);
   const PRI = phase === "primary";
@@ -693,6 +700,20 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
       bench,
     };
   }
+  if (type === "early") {
+    /* authority-level by necessity: the DfE publishes no school-level EYFSP
+       or phonics. The scope's authorities stand in for its schools. */
+    const early = extras && extras.early;
+    if (!early || !early.las) return null;
+    const nat = early.national && early.national["202526"] ? early.national["202526"] : null;
+    const trend = early.national ? Object.entries(early.national).sort(([a], [b]) => a.localeCompare(b)).map(([tp, v]) => ({ tp, label: tp.slice(0, 4) + "/" + tp.slice(4), ...v })) : [];
+    const laNames = [...new Set(schools.map((s) => s.la).filter(Boolean))];
+    const rows = laNames.map((name) => ({ name, n: schools.filter((s) => s.la === name).length, ...(early.las[name] || {}) }))
+      .filter((r) => r.gld != null || r.ph1 != null)
+      .sort((a, b) => (b.gld ?? -1) - (a.gld ?? -1));
+    const missing = laNames.length - rows.length;
+    return { mode: rows.length === 1 ? "one" : "las", rows, missing, nat, trend };
+  }
   if (type === "inclusion") {
     /* who teaches the children with the highest needs; both phases */
     const outcome = PRI ? (s) => num(s.ks2_rwm_exp) : (s) => num(s.attainment8);
@@ -770,9 +791,12 @@ export function scopeShort(scope) {
 }
 
 /* one school, everything the dataset holds on it — the in-report dashboard */
-export function computeSchoolDash(all, urn) {
+export function computeSchoolDash(all, urn, extras) {
   const s = all.find((x) => String(x.urn) === String(urn));
   if (!s) return null;
+  /* the early-years context of the school's authority (no school-level exists) */
+  const early = extras && extras.early && extras.early.las && s.la && extras.early.las[s.la]
+    ? { la: s.la, ...extras.early.las[s.la], nat: extras.early.national && extras.early.national["202526"] } : null;
   const bench = benchmarks(all);
   const pri = num(s.attainment8) == null && num(s.ks2_rwm_exp) != null;
   const B = pri ? { ...bench, ...bench.pri } : bench;
@@ -817,10 +841,10 @@ export function computeSchoolDash(all, urn) {
       similar = { n: peers.length, rank, med, bins, fsm: r1(fsm), topPct: Math.max(1, Math.round((rank / peers.length) * 100)), v: r1(num(s[mKey])) };
     }
   }
-  return { s, pri, bench: B, dist, standing, similar };
+  return { s, pri, bench: B, dist, standing, similar, early };
 }
 
-export function computeReport(all, spec) {
+export function computeReport(all, spec, extras) {
   const schools = resolveScope(all, spec.scope);
   const bench = benchmarks(all);
   const phase = spec.scope && spec.scope.phase;
@@ -835,8 +859,8 @@ export function computeReport(all, spec) {
   }
   const blocks = (spec.blocks || []).map((b) => ({
     type: b.type,
-    data: computeBlock(b.type, schools, all, B, phase, b),
-    vs: vsSchools && b.type !== "league" ? computeBlock(b.type, vsSchools, all, B, phase, b) : null,
+    data: computeBlock(b.type, schools, all, B, phase, b, extras),
+    vs: vsSchools && b.type !== "league" && b.type !== "early" ? computeBlock(b.type, vsSchools, all, B, phase, b, extras) : null,
   })).filter((b) => b.data);
   return {
     schools, vsSchools, bench: B, blocks, phase: phase || "secondary",

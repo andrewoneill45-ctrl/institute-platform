@@ -25,7 +25,7 @@ export const CORE_FIELDS = [
   "latitude", "longitude", "pupils",
   "edu_fsm_pct", "fsm_pct",
   "attainment8", "basics_95", "ks2_rwm_exp",
-  "sen_all_pct", "sen_ehcp_pct", "sen_support_pct",
+  "sen_all_pct", "sen_ehcp_pct", "sen_support_pct", "idaci",
 ];
 
 export function split(schools) {
