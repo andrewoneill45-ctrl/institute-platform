@@ -711,7 +711,47 @@ export function computeSchoolDash(all, urn) {
   const pri = num(s.attainment8) == null && num(s.ks2_rwm_exp) != null;
   const B = pri ? { ...bench, ...bench.pri } : bench;
   const dist = computeBlock("distribution", [s], all, B, pri ? "primary" : undefined);
-  return { s, pri, bench: B, dist };
+  const estate = pri ? primaries(all) : secondaries(all);
+
+  /* where it stands: the share of England this school beats, measure by
+     measure. Higher is always better — absence, suspensions and turnover
+     are inverted here so the renderer never has to think about direction. */
+  const beat = (key, invert) => {
+    const v = num(s[key]);
+    if (v == null) return null;
+    const xs = estate.map((x) => num(x[key])).filter((x) => x != null);
+    if (xs.length < 50) return null;
+    const better = invert ? xs.filter((x) => x > v).length : xs.filter((x) => x < v).length;
+    return Math.round((better / xs.length) * 100);
+  };
+  const standing = pri ? {
+    outcome: beat("ks2_rwm_exp"), high: beat("ks2_rwm_high"), disadv: beat("ks2_rwm_disadv"), read: beat("ks2_read_avg"),
+    abs: beat("abs_overall_pct", true), pa: beat("abs_persistent_pct", true), susp: beat("susp_rate", true),
+    turnover: beat("wf_turnover_pct", true), reserve: beat("fin_reserve_pp"),
+  } : {
+    outcome: beat("attainment8"), basics: beat("basics_95"), disadv: beat("a8_disadv"), dest: beat("dest_sustained"),
+    abs: beat("abs_overall_pct", true), pa: beat("abs_persistent_pct", true), susp: beat("susp_rate", true),
+    turnover: beat("wf_turnover_pct", true), reserve: beat("fin_reserve_pp"),
+  };
+
+  /* the fair comparison: every school teaching a similar intake, whole-school
+     FSM within five points of this one's, ranked by the headline measure */
+  const mKey = pri ? "ks2_rwm_exp" : "attainment8";
+  const fsm = num(s.edu_fsm_pct);
+  let similar = null;
+  if (fsm != null && num(s[mKey]) != null) {
+    const peers = estate.filter((x) => num(x.edu_fsm_pct) != null && Math.abs(x.edu_fsm_pct - fsm) <= 5 && num(x[mKey]) != null);
+    if (peers.length >= 20) {
+      const vals = peers.map((x) => num(x[mKey])).sort((a, b) => a - b);
+      const mid = vals.length >> 1;
+      const med = r1(vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2);
+      const rank = peers.filter((x) => num(x[mKey]) > num(s[mKey])).length + 1;
+      const bins = Array.from({ length: pri ? 20 : 18 }, (_, i) => ({ lo: i * 5, hi: i * 5 + 5, n: 0 }));
+      vals.forEach((v) => { const i = Math.max(0, Math.min(bins.length - 1, Math.floor(v / 5))); bins[i].n++; });
+      similar = { n: peers.length, rank, med, bins, fsm: r1(fsm), topPct: Math.max(1, Math.round((rank / peers.length) * 100)), v: r1(num(s[mKey])) };
+    }
+  }
+  return { s, pri, bench: B, dist, standing, similar };
 }
 
 export function computeReport(all, spec) {

@@ -154,12 +154,18 @@ export default function Prizm() {
   }, [hits, scope]);
   useEffect(() => { setSel(0); }, [q]);
 
-  const spec = useMemo(() => ({
-    title: title || (scope ? scopeLabel(scope).replace(/ · /g, ", ") + ": the picture" : "A Prizm report"),
-    scope, blocks: blocks.map((type) => ({ type })),
-  }), [title, scope, blocks]);
+  const spec = useMemo(() => {
+    const one = scope && scope.type === "urns" && Array.isArray(scope.urns) && scope.urns.length === 1 && all
+      ? all.find((s) => String(s.urn) === String(scope.urns[0])) : null;
+    return {
+      title: title || (one ? `${one.name}: the full picture` : scope ? scopeLabel(scope).replace(/ · /g, ", ") + ": the picture" : "A Prizm report"),
+      scope, blocks: blocks.map((type) => ({ type })),
+    };
+  }, [title, scope, blocks, all]);
   const computed = useMemo(() => (all && scope ? computeReport(all, spec) : null), [all, spec, scope]);
   const dash = useMemo(() => (all && dashUrn ? computeSchoolDash(all, dashUrn) : null), [all, dashUrn]);
+  /* one school is not a cohort: a single-school scope pivots to the full picture */
+  const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn) : null), [all, computed]);
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
   const isPrimary = scope && scope.phase === "primary";
 
@@ -214,6 +220,19 @@ export default function Prizm() {
 
   function buildFindings() {
     if (!computed) return null;
+    if (singleDash) {
+      const { s, standing, similar: sim, pri } = singleDash;
+      const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : (v != null && Number.isFinite(parseFloat(v)) ? parseFloat(v) : undefined));
+      return {
+        title: spec.title, school: s.name, la: s.la, region: s.region, phase: computed.phase,
+        measures: pri
+          ? { rwmExpected: n(s.ks2_rwm_exp), rwmPrev: n(s.ks2_rwm_prev), higherStandard: n(s.ks2_rwm_high), readingScore: n(s.ks2_read_avg), rwmDisadvantaged: n(s.ks2_rwm_disadv), fsmPct: n(s.edu_fsm_pct), absence: n(s.abs_overall_pct), persistentAbsence: n(s.abs_persistent_pct), suspensionsPer100: n(s.susp_rate), teacherTurnoverPct: n(s.wf_turnover_pct), spendPerPupil: n(s.fin_spend_pp), reservePerPupil: n(s.fin_reserve_pp) }
+          : { attainment8: n(s.attainment8), a8Prev: n(s.a8_prev), basics95: n(s.basics_95), basics94: n(s.basics_94), a8Disadvantaged: n(s.a8_disadv), fsmPct: n(s.edu_fsm_pct), absence: n(s.abs_overall_pct), persistentAbsence: n(s.abs_persistent_pct), suspensionsPer100: n(s.susp_rate), sustainedDestinations: n(s.dest_sustained), teacherTurnoverPct: n(s.wf_turnover_pct), spendPerPupil: n(s.fin_spend_pp), reservePerPupil: n(s.fin_reserve_pp) },
+        nationalStandingPercentBeaten: standing,
+        similarIntake: sim ? { schools: sim.n, rank: sim.rank, topPercent: sim.topPct, cohortMedian: sim.med, fsmPct: sim.fsm } : undefined,
+        england: (({ pri: _p, ...e }) => e)(computed.bench),
+      };
+    }
     const slim = (v, depth = 0) => {
       if (Array.isArray(v)) { if (!v.length || depth > 3) return undefined; const take = v.length > 6 ? [...v.slice(0, 3), ...v.slice(-3)] : v; return take.map((x) => slim(x, depth + 1)).filter((x) => x !== undefined); }
       if (v && typeof v === "object") { const o = {}; for (const [k, val] of Object.entries(v)) { if (["cloud", "bins", "marks", "bench"].includes(k)) continue; const s = slim(val, depth + 1); if (s !== undefined) o[k] = s; } return o; }
@@ -258,7 +277,7 @@ export default function Prizm() {
   }
   function download() {
     if (!computed) return;
-    const blob = new Blob([reportHtml(spec, computed, foreword)], { type: "text/html;charset=utf-8" });
+    const blob = new Blob([reportHtml(spec, computed, foreword, singleDash ? schoolDashHtml(singleDash) : undefined)], { type: "text/html;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = (spec.title || "prizm-report").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) + ".html";
@@ -269,6 +288,14 @@ export default function Prizm() {
   const nextSteps = useMemo(() => {
     if (!scope || !computed) return [];
     const out = [];
+    if (singleDash) {
+      const s = singleDash.s;
+      if (s.la) out.push({ t: `All of ${s.la}`, f: () => setScope({ type: "la", name: s.la, phase: scope.phase }) });
+      if (s.trust && s.trust !== "Not supported by a trust") out.push({ t: "Its trust, school by school", f: () => setScope({ type: "trust", name: s.trust, phase: scope.phase }) });
+      if (!foreword && !fwBusy) out.push({ t: "Write the foreword", f: askForeword });
+      out.push({ t: "Open on the Atlas map", f: () => navigate(`/members/atlas?urn=${s.urn}`) });
+      return out.slice(0, 3);
+    }
     if (!scope.versus && scope.type !== "england") out.push({ t: "Set it against England", f: () => setScope({ ...scope, versus: { type: "england" } }) });
     if (scope.versus) out.push({ t: "Drop the comparison", f: () => setScope(removeScopeToken(scope, "versus")) });
     if (!blocks.includes("league") && computed.schools.length > 20) out.push({ t: "Rank the authorities", f: () => addBlock("league") });
@@ -387,7 +414,7 @@ export default function Prizm() {
                   )}
                 </span>
               ))}
-              <span style={{ fontSize: 12, color: MUTED, fontWeight: 600, padding: "0 4px" }}>{computed ? `${computed.schools.length} schools` : ""}</span>
+              <span style={{ fontSize: 12, color: MUTED, fontWeight: 600, padding: "0 4px" }}>{computed ? `${computed.schools.length} school${computed.schools.length === 1 ? "" : "s"}` : ""}</span>
               <button onClick={() => { setScope(null); setTitle(""); setForeword(null); setNote(null); }} style={{ border: "none", background: "transparent", color: "#B3261E", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0, fontFamily: "inherit" }}>start again</button>
             </div>
           )}
@@ -423,6 +450,9 @@ export default function Prizm() {
           <div className="asi-rise pz-report" style={{ borderRadius: 4 }}>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={spec.title} aria-label="Report title"
               style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", fontFamily: "inherit", fontSize: 11.5, color: MUTED, padding: "0 0 10px", outline: "none", borderBottom: `1px dashed ${HAIR}`, marginBottom: 14 }} />
+            {singleDash ? (
+              <div dangerouslySetInnerHTML={{ __html: forewordHtml(foreword) + schoolDashHtml(singleDash) }} />
+            ) : (<>
             <div dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) }} />
             {(() => {
               let togglePlaced = false;
@@ -468,6 +498,7 @@ export default function Prizm() {
                 </div>
               </div>
             )}
+            </>)}
           </div>
         ) : null}
       </div>

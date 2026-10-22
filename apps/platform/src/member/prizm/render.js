@@ -408,7 +408,7 @@ function financeHtml(d, ctx) {
   const vsLine = ctx && ctx.vs && ctx.vs.spendMean != null ? ` ${esc(LBL.b || "The comparison")} spends ${money(ctx.vs.spendMean)}.` : "";
   const { rows: shown, capped } = capRows(d.rows.filter((r) => r.spend != null).map((r) => ({
     label: r.name, v: r.spend / 1000, urn: r.urn,
-    tipLines: [r.name, `Spend ${money(r.spend)} per pupil · income ${money(r.income)}`, `Staff ${f1(r.staffPct)}% of spend · energy ${money(r.energy)} per pupil`, `Revenue reserve ${money(r.reserve)} per pupil${r.reserve != null && r.reserve < 0 ? " — in deficit" : ""}`],
+    tipLines: [r.name, `Spend ${money(r.spend)} per pupil · income ${money(r.income)}`, `Staff ${f1(r.staffPct)}% of spend · energy ${money(r.energy)} per pupil`, `Revenue reserve ${money(r.reserve)} per pupil${r.reserve != null && r.reserve < 0 ? ": in deficit" : ""}`],
   })));
   if (!shown.length) return "";
   const spends = d.rows.map((r) => r.spend).filter((v) => v != null);
@@ -551,6 +551,53 @@ function trendSvg(points, engRef, { min, max, unit = "", dp = 1 }) {
   return s + "</svg>";
 }
 
+/* where it stands: one row per measure, the school's national percentile on a
+   track whose gold centre line is England's median. Direction is already
+   resolved by the engine: right is always the better side. */
+function standingHtml(st, pri) {
+  if (!st) return "";
+  const defs = pri ? [
+    ["RWM expected standard", st.outcome], ["Higher standard", st.high], ["Disadvantaged pupils", st.disadv], ["Reading score", st.read],
+    ["Attendance", st.abs], ["Persistent absence", st.pa], ["Suspensions", st.susp], ["Teacher retention", st.turnover], ["Financial reserves", st.reserve],
+  ] : [
+    ["Attainment 8", st.outcome], ["Grade 5+ in English and maths", st.basics], ["Disadvantaged pupils", st.disadv], ["Sustained destinations", st.dest],
+    ["Attendance", st.abs], ["Persistent absence", st.pa], ["Suspensions", st.susp], ["Teacher retention", st.turnover], ["Financial reserves", st.reserve],
+  ];
+  const rows = defs.filter(([, p]) => p != null);
+  if (!rows.length) return "";
+  const above = rows.filter(([, p]) => p >= 50).length;
+  const body = rows.map(([label, p]) => {
+    const word = p >= 50 ? `top ${Math.max(1, 100 - p)}%` : `bottom ${Math.max(1, p)}%`;
+    const col = p >= 75 ? "var(--up)" : p < 25 ? "var(--down)" : "var(--ink)";
+    return `<div class="pz-prow"><span class="k">${esc(label)}</span><div class="tr"><em></em><i style="left:${Math.max(1.5, Math.min(98.5, p))}%;${p >= 75 ? "" : p < 25 ? "background:var(--down)" : ""}"></i></div><span class="v" style="color:${col}">${word}</span></div>`;
+  }).join("");
+  return section("Where it stands", `At or above England's median on ${above} of ${rows.length} measures.`,
+    "Each dot is this school's national standing on one measure; the gold line is England's median, and right of it is always the better side: attendance, behaviour and turnover are already turned the right way round.",
+    `<div class="pz-pwrap">${body}</div><div class="pz-plegend"><span>England's weakest</span><span>England's median</span><span>England's strongest</span></div>`);
+}
+
+/* the fair comparison: the similar-intake cohort, this school marked in it */
+function similarHtml(sim, pri, name) {
+  if (!sim) return "";
+  const MEASURE = pri ? "RWM expected standard" : "Attainment 8";
+  const SPAN = pri ? 100 : 90;
+  const ord = (n) => { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  const W = 1000, H = 230, B = 34;
+  const maxN = Math.max(...sim.bins.map((b) => b.n));
+  const bw = (W - 60) / sim.bins.length;
+  const bars = sim.bins.map((b, i) => { const h = maxN ? (b.n / maxN) * (H - B - 30) : 0; return `<rect x="${40 + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="var(--lilac)"/>`; }).join("");
+  const px = (v) => 40 + (Math.max(0, Math.min(SPAN - 0.1, v)) / SPAN) * (W - 60);
+  const medX = px(sim.med), youX = px(sim.v);
+  const XT = pri ? [0, 25, 50, 75, 100] : [0, 30, 60, 90];
+  return section("A similar intake", `Among the ${sim.n.toLocaleString("en-GB")} schools teaching an intake like this one's, it ranks ${ord(sim.rank)}: the top ${sim.topPct}%.`,
+    `Every state-funded ${pri ? "primary" : "secondary"} whose whole-school FSM sits within five points of this school's ${f1(sim.fsm)}%, ranked by ${MEASURE}. The fair comparison: same hand, different schools.`,
+    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${bars}
+      <line x1="${medX}" y1="26" x2="${medX}" y2="${H - B}" stroke="var(--nat)" stroke-dasharray="3 4"/><text class="tick" x="${medX}" y="18" text-anchor="middle">similar-intake median ${pri ? f0(sim.med) : f1(sim.med)}</text>
+      <line x1="${youX}" y1="26" x2="${youX}" y2="${H - B}" stroke="var(--gold)" stroke-width="4" stroke-opacity="0.9"${hit([name, `${MEASURE} ${pri ? f0(sim.v) : f1(sim.v)}`, `${ord(sim.rank)} of ${sim.n} similar-intake schools`])}/>
+      <text class="tick" x="${youX}" y="${H - 2}" text-anchor="middle" style="fill:var(--gold);font-weight:700">this school</text>
+      ${XT.map((v) => `<text class="tick" x="${px(v)}" y="${H - 14}" text-anchor="middle">${v}${pri ? "%" : ""}</text>`).join("")}</svg>`);
+}
+
 /* the money on the school dash: per-pupil bars, reserve and balance spelt out */
 function moneyGroup(s, bench, n) {
   if (n(s.fin_spend_pp) == null) return "";
@@ -667,6 +714,8 @@ export function schoolDashHtml(d) {
   <p class="pz-sub">${esc(meta.join(" · "))}</p>
   <div class="pz-vintage">${esc(pri ? VINTAGE_KS2 : VINTAGE)}</div>
   <section class="pz-block">${tileHtml}</section>
+  ${standingHtml(d.standing, pri)}
+  ${similarHtml(d.similar, pri, s.name)}
   ${trendSection}
   ${recordSection}
   ${d.dist ? distributionHtml(d.dist, {}) : ""}`;
@@ -742,6 +791,14 @@ export const PZ_CSS = `
   .pz-mrow .tick{position:absolute;top:-3px;width:2.5px;height:18px;background:var(--gold);border-radius:1px}
   .pz-mrow .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
   .pz-mrow .e{grid-column:2/4;font-size:10.5px;color:var(--muted);margin-top:-2px}
+  .pz-pwrap{margin-top:6px}
+  .pz-prow{display:grid;grid-template-columns:minmax(150px,220px) 1fr 92px;gap:16px;align-items:center;margin:13px 0;font-family:Inter,system-ui,sans-serif}
+  .pz-prow .k{font-size:12.5px;color:var(--muted)}
+  .pz-prow .tr{position:relative;height:9px;background:var(--lilac);border-radius:99px}
+  .pz-prow .tr em{position:absolute;top:-4px;bottom:-4px;left:50%;width:2.5px;background:var(--gold);border-radius:1px}
+  .pz-prow .tr i{position:absolute;top:-3.5px;width:15px;height:15px;border-radius:50%;background:var(--purple);border:2.5px solid var(--paper);box-shadow:0 1px 5px rgba(34,18,51,.3);transform:translateX(-50%);box-sizing:border-box}
+  .pz-prow .v{font-size:12.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  .pz-plegend{display:flex;justify-content:space-between;margin:4px 108px 0 236px;font-size:10.5px;color:var(--muted);font-family:Inter,system-ui,sans-serif}
   .pz-stack{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:4px 0 8px}
   .pz-stack span{display:block;height:100%}
   .pz-blockwrap{position:relative}
@@ -799,14 +856,14 @@ export function coverHtml(spec, computed) {
 }
 
 /* ── the deliverable: one self-contained file ── */
-export function reportHtml(spec, computed, foreword) {
+export function reportHtml(spec, computed, foreword, singleHtml) {
   return `<!doctype html>
 <html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(spec.title || "Prizm report")}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>body{margin:0;background:#F2EFEA;padding:34px 14px}main{max-width:960px;margin:0 auto}${PZ_CSS}</style></head>
-<body><main><div class="pz-report">${coverHtml(spec, computed)}${forewordHtml(foreword)}${renderBlocks(computed)}
+<body><main><div class="pz-report">${singleHtml ? forewordHtml(foreword) + singleHtml : coverHtml(spec, computed) + forewordHtml(foreword) + renderBlocks(computed)}
 <div class="pz-foot"><span>Built with Prizm at institute.school · the AI arranges, the mathematics counts.</span><span>${esc(computed.phase === "primary" ? VINTAGE_KS2 : VINTAGE)}</span></div>
 <script>window.__PZ_OPEN__="https://institute.school/members/prizm";${PZ_TIP_JS}</script>
 </div></main></body></html>`;
