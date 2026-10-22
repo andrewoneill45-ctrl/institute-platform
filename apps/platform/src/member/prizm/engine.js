@@ -78,6 +78,9 @@ function applyFilters(out, scope) {
   if (scope.maxPtr != null) out = out.filter((s) => num(s.wf_ptr) != null && s.wf_ptr <= scope.maxPtr);
   if (scope.minVac != null) out = out.filter((s) => num(s.wf_vac_rate) != null && s.wf_vac_rate >= scope.minVac);
   if (scope.maxVac != null) out = out.filter((s) => num(s.wf_vac_rate) != null && s.wf_vac_rate <= scope.maxVac);
+  if (scope.minSpend != null) out = out.filter((s) => num(s.fin_spend_pp) != null && s.fin_spend_pp >= scope.minSpend);
+  if (scope.maxSpend != null) out = out.filter((s) => num(s.fin_spend_pp) != null && s.fin_spend_pp <= scope.maxSpend);
+  if (scope.deficit) out = out.filter((s) => num(s.fin_reserve_pp) != null && s.fin_reserve_pp < 0);
   if (scope.minRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp >= scope.minRwm);
   if (scope.maxRwm != null) out = out.filter((s) => num(s.ks2_rwm_exp) != null && s.ks2_rwm_exp <= scope.maxRwm);
   if (scope.minRead != null) out = out.filter((s) => num(s.ks2_read_avg) != null && s.ks2_read_avg >= scope.minRead);
@@ -94,8 +97,8 @@ function applyFilters(out, scope) {
   if (scope.minNotsust != null) out = out.filter((s) => num(s.dest_notsust) != null && s.dest_notsust >= scope.minNotsust);
   if (scope.order && scope.order.by) {
     const key = (PRI
-      ? { a8: (s) => num(s.ks2_rwm_exp) ?? -99, rwm: (s) => num(s.ks2_rwm_exp) ?? -99, reading: (s) => num(s.ks2_read_avg) ?? -99, improvement: (s) => pdrift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 }
-      : { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1 })[scope.order.by];
+      ? { a8: (s) => num(s.ks2_rwm_exp) ?? -99, rwm: (s) => num(s.ks2_rwm_exp) ?? -99, reading: (s) => num(s.ks2_read_avg) ?? -99, improvement: (s) => pdrift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1 }
+      : { a8: (s) => num(s.attainment8) ?? -99, improvement: (s) => drift(s) ?? -99, pupils: (s) => num(s.pupils) ?? -1, fsm: (s) => num(s.edu_fsm_pct) ?? -1, spend: (s) => num(s.fin_spend_pp) ?? -1 })[scope.order.by];
     if (key) {
       out = [...out].sort((a, b) => key(b) - key(a));
       if (scope.order.limit) out = out.slice(0, scope.order.limit);
@@ -163,8 +166,10 @@ export function scopeLabel(scope, n) {
     scope.minTurnover != null ? `turnover ${scope.minTurnover}%+` : null, scope.maxTurnover != null ? `turnover under ${scope.maxTurnover}%` : null,
     scope.minPtr != null ? `PTR ${scope.minPtr}+` : null, scope.maxPtr != null ? `PTR under ${scope.maxPtr}` : null,
     scope.minVac != null ? "with unfilled posts" : null, scope.maxVac === 0 ? "no unfilled posts" : null,
+    scope.minSpend != null ? `spend £${scope.minSpend.toLocaleString("en-GB")}+ per pupil` : null, scope.maxSpend != null ? `spend under £${scope.maxSpend.toLocaleString("en-GB")}` : null,
+    scope.deficit ? "in deficit" : null,
   ].filter(Boolean);
-  const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[scope.order.by] : null;
+  const ordName = scope.order ? { a8: scope.phase === "primary" ? "RWM" : "Attainment 8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend per pupil" }[scope.order.by] : null;
   const ord = ordName && scope.order.limit ? `Top ${scope.order.limit} by ${ordName} · ` : "";
   const pre = bits.join(" ");
   const vs = scope.versus && scope.versus.type ? ` vs ${scopeShort(scope.versus)}` : "";
@@ -290,6 +295,10 @@ export function parseQuery(raw) {
   eat(/\bptr (under|below) (\d{1,2})\b/, (m) => { f.maxPtr = +m[2]; });
   eat(/\b(with|carrying) (teacher )?vacanc(y|ies)\b/, () => { f.minVac = 0.01; });
   eat(/\b(no|without) (teacher )?vacanc(y|ies)\b/, () => { f.maxVac = 0; });
+  /* finance */
+  eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(over|above|at least) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.minSpend = +m[2].replace(/,/g, ""); });
+  eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(under|below) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.maxSpend = +m[2].replace(/,/g, ""); });
+  eat(/\b(in deficit|carrying (a )?deficits?|with (a )?deficits?|deficit schools?)\b/, () => { f.deficit = true; });
   /* movement */
   eat(/\b(?:the )?(\d{1,3})? ?most improved\b/, (m) => { order = { by: "improvement", limit: m[1] ? +m[1] : 20 }; });
   eat(/\bimproving\b/, () => { f.minDrift = f.minDrift ?? 0.05; });
@@ -297,6 +306,8 @@ export function parseQuery(raw) {
   /* ranking */
   eat(/\b(largest|biggest) (\d{1,3})\b/, (m) => { order = { by: "pupils", limit: +m[2] }; });
   eat(/\b(top|best) (\d{1,3})\b/, (m) => { order = order || { by: "a8", limit: +m[2] }; });
+  eat(/\bby spend(?:ing)?\b/, () => { order = { ...(order || { limit: 25 }), by: "spend" }; });
+  eat(/\b(highest|biggest) spend(?:ers|ing)?\b/, () => { order = { ...(order || { limit: 25 }), by: "spend" }; });
   if (order) f.order = order;
   return { filters: f, hasF: Object.keys(f).length > 0, rest: rest.replace(/\s+/g, " ").trim() };
 }
@@ -428,6 +439,9 @@ export function benchmarks(all) {
      where the measure is shared, so a primary-phase report can overlay them */
   const pri = primaries(all);
   const ptake = (f) => pri.map(f).filter((v) => v != null);
+  const r0 = (v) => (v == null ? null : Math.round(v));
+  const defPct = (xs) => (xs.length ? r1((xs.filter((v) => v < 0).length / xs.length) * 100) : null);
+  const resP = ptake((s) => num(s.fin_reserve_pp)), resS = take((s) => num(s.fin_reserve_pp));
   const rwm = ptake((s) => num(s.ks2_rwm_exp)), prwm = ptake((s) => num(s.ks2_rwm_prev));
   const priBench = {
     n: pri.length,
@@ -446,6 +460,13 @@ export function benchmarks(all) {
     vacMean: r1(mean(ptake((s) => num(s.wf_vac_rate)))),
     sickDaysMed: r1(med(ptake((s) => num(s.wf_sick_days)))),
     payMed: r1(med(ptake((s) => num(s.wf_pay_mean)))),
+    spendMed: r0(med(ptake((s) => num(s.fin_spend_pp)))),
+    incomeMed: r0(med(ptake((s) => num(s.fin_income_pp)))),
+    teachPpMed: r0(med(ptake((s) => num(s.fin_teach_pp)))),
+    energyPpMed: r0(med(ptake((s) => num(s.fin_energy_pp)))),
+    reserveMed: r0(med(resP)),
+    staffPctMed: r1(med(ptake((s) => num(s.fin_staff_pct)))),
+    deficitPct: defPct(resP),
   };
   return {
     pri: priBench,
@@ -466,6 +487,13 @@ export function benchmarks(all) {
     vacMean: r1(mean(take((s) => num(s.wf_vac_rate)))),
     sickDaysMed: r1(med(take((s) => num(s.wf_sick_days)))),
     payMed: r1(med(take((s) => num(s.wf_pay_mean)))),
+    spendMed: r0(med(take((s) => num(s.fin_spend_pp)))),
+    incomeMed: r0(med(take((s) => num(s.fin_income_pp)))),
+    teachPpMed: r0(med(take((s) => num(s.fin_teach_pp)))),
+    energyPpMed: r0(med(take((s) => num(s.fin_energy_pp)))),
+    reserveMed: r0(med(resS)),
+    staffPctMed: r1(med(take((s) => num(s.fin_staff_pct)))),
+    deficitPct: defPct(resS),
   };
 }
 
@@ -478,6 +506,7 @@ export const BLOCK_TYPES = [
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
+  { type: "finance", name: "The money", desc: "spend per pupil, reserves and deficits against England" },
   { type: "destinations", name: "Destinations", desc: "where leavers went, and who wasn't sustained" },
   { type: "scatter", name: "Context and outcomes", desc: "FSM against Attainment 8, the scope against England" },
   { type: "distribution", name: "Where they sit", desc: "the national Attainment 8 distribution, scope schools marked" },
@@ -618,6 +647,25 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec) {
       ptrMean: r1(mean(rows.map((r) => r.ptr).filter((v) => v != null))),
       vacCount: rows.filter((r) => r.vac != null && r.vac > 0).length,
       bench,
+    };
+  }
+  if (type === "finance") {
+    /* works for both phases: the money is the money; outcomes swap by phase */
+    const outcome = PRI ? (s) => num(s.ks2_rwm_exp) : (s) => num(s.attainment8);
+    const rows = schools.filter((s) => num(s.fin_spend_pp) != null)
+      .map((s) => ({ urn: s.urn, name: s.name, sector: s.fin_sector || null, income: num(s.fin_income_pp), spend: num(s.fin_spend_pp), teach: num(s.fin_teach_pp), energy: num(s.fin_energy_pp), staffPct: num(s.fin_staff_pct), balance: num(s.fin_balance_pp), reserve: num(s.fin_reserve_pp) }))
+      .sort((a, b) => (b.spend ?? -1) - (a.spend ?? -1));
+    const nat = estate().filter((s) => num(s.fin_spend_pp) != null && outcome(s) != null);
+    const step = Math.max(1, Math.floor(nat.length / 1400));
+    const cloud = nat.filter((_, i) => i % step === 0).map((s) => [Math.round(s.fin_spend_pp), r1(outcome(s))]);
+    const marks = schools.filter((s) => num(s.fin_spend_pp) != null && outcome(s) != null)
+      .map((s) => ({ urn: s.urn, name: s.name, spend: Math.round(s.fin_spend_pp), y: r1(outcome(s)) }));
+    const sm = mean(rows.map((r) => r.spend).filter((v) => v != null));
+    return {
+      kind: PRI ? "ks2" : "ks4", rows,
+      spendMean: sm == null ? null : Math.round(sm),
+      deficitN: rows.filter((r) => r.reserve != null && r.reserve < 0).length,
+      cloud, marks, bench,
     };
   }
   if (type === "destinations") {

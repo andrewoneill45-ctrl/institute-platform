@@ -54,6 +54,19 @@
       "notes": "School-level CSVs inside the release zip: size of workforce, pupil-teacher ratios, vacancies, sickness absence. Pulled by hand via browser; the tripwire watches for an API id."
     },
     {
+      "key": "finance",
+      "name": "School finance: CFR (maintained) and AAR (academies) benchmarking returns",
+      "publisher": "Department for Education",
+      "route": "manual",
+      "catalogueUrl": "https://financial-benchmarking-and-insights-tool.education.gov.uk/data-sources",
+      "apiDataSetId": null,
+      "cadence": "Annual; CFR published summer, AAR the following spring (matched pair lags a year)",
+      "lastVersion": "2024-25 financial year (CFR Full Data Workbook + AAR download)",
+      "lastPulled": "2026-10-22",
+      "output": "apps/platform/public/data/schools.json (fin_* fields)",
+      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to £1,000s at source."
+    },
+    {
       "key": "ofsted",
       "name": "Ofsted inspection outcomes (management information)",
       "publisher": "Ofsted",

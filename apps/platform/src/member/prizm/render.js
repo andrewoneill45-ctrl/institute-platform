@@ -400,6 +400,52 @@ function workforceHtml(d, ctx) {
     columnsSvg({ rows: shown, min: 0, max: Math.min(80, Math.ceil((hi + 4) / 10) * 10), unit: "%", refs: [{ v: d.bench.turnMed, label: "England", color: "var(--nat)" }, { v: d.turnMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
 }
 
+function financeHtml(d, ctx) {
+  if (!d.rows.length) return "";
+  const KS2 = d.kind === "ks2";
+  const LBL = (ctx && ctx.labels) || {};
+  const money = (v) => (v == null ? "–" : (v < 0 ? "−£" + Math.abs(v).toLocaleString("en-GB") : "£" + v.toLocaleString("en-GB")));
+  const vsLine = ctx && ctx.vs && ctx.vs.spendMean != null ? ` ${esc(LBL.b || "The comparison")} spends ${money(ctx.vs.spendMean)}.` : "";
+  const { rows: shown, capped } = capRows(d.rows.filter((r) => r.spend != null).map((r) => ({
+    label: r.name, v: r.spend / 1000, urn: r.urn,
+    tipLines: [r.name, `Spend ${money(r.spend)} per pupil · income ${money(r.income)}`, `Staff ${f1(r.staffPct)}% of spend · energy ${money(r.energy)} per pupil`, `Revenue reserve ${money(r.reserve)} per pupil${r.reserve != null && r.reserve < 0 ? " — in deficit" : ""}`],
+  })));
+  if (!shown.length) return "";
+  const spends = d.rows.map((r) => r.spend).filter((v) => v != null);
+  const hi = Math.max(...spends) / 1000, lo = Math.min(...spends) / 1000;
+  const headline = `Spend averages ${money(d.spendMean)} per pupil against England's median ${money(d.bench.spendMed)}, and ${d.deficitN} of ${d.rows.length} school${d.rows.length === 1 ? "" : "s"} ${d.deficitN === 1 ? "is" : "are"} carrying a negative revenue reserve.${vsLine}`;
+  const cols = columnsSvg({ rows: shown, min: Math.max(0, Math.floor(lo - 1)), max: Math.ceil(hi + 1), unit: "k", dp: 1, refs: [{ v: d.bench.spendMed / 1000, label: "England", color: "var(--nat)" }, ...(d.spendMean != null ? [{ v: d.spendMean / 1000, label: "Scope", color: "var(--gold)" }] : [])] });
+
+  /* spend against outcomes: each mark a scope school on England's cloud */
+  let scat = "";
+  if (d.marks.length && d.cloud.length) {
+    const TOP = KS2 ? 100 : 80, MEASURE = KS2 ? "RWM expected standard" : "Attainment 8", PHASE = KS2 ? "primary" : "secondary";
+    const W = 1000, H = 420, L = 54, B = 44, XMIN = 3000, XMAX = 16000;
+    const x = (v) => L + ((Math.max(XMIN, Math.min(XMAX, v)) - XMIN) / (XMAX - XMIN)) * (W - L - 20);
+    const y = (a) => (H - B) - (Math.max(0, Math.min(TOP, a)) / TOP) * (H - B - 20);
+    const cloud = d.cloud.map(([sp, a]) => `<circle cx="${x(sp).toFixed(1)}" cy="${y(a).toFixed(1)}" r="2" fill="var(--slo)"/>`).join("");
+    const vsMarks = ctx && ctx.vs ? ctx.vs.marks : null;
+    const dot = (m, color) => `<circle cx="${x(m.spend).toFixed(1)}" cy="${y(m.y).toFixed(1)}" r="5.2" fill="${color}" stroke="var(--paper)" stroke-width="1.4"${hit([m.name, `Spend ${money(m.spend)} per pupil · ${KS2 ? "RWM " + f0(m.y) : "A8 " + f1(m.y)}`], m.urn)}/>`;
+    const marks = (vsMarks ? vsMarks.map((m) => dot(m, "var(--gold)")).join("") : "") + d.marks.map((m) => dot(m, "var(--purple)")).join("");
+    const yTicks = KS2 ? [25, 50, 75, 100] : [20, 40, 60, 80];
+    const xTicks = [4000, 7000, 10000, 13000, 16000];
+    const axes = `<line x1="${L}" y1="${H - B}" x2="${W - 20}" y2="${H - B}" stroke="var(--grid)"/><line x1="${L}" y1="20" x2="${L}" y2="${H - B}" stroke="var(--grid)"/>
+      ${xTicks.map((v) => `<text class="tick" x="${x(v)}" y="${H - B + 16}" text-anchor="middle">£${v / 1000}k</text>`).join("")}
+      ${yTicks.map((v) => `<text class="tick" x="${L - 8}" y="${y(v) + 3}" text-anchor="end">${v}${KS2 ? "%" : ""}</text>`).join("")}
+      <text class="tick" x="${(W + L) / 2}" y="${H - 6}" text-anchor="middle">spend per pupil</text>
+      <text class="tick" x="16" y="${(H - B) / 2}" transform="rotate(-90 16 ${(H - B) / 2})" text-anchor="middle">${MEASURE}</text>`;
+    scat = `<p class="pz-note" style="margin:22px 0 4px">Does money buy ${MEASURE.toLowerCase()}? Each mark is a scope school set on the national cloud; association, not causation.</p>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${axes}${cloud}${marks}</svg>` + legend(vsMarks
+      ? [["var(--purple)", LBL.a || "Scope"], ["var(--gold)", LBL.b || "Comparison"], ["var(--slo)", `Every other state-funded ${PHASE}`]]
+      : [["var(--purple)", "Scope school"], ["var(--slo)", `Every other state-funded ${PHASE}`]]);
+  }
+
+  const tbl = `<details class="pz-fold"><summary>The money, school by school<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Sector</th><th>Income / pupil</th><th>Spend / pupil</th><th>Teaching staff / pupil</th><th>Energy / pupil</th><th>Staff share</th><th>In-year balance / pupil</th><th>Reserve / pupil</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td>${r.sector === "academy" ? "Academy" : "Maintained"}</td><td class="num">${money(r.income)}</td><td class="num">${money(r.spend)}</td><td class="num">${money(r.teach)}</td><td class="num">${money(r.energy)}</td><td class="num">${f1(r.staffPct)}%</td><td class="num" style="color:${r.balance != null && r.balance < 0 ? "var(--down)" : "inherit"}">${money(r.balance)}</td><td class="num" style="color:${r.reserve != null && r.reserve < 0 ? "var(--down)" : "inherit"}">${money(r.reserve)}</td></tr>`).join("")}</tbody></table></details>`;
+  return section("The money", headline,
+    (capped ? `Showing the two ends of ${d.rows.length} schools. ` : "") + "Total spend per pupil, 2024-25 financial year: consistent financial reporting for maintained schools, accounting returns for academies. Sorted highest spend first; income, staff share, energy and reserves in the tooltips and the table.",
+    cols + scat + tbl);
+}
+
 function destinationsHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.destMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")} sustains ${f1(ctx.vs.destMean)}%.` : "";
@@ -505,6 +551,22 @@ function trendSvg(points, engRef, { min, max, unit = "", dp = 1 }) {
   return s + "</svg>";
 }
 
+/* the money on the school dash: per-pupil bars, reserve and balance spelt out */
+function moneyGroup(s, bench, n) {
+  if (n(s.fin_spend_pp) == null) return "";
+  const money = (v) => (v == null ? "–" : (v < 0 ? "−£" + Math.abs(v).toLocaleString("en-GB") : "£" + v.toLocaleString("en-GB")));
+  const res = n(s.fin_reserve_pp), bal = n(s.fin_balance_pp);
+  const note = `<p class="pz-note" style="margin-top:8px">Revenue reserve ${money(res)} per pupil${res != null && res < 0 ? ", a deficit" : ""} (England median ${money(bench.reserveMed)}); in-year balance ${money(bal)} per pupil. ${s.fin_sector === "academy" ? "Academy accounting return" : "Consistent financial reporting"}, 2024-25.</p>`;
+  return mgroup("The money", [
+    mrow("Spend per pupil (£000)", n(s.fin_spend_pp) / 1000, bench.spendMed != null ? bench.spendMed / 1000 : null, 22),
+    mrow("Income per pupil (£000)", n(s.fin_income_pp) != null ? n(s.fin_income_pp) / 1000 : null, bench.incomeMed != null ? bench.incomeMed / 1000 : null, 22),
+    mrow("Teaching staff per pupil (£000)", n(s.fin_teach_pp) != null ? n(s.fin_teach_pp) / 1000 : null, bench.teachPpMed != null ? bench.teachPpMed / 1000 : null, 12),
+    mrow("Energy per pupil (£)", n(s.fin_energy_pp), bench.energyPpMed, 500, "", 0),
+    mrow("Staff share of spend", n(s.fin_staff_pct), bench.staffPctMed, 100, "%"),
+    note,
+  ]);
+}
+
 export function schoolDashHtml(d) {
   if (!d || !d.s) return "";
   const { s, pri, bench } = d;
@@ -562,6 +624,7 @@ export function schoolDashHtml(d) {
       mrow("Vacancy rate", n(s.wf_vac_rate), bench.vacMean, 10, "%"),
       mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
     ]),
+    moneyGroup(s, bench, n),
   ].join("") : [
     mgroup("Outcomes", [
       mrow("Attainment 8", n(s.attainment8), bench.a8Med, 90),
@@ -587,6 +650,7 @@ export function schoolDashHtml(d) {
       mrow("Sick days per teacher", n(s.wf_sick_days), bench.sickDaysMed, 15),
       mrow("Mean teacher pay (£000)", n(s.wf_pay_mean) != null ? n(s.wf_pay_mean) / 1000 : null, bench.payMed != null ? bench.payMed / 1000 : null, 90),
     ]),
+    moneyGroup(s, bench, n),
   ].join("");
 
   /* destinations: one stacked bar of where the leavers went */
@@ -616,7 +680,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};

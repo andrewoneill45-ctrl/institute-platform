@@ -23,6 +23,7 @@ const KS2_DESCS = {
   attendance: "overall and persistent absence against primary England",
   behaviour: "suspension rates and permanent exclusions (primary)",
   workforce: "teacher turnover, ratios and unfilled posts in primaries",
+  finance: "spend per pupil, reserves and deficits in primaries",
   destinations: "secondary only — KS4 leavers' destinations",
   scatter: "FSM against RWM, the scope against England's primaries",
   distribution: "the national RWM distribution, scope schools marked",
@@ -37,7 +38,7 @@ const EXAMPLES = [
   { t: "Schools where one leaver in ten doesn't sustain a destination", sub: "the NEET risk register", sc: { type: "england", minNotsust: 10 }, blocks: ["headlines", "cohort", "destinations", "scatter"] },
   { t: "The primary picture in the north west", sub: "KS2 2024/25, the latest published", sc: { type: "region", name: "North West", phase: "primary" } },
   { t: "London schools with no permanent exclusions", sub: "behaviour, composed in one breath", sc: { type: "region", name: "London", maxPex: 0 }, blocks: ["headlines", "cohort", "behaviour"] },
-  { t: "The twenty most improved schools in England", sub: "movement on last year", sc: { type: "england", order: { by: "improvement", limit: 20 } }, blocks: ["headlines", "cohort", "movement"] },
+  { t: "Secondary schools in deficit — does money buy outcomes?", sub: "the 2024-25 accounts, spend set against attainment", sc: { type: "england", deficit: true }, blocks: ["headlines", "finance", "cohort"] },
 ];
 
 /* the scope, taken apart: every piece removable on its own */
@@ -63,8 +64,10 @@ const TOKEN_DEFS = [
   ["minTurnover", (sc) => `turnover ${sc.minTurnover}%+`], ["maxTurnover", (sc) => `turnover under ${sc.maxTurnover}%`],
   ["minPtr", (sc) => `PTR ${sc.minPtr}+`], ["maxPtr", (sc) => `PTR under ${sc.maxPtr}`],
   ["minVac", () => "with unfilled posts"], ["maxVac", () => "no unfilled posts"],
+  ["minSpend", (sc) => `spend £${sc.minSpend.toLocaleString("en-GB")}+`], ["maxSpend", (sc) => `spend under £${sc.maxSpend.toLocaleString("en-GB")}`],
+  ["deficit", () => "in deficit"],
   ["noGrammar", () => "grammars set aside"],
-  ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM" }[sc.order.by] || sc.order.by}`],
+  ["order", (sc) => `top ${sc.order.limit || ""} by ${{ a8: "A8", rwm: "RWM", reading: "reading", improvement: "improvement", pupils: "size", fsm: "FSM", spend: "spend" }[sc.order.by] || sc.order.by}`],
   ["versus", (sc) => `vs ${scopeShort(sc.versus)}`],
 ];
 function scopeTokens(sc) {
@@ -167,6 +170,7 @@ export default function Prizm() {
     if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null) want.push("behaviour");
     if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
     if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
+    if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
@@ -271,6 +275,7 @@ export default function Prizm() {
     if (!isPrimary) out.push({ t: "The primary phase", f: () => setScope(withPhase(scope, "primary")) });
     else out.push({ t: "The secondary phase", f: () => setScope(withPhase(scope, undefined)) });
     if (!foreword && !fwBusy) out.push({ t: "Write the foreword", f: askForeword });
+    if (!blocks.includes("finance")) out.push({ t: "Follow the money", f: () => addBlock("finance") });
     if (!blocks.includes("attendance")) out.push({ t: "Add attendance", f: () => addBlock("attendance") });
     if (!blocks.includes("destinations") && !isPrimary) out.push({ t: "Add destinations", f: () => addBlock("destinations") });
     return out.slice(0, 3);
@@ -424,7 +429,7 @@ export default function Prizm() {
               const grammarsIn = !isPrimary && !scope.noGrammar ? computed.schools.filter((s) => /grammar/i.test(s.name || "")).length : 0;
               const showToggle = !isPrimary && (scope.noGrammar || grammarsIn > 0);
               return computed.blocks.map((b) => {
-                const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce"].includes(b.type);
+                const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce", "finance"].includes(b.type);
                 const withToggle = showToggle && ranked && !togglePlaced && (togglePlaced = true);
                 return (
                   <div key={b.type} className="pz-blockwrap">
