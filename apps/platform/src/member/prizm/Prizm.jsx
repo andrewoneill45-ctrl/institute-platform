@@ -122,6 +122,7 @@ export default function Prizm() {
   const [saved, setSaved] = useState([]);
   const [keeping, setKeeping] = useState(false);
   const [dashUrn, setDashUrn] = useState(null);
+  const [segs, setSegs] = useState({}); /* per-block decile view: type → 0..9, absent = both ends */
   const boxRef = useRef(null);
 
   useEffect(ensureMotionCss, []);
@@ -129,6 +130,7 @@ export default function Prizm() {
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   useEffect(() => { setForeword(null); }, [scope, blocks]);
+  useEffect(() => { setSegs({}); }, [scope]);
   useEffect(() => {
     try { const want = new URLSearchParams(window.location.search).get("school"); if (want) setDashUrn(want); } catch { /* no params */ }
   }, []);
@@ -468,6 +470,15 @@ export default function Prizm() {
               return computed.blocks.map((b) => {
                 const ranked = ["cohort", "movement", "gap", "distribution", "league", "workforce", "finance", "inclusion"].includes(b.type);
                 const withToggle = showToggle && ranked && !togglePlaced && (togglePlaced = true);
+                /* decile view: every chart that ranks schools can page through the system */
+                const seggable = ["cohort", "movement", "gap", "attendance", "behaviour", "workforce", "inclusion", "finance", "destinations"].includes(b.type) && computed.schools.length > 44;
+                const segOn = segs[b.type] ?? null;
+                const segBtn = (d, label) => (
+                  <button key={b.type + String(d)} onClick={() => setSegs((s) => ({ ...s, [b.type]: d }))}
+                    style={{ fontFamily: "inherit", border: `1px solid ${segOn === d ? PURPLE : HAIR}`, background: segOn === d ? PURPLE : "#fff", color: segOn === d ? "#fff" : MUTED, borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
+                    {label}
+                  </button>
+                );
                 return (
                   <div key={b.type} className="pz-blockwrap">
                     <div className="pz-blockctl">
@@ -475,7 +486,14 @@ export default function Prizm() {
                       <button onClick={() => moveBlock(b.type, 1)} title="Move down">↓</button>
                       <button onClick={() => removeBlock(b.type)} title="Remove this section">×</button>
                     </div>
-                    <div dangerouslySetInnerHTML={{ __html: renderBlock(b, computed) }} />
+                    <div dangerouslySetInnerHTML={{ __html: renderBlock(b, computed, segOn != null ? { d: segOn } : null) }} />
+                    {seggable && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 10, flexWrap: "wrap", fontFamily: "Inter, system-ui, sans-serif" }}>
+                        <span style={{ fontSize: 9.5, letterSpacing: ".12em", fontWeight: 700, color: GOLD, marginRight: 3 }}>VIEW</span>
+                        {segBtn(null, "Both ends")}
+                        {["Top 10%", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "Bottom 10%"].map((label, d) => segBtn(d, label))}
+                      </div>
+                    )}
                     {withToggle && (
                       <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: MUTED, cursor: "pointer", fontFamily: "Inter, system-ui, sans-serif" }}>
                         <input type="checkbox" checked={!!scope.noGrammar} style={{ accentColor: PURPLE }}
