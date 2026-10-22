@@ -5,6 +5,10 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth.jsx";
 import { Rise, ensureMotionCss } from "../lib/motion.jsx";
 import { getDataset } from "../lib/dataset.js";
+import { listReports } from "./prizm/reports.js";
+
+/* a one-click road into Prizm with a composed scope */
+const prizmLink = (scope, blocks) => `/members/prizm?spec=${encodeURIComponent(JSON.stringify({ scope, blocks }))}`;
 
 const Q = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
 const fmt = (v, d = 1) => (v == null ? "–" : Number(v).toFixed(d));
@@ -83,12 +87,15 @@ export default function Home() {
   const [me, setMe] = useState(undefined); // undefined = loading, null = not found
   const [nat, setNat] = useState(null);
   const [sys, setSys] = useState(null);
+  const [patch, setPatch] = useState(null);
+  const [vault, setVault] = useState([]);
   const system = user?.accountType && user.accountType !== "school";
   useEffect(ensureMotionCss, []);
+  useEffect(() => { listReports(user?.urn).then((r) => setVault(r.slice(0, 4))).catch(() => {}); }, [user?.urn]);
 
   useEffect(() => {
     let live = true;
-    getDataset().then(({ raw: all }) => {
+    getDataset().then(({ raw: all, ofsted }) => {
       if (!live) return;
       if (system) {
         /* the bird's eye: England itself is this account's school */
@@ -98,7 +105,25 @@ export default function Home() {
         const a8 = state.map((s) => s.attainment8).filter((x) => typeof x === "number");
         const rwm = state.map((s) => s.ks2_rwm_exp).filter((x) => typeof x === "number");
         const abs = state.map((s) => s.abs_overall_pct).filter((x) => typeof x === "number");
-        setSys({ n: state.length, a8: mean(a8), secN: a8.length, rwm: mean(rwm), priN: rwm.length, abs: med(abs) });
+        /* pupil-weighted EHC plan share, deficits and report cards: today's layers */
+        let ehcN = 0, ehcP = 0, deficits = 0;
+        for (const s of state) {
+          if (typeof s.sen_ehcp_n === "number" && typeof s.pupils === "number" && s.pupils > 0) { ehcN += s.sen_ehcp_n; ehcP += s.pupils; }
+          if (typeof s.fin_reserve_pp === "number" && s.fin_reserve_pp < 0) deficits++;
+        }
+        const cards = ofsted ? Object.values(ofsted).filter((e) => e && e.rc).length : 0;
+        setSys({ n: state.length, a8: mean(a8), secN: a8.length, rwm: mean(rwm), priN: rwm.length, abs: med(abs), ehcp: ehcP ? (ehcN / ehcP) * 100 : null, deficits, cards });
+        /* the patch: an LA or trust account sees its own estate at a glance */
+        const org = (user?.orgName || "").trim().toLowerCase();
+        if (org && (user.accountType === "la" || user.accountType === "trust")) {
+          const mineAll = state.filter((s) => ((user.accountType === "la" ? s.la : s.trust) || "").trim().toLowerCase() === org);
+          if (mineAll.length) {
+            const pa8 = mineAll.map((s) => s.attainment8).filter((x) => typeof x === "number");
+            const prwm = mineAll.map((s) => s.ks2_rwm_exp).filter((x) => typeof x === "number");
+            const pabs = mineAll.map((s) => s.abs_overall_pct).filter((x) => typeof x === "number");
+            setPatch({ n: mineAll.length, a8: mean(pa8), rwm: mean(prwm), abs: med(pabs), scope: user.accountType === "la" ? { type: "la", name: user.orgName } : { type: "trust", name: user.orgName } });
+          }
+        }
         setMe(null);
         return;
       }
@@ -129,7 +154,17 @@ export default function Home() {
     ["Attainment 8, England mean", fmt(sys.a8), null],
     ["KS2 expected standard, mean", sys.rwm != null ? Math.round(sys.rwm) + "%" : "–", null],
     ["Overall absence, median", sys.abs != null ? fmt(sys.abs) + "%" : "–", null],
+    ["Pupils with an EHC plan", sys.ehcp != null ? fmt(sys.ehcp) + "%" : "–", null],
+    ["Report cards published so far", sys.cards ? sys.cards.toLocaleString("en-GB") : "–", null],
   ].filter((s) => s[1] !== "–");
+
+  /* one-click national questions for the bird's-eye account */
+  const sysAsks = system && sys && [
+    ["The report cards so far", { type: "england", hasCard: true }, ["headlines", "ofsted", "cohort"]],
+    [`${sys.deficits ? sys.deficits.toLocaleString("en-GB") + " schools" : "Schools"} in deficit`, { type: "england", deficit: true }, ["headlines", "finance", "cohort"]],
+    ["Where the highest needs learn", { type: "england", minEhcp: 10 }, ["headlines", "inclusion", "scatter"]],
+    ["Which authorities hold the widest gaps", { type: "england" }, ["headlines", "league", "gap"]],
+  ];
 
   const stats = system ? sysStats : me && [
     ["Attainment 8", fmt(me.attainment8), nat?.attainment8 != null && me.attainment8 != null ? me.attainment8 - nat.attainment8 : null],
@@ -157,7 +192,9 @@ export default function Home() {
         </Rise>
         <Rise delay={200}>
           <p style={{ color: "#6F6580", fontSize: 15, maxWidth: 560, margin: "12px 0 0", lineHeight: 1.55 }}>
-            {system ? <>The whole system is your scope: here is England this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}, read live from the dataset every instrument shares.</>
+            {system ? (user?.orgName && (user.accountType === "la" || user.accountType === "trust")
+              ? <>England first, {user.orgName} beneath it: both read live this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"} from the dataset every instrument shares.</>
+              : <>The whole system is your scope: here is England this {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}, read live from the dataset every instrument shares.</>)
               : me === undefined ? "Reading your school from the Institute dataset…"
               : me ? <>Here is {user?.school ? "your school" : "the picture"} at a glance{me.la ? <>, read live alongside every school in {me.la}</> : null}: joined, not judged.</>
               : "Your school's published data joins the dataset as the DfE releases it; the instruments are ready in the meantime."}
@@ -178,6 +215,57 @@ export default function Home() {
               </div>
             ))}
           </div>
+        )}
+
+        {patch && (
+          <Rise delay={420}>
+            <div style={{ ...card, marginTop: 18, display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 200, flex: 1 }}>
+                <div style={{ fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginBottom: 6 }}>Your patch</div>
+                <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 19, color: "#221233" }}>{user?.orgName}</div>
+                <div style={{ fontSize: 12.5, color: "#6F6580", marginTop: 4 }}>
+                  {patch.n} school{patch.n === 1 ? "" : "s"}
+                  {patch.a8 != null ? ` · A8 ${fmt(patch.a8)}` : ""}{patch.rwm != null ? ` · RWM ${Math.round(patch.rwm)}%` : ""}{patch.abs != null ? ` · absence ${fmt(patch.abs)}%` : ""}
+                </div>
+              </div>
+              <Link to={prizmLink(patch.scope)} style={{ fontSize: 12.5, fontWeight: 700, color: "#fff", background: "#6A0CA0", borderRadius: 999, padding: "10px 18px", textDecoration: "none", whiteSpace: "nowrap" }}>
+                The full picture in Prizm
+              </Link>
+            </div>
+          </Rise>
+        )}
+
+        {sysAsks && (
+          <Rise delay={500}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+              <span style={{ fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginRight: 2 }}>Ask Prizm</span>
+              {sysAsks.map(([label, scope, blocks]) => (
+                <Link key={label} to={prizmLink(scope, blocks)}
+                  style={{ fontSize: 12.5, fontWeight: 600, color: "#221233", background: "#fff", border: "1px solid rgba(34,18,51,.14)", borderRadius: 999, padding: "8px 15px", textDecoration: "none" }}>
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </Rise>
+        )}
+
+        {vault.length > 0 && (
+          <Rise delay={560}>
+            <div style={{ marginTop: 26 }}>
+              <div style={{ fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginBottom: 10 }}>Your vault</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
+                {vault.map((r) => (
+                  <Link key={r.id} to={`/members/prizm?vault=${encodeURIComponent(r.id)}`} className="asi-lift"
+                    style={{ ...card, padding: "16px 18px", textDecoration: "none", display: "block" }}>
+                    <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 15.5, color: "#221233", lineHeight: 1.3 }}>{r.title}</div>
+                    <div style={{ fontSize: 11.5, color: "#6F6580", marginTop: 6 }}>
+                      Kept {r.created_at ? new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""} · recomputes on opening
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </Rise>
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18, marginTop: 30 }}>

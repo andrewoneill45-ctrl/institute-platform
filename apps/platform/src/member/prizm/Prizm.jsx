@@ -131,9 +131,32 @@ export default function Prizm() {
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   useEffect(() => { setForeword(null); }, [scope, blocks]);
   useEffect(() => { setSegs({}); }, [scope]);
+  const [pendingVault, setPendingVault] = useState(null);
   useEffect(() => {
-    try { const want = new URLSearchParams(window.location.search).get("school"); if (want) setDashUrn(want); } catch { /* no params */ }
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const want = p.get("school");
+      if (want) setDashUrn(want);
+      /* arrive with a composed scope: ?spec= carries {scope, blocks} from Home */
+      const sp = p.get("spec");
+      if (sp) {
+        const o = JSON.parse(decodeURIComponent(sp));
+        if (o && o.scope && o.scope.type) {
+          setScope(o.scope);
+          if (Array.isArray(o.blocks) && o.blocks.length) setBlocks(o.blocks.filter((t) => BLOCK_TYPES.some((k) => k.type === t)));
+        }
+      }
+      /* arrive at a kept report: ?vault=<id> opens it once the vault loads */
+      const v = p.get("vault");
+      if (v) setPendingVault(v);
+    } catch { /* no params */ }
   }, []);
+  useEffect(() => {
+    if (!pendingVault || !saved.length) return;
+    const r = saved.find((x) => String(x.id) === String(pendingVault));
+    if (r) { openSaved(r); setPendingVault(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVault, saved]);
   /* "/" summons the box from anywhere */
   useEffect(() => {
     const onKey = (e) => {
