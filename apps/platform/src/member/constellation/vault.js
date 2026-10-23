@@ -8,10 +8,15 @@ import { supabase, DEMO } from "../../lib/supabase.js";
 
 /* ── the sync decision, pure and testable ───────────────────────────────────
    Given what exists locally and in the vault, decide what Constellation
-   should do on arrival. The vault, when it has anything, is the truth. */
+   should do on arrival. The newer copy is the truth: a push that never
+   completed (a closed laptop, an unreachable vault) must not let an older
+   vault state silently roll the device's work back. Ties go to the vault. */
 export function planSync(local, vaultRow) {
-  if (vaultRow && vaultRow.state) return "adopt";                       // the school's copy wins
-  if (local && (local.ledger || []).length) return "seed";              // device work becomes the school's
+  const hasVault = !!(vaultRow && vaultRow.state);
+  const hasLocal = !!(local && (local.ledger || []).length);
+  if (hasVault && hasLocal && (local.touched || 0) > (vaultRow.state.touched || 0)) return "seed"; // the device is newer: share it
+  if (hasVault) return "adopt";                                         // the school's copy wins
+  if (hasLocal) return "seed";                                          // device work becomes the school's
   return "blank";                                                       // nothing anywhere yet
 }
 

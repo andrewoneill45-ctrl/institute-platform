@@ -47,8 +47,33 @@ function Constellation() {
   const vault = useRef({ member: false, urn: null, version: 0 });
   const adopted = useRef(false); /* true when state was just taken FROM the vault: cache it, don't push it back */
   const pushTimer = useRef(null);
+  const pendingRef = useRef(null); /* the newest state the vault has not yet confirmed */
+  const alive = useRef(true);
+  const userRef = useRef(user); userRef.current = user;
   const [vaultOn, setVaultOn] = useState(false);
   const [vaultNote, setVaultNote] = useState("");
+  const pushNow = async (s) => {
+    if (!vault.current.member || !s) return;
+    if (pendingRef.current === s) pendingRef.current = null;
+    const r = await vaultSave(vault.current.urn, s, vault.current.version, userRef.current?.id);
+    if (r?.ok) { vault.current.version = r.version; if (alive.current) setVaultNote(""); }
+    else if (r?.conflict) {
+      vault.current.version = r.version;
+      if (alive.current) { adopted.current = true; setState(r.state); setVaultNote("A colleague updated the school's data while you worked; showing the latest."); }
+    } else {
+      if (pendingRef.current == null) pendingRef.current = s; /* keep it for the next flush */
+      if (alive.current) setVaultNote("The vault could not be reached; your work is safe on this device and will share next time.");
+    }
+  };
+  /* leaving the page must not cancel an unshared change: flush it on the way out */
+  useEffect(() => {
+    alive.current = true;
+    const onHide = () => { if (document.visibilityState === "hidden" && pendingRef.current) { clearTimeout(pushTimer.current); pushNow(pendingRef.current); } };
+    const onGone = () => { if (pendingRef.current) { clearTimeout(pushTimer.current); pushNow(pendingRef.current); } };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onGone);
+    return () => { alive.current = false; document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", onGone); onGone(); };
+  }, []);
   useEffect(() => {
     if (!user) return;
     loadedFor.current = null;
@@ -74,19 +99,11 @@ function Constellation() {
     if (!(state && loadedFor.current === sid)) return;
     saveState(sid, state); /* the device cache, always */
     if (!vault.current.member) return;
-    if (adopted.current) { adopted.current = false; return; } /* came from the vault: nothing to push */
+    if (adopted.current) { adopted.current = false; pendingRef.current = null; return; } /* came from the vault: nothing to push */
+    pendingRef.current = state;
     clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(async () => {
-      const r = await vaultSave(vault.current.urn, state, vault.current.version, user?.id);
-      if (r?.ok) { vault.current.version = r.version; setVaultNote(""); }
-      else if (r?.conflict) {
-        vault.current.version = r.version;
-        adopted.current = true;
-        setState(r.state);
-        setVaultNote("A colleague updated the school's data while you worked; showing the latest.");
-      } else setVaultNote("The vault could not be reached; your work is safe on this device and will share next time.");
-    }, 1200);
-    return () => clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => pushNow(state), 1200);
+    return () => clearTimeout(pushTimer.current); /* the re-run reschedules with the newer state; pendingRef keeps it for the flush */
   }, [state, sid]);
 
   const computed = useMemo(() => (state ? computeAll(state) : {}), [state]);
@@ -130,12 +147,18 @@ function Constellation() {
   const commitAll = () => {
     let st = state;
     const ordered = [...slips].filter((s) => s.kind !== "unreadable").sort((a, b) => (a.kind === "roll" ? 0 : 1) - (b.kind === "roll" ? 0 : 1));
-    for (const sl of ordered) st = commitSlip(st, sl);
+    const done = new Set();
+    for (const sl of ordered) {
+      if (sl.kind !== "roll" && !st.roll.length) continue; /* nothing to attach to: the slip stays, waiting for the roll */
+      st = commitSlip(st, sl);
+      done.add(sl.id);
+    }
+    if (!done.size) return;
     setState(st);
-    setSlips((cur) => cur.filter((s) => s.kind === "unreadable"));
+    setSlips((cur) => cur.filter((s) => !done.has(s.id)).map((s) => (s.kind === "unreadable" || done.has(s.id) ? s : reinspect(st, s, s.fixes))));
   };
   const resolve = (item, upn) => {
-    const s = { ...state, review: state.review.filter((r) => r !== item) };
+    const s = { ...state, review: state.review.filter((r) => r !== item), touched: Date.now() };
     if (upn) {
       s.aliases = { ...s.aliases, [item.name.toLowerCase().replace(/[^a-z]/g, "")]: upn };
       s.evidence = [...s.evidence]; // re-ingest the held row via alias
@@ -147,6 +170,8 @@ function Constellation() {
 
   if (!state) return null;
   const chosen = pick ? computed[pick] : null;
+  const ghostRoll = !state.roll.length && state.ledger.some((l) => l.kind === "roll");
+  const rollWaiting = slips.some((s) => s.kind === "roll");
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#FBFAF7", color: INK, backgroundImage: "radial-gradient(760px 400px at 50% -70px, rgba(106,12,160,.07), transparent 70%)" }}>
@@ -156,6 +181,7 @@ function Constellation() {
             <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 30, letterSpacing: "-.015em", margin: 0 }}>Constellation</h1>
             <p style={{ color: MUTED, fontSize: 13.5, margin: "4px 0 0" }}>Every child in view · {state.roll.length ? `${state.roll.length} pupils on roll` : "awaiting the roll"} · {vaultOn ? "read on your device, held in your school's private vault" : "held on this device only, nothing leaves the browser"}</p>
             {vaultNote && <p style={{ color: "#8a6d1c", fontSize: 12, margin: "4px 0 0" }}>{vaultNote}</p>}
+            {ghostRoll && <p style={{ color: "#B3261E", fontSize: 12, margin: "4px 0 0", maxWidth: 740 }}>The ledger lists a roll but no pupils are on the spine, so nothing can match. Upload your roll export again to rebuild it; then read in again, under the same filename, any file that landed 0 matched.</p>}
           </div>
           <div style={{ display: "flex", gap: 6, background: "#fff", borderRadius: 999, padding: 5, boxShadow: shadow }}>
             {[["view", "School View"], ["up", "Uploads"], ["ins", "Insights"]].map(([k, l]) => (
@@ -219,11 +245,14 @@ function Constellation() {
                   <div style={kick}>The reading slip &middot; nothing lands until you say so</div>
                   <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 0" }}>{slips.length === 1 ? "One file waiting on your word" : `${slips.length} files waiting on your word`}</h3>
                 </div>
-                {slips.filter((s) => s.kind !== "unreadable").length > 1 && (
-                  <button onClick={commitAll} style={{ border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6A0CA0,#4B0875)", color: "#fff", borderRadius: 999, padding: "10px 20px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Read all {slips.filter((s) => s.kind !== "unreadable").length} in</button>
-                )}
+                {(() => {
+                  const n = slips.filter((s) => s.kind !== "unreadable" && (s.kind === "roll" || state.roll.length > 0 || rollWaiting)).length;
+                  return n > 1 && (
+                    <button onClick={commitAll} style={{ border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6A0CA0,#4B0875)", color: "#fff", borderRadius: 999, padding: "10px 20px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Read all {n} in{rollWaiting ? ", roll first" : ""}</button>
+                  );
+                })()}
               </div>
-              {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} onFix={(fx) => fixSlip(sl, fx)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
+              {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} spineEmpty={!state.roll.length} rollWaiting={rollWaiting} onFix={(fx) => fixSlip(sl, fx)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
             </div>
           )}
           <div className="asi-rise" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20, "--asi-d": "280ms" }}>
@@ -231,7 +260,7 @@ function Constellation() {
               <div style={kick}>Upload anything</div>
               <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 18, margin: "4px 0 8px" }}>In-play: the children in the building now</h3>
               <p style={{ fontSize: 12.5, color: MUTED, margin: "0 0 6px" }}><b>This intake is for live pupils only.</b> Finished cohorts, historic results and inspection evidence belong in Lens's Section 48 vault; nothing moves between the two unless you move it.</p>
-              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year. Every file is read back to you first as a <b>reading slip</b> &mdash; what the reader believes it is, which column means what, how many rows will land &mdash; and nothing is written until you say so. Correct a slip once and this device remembers the shape for next time. CSV and Excel in this release; Word and scans follow.</p>
+              <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55 }}>Start with your MIS roll export (UPN, name, year, and ideally DOB, reg group, prior attainment, PPG, SEN). Then assessments, attendance, behaviour, trip registers and intervention logs, year after year. Every file is read back to you first as a <b>reading slip</b>: what the reader believes it is, which column means what, how many rows will land; nothing is written until you say so. Correct a slip once and this device remembers the shape for next time. CSV and Excel in this release; Word and scans follow.</p>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "12px 0 2px" }}>
                 <span style={{ ...kick, marginRight: 4 }}>These files cover</span>
                 <button onClick={() => setUpYear(null)} style={chip(upYear == null, DEEP)}>Whole school</button>
@@ -244,7 +273,7 @@ function Constellation() {
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
-              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
+              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d, touched: Date.now() }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={kick}>Held for review · never guessed</div>
@@ -270,7 +299,7 @@ function Constellation() {
                     <div key={i} style={{ borderTop: "1px solid rgba(106,12,160,.12)", padding: "9px 0", fontSize: 12.5 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <span><b>{l.file}</b> · read as <b style={{ color: DEEP }}>{l.kind}</b> · {l.matched}/{l.of} matched{l.held ? `, ${l.held} held` : ""} · {l.date}</span>
-                        <button onClick={() => { const roll = l.kind === "roll"; if (window.confirm(roll ? "Remove the roll? This clears every pupil from the spine; evidence files remain but nothing can attach until a roll is uploaded again." : "Remove this file and all the evidence it brought in?")) setState(removeUpload(state, l)); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 14, padding: 0, lineHeight: 1 }}>&times;</button>
+                        <button onClick={() => { const roll = l.kind === "roll"; if (window.confirm(roll ? "Remove this roll file? Pupils whom another roll file on the ledger still vouches for stay on the spine; pupils only this file vouches for leave it, with their evidence unattached until a roll that carries them returns." : "Remove this file and all the evidence it brought in?")) setState(removeUpload(state, l)); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 14, padding: 0, lineHeight: 1 }}>&times;</button>
                       </div>
                       {l.note && <div style={{ color: DEEP, fontSize: 11.5, marginTop: 2, fontStyle: "italic" }}>&ldquo;{l.note}&rdquo;</div>}
                       {l.assumptions?.length > 0 && <div style={{ color: MUTED, fontSize: 11.5, marginTop: 2 }}>{l.assumptions.join("; ")}</div>}
@@ -755,8 +784,10 @@ function Metrics({ pupils: all, label }) {
 
 /* ── the reading slip card: the file read back before it lands ── */
 const sel = { border: "1px solid rgba(106,12,160,.25)", borderRadius: 8, padding: "5px 8px", fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#221233", maxWidth: 260 };
-function Slip({ slip, years, onFix, onCommit, onDiscard }) {
+function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard }) {
   const unread = slip.kind === "unreadable";
+  const gated = !unread && slip.kind !== "roll" && spineEmpty; /* nothing to attach to: refuse politely */
+  const dead = !unread && !gated && slip.kind !== "roll" && slip.stats.of > 0 && slip.stats.matched === 0;
   const fx = slip.fixes || {};
   const yr = fx.year ?? null;
   const autoCol = (k) => (k === "att" ? (slip.autoMap.attPlus ?? slip.autoMap.att ?? null) : (slip.autoMap[k] ?? null));
@@ -774,7 +805,7 @@ function Slip({ slip, years, onFix, onCommit, onDiscard }) {
         )}
       </div>
       {slip.opts?.note && <div style={{ fontSize: 11.5, color: DEEP, fontStyle: "italic", margin: "4px 0 0" }}>&ldquo;{slip.opts.note}&rdquo;</div>}
-      {slip.remembered && <div style={{ fontSize: 12, color: "#8a6d1c", margin: "6px 0 0" }}>This shape is remembered from <b>{slip.remembered.file}</b> &mdash; the correction is already applied below.</div>}
+      {slip.remembered && <div style={{ fontSize: 12, color: "#8a6d1c", margin: "6px 0 0" }}>This shape is remembered from <b>{slip.remembered.file}</b>; the correction is already applied below.</div>}
       {slip.replaces && <div style={{ fontSize: 12, color: MUTED, margin: "6px 0 0" }}>Replaces the earlier reading of this file. Nothing changes until you confirm.</div>}
       {!unread && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "10px 0 2px", fontSize: 13 }}>
@@ -797,7 +828,7 @@ function Slip({ slip, years, onFix, onCommit, onDiscard }) {
               <span style={{ fontSize: 12, color: MUTED }}>{FIELD_LABELS[k] || k}</span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <select value={v == null ? "" : v} onChange={(e) => chg(k, e.target.value === "" ? null : +e.target.value)} style={{ ...sel, color: v == null ? MUTED : INK }}>
-                  <option value="">&mdash; not in this file &mdash;</option>
+                  <option value="">not in this file</option>
                   {v === -1 && <option value={-1}>surname + forename</option>}
                   {slip.headers.map((h, i) => (h ? <option key={i} value={i}>{h}</option> : null))}
                 </select>
@@ -812,8 +843,18 @@ function Slip({ slip, years, onFix, onCommit, onDiscard }) {
           {slip.assumptions.map((a, i) => <div key={i} style={{ margin: "2px 0" }}>&middot; {a}</div>)}
         </div>
       )}
+      {gated && (
+        <div style={{ fontSize: 12.5, color: "#8a6d1c", fontWeight: 600, margin: "10px 0 0" }}>
+          Waiting for the roll: {rollWaiting ? "read the roll's slip in first and this one re-counts itself." : "the spine is empty, so these rows have nothing to attach to. Upload your MIS roll, then read this file in."}
+        </div>
+      )}
+      {dead && (
+        <div style={{ fontSize: 12.5, color: "#B3261E", margin: "10px 0 0" }}>
+          None of these rows matched a pupil on the spine. Check the UPN column and the year scope before reading it in; read in as it stands, nothing will land.
+        </div>
+      )}
       <div style={{ display: "flex", gap: 10, marginTop: 13 }}>
-        {!unread && <button onClick={onCommit} style={{ border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6A0CA0,#4B0875)", color: "#fff", borderRadius: 999, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Read it in</button>}
+        {!unread && !gated && <button onClick={onCommit} style={{ border: "none", cursor: "pointer", background: dead ? "#fff" : "linear-gradient(135deg,#6A0CA0,#4B0875)", color: dead ? "#B4475A" : "#fff", borderRadius: 999, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", boxShadow: dead ? shadow : "none" }}>{dead ? "Read it in anyway" : "Read it in"}</button>}
         <button onClick={onDiscard} style={{ border: "none", cursor: "pointer", background: "#fff", color: MUTED, borderRadius: 999, padding: "9px 16px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", boxShadow: shadow }}>Don&rsquo;t read this file</button>
       </div>
     </div>

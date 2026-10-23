@@ -28,10 +28,27 @@ export function rowsToCsv(aoa) {
   return aoa.map((r) => r.map((c) => '"' + String(c ?? "").replace(/"/g, '""') + '"').join(",")).join("\n");
 }
 export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {}, dialects: {} });
+/* every committed change carries its moment, so two copies of the school can be told apart by age */
+const stamp = (s) => ({ ...s, touched: Date.now() });
+
+/* ── the spine's citizenship rule ──────────────────────────────────────────
+   Each roll file's ledger entry carries the UPNs it vouches for. A pupil
+   stays on the spine while ANY remaining roll file vouches for them, so
+   removing an older roll export no longer empties the school. An entry from
+   before rosters were kept has an unknown roster: then nothing is pruned,
+   because a guess must never delete a child. No roll files, no spine. */
+export function pruneRoll(roll, ledger) {
+  const rolls = ledger.filter((l) => l.kind === "roll");
+  if (!rolls.length) return [];
+  if (rolls.some((l) => !l.upns)) return roll;
+  const keep = new Set();
+  rolls.forEach((l) => l.upns.forEach((u) => keep.add(u)));
+  return roll.filter((p) => keep.has(p.upn));
+}
 
 /* ── CSV: small, honest parser (quoted fields, CRLF) ── */
 export function parseCSV(text) {
-  text = String(text).replace(/^\uFEFF/, "");
+  text = String(text).replace(/^\uFEFF/, "").replace(/\u0000/g, ""); /* a stray NUL would poison every vault write */
   const rows = []; let row = [], cell = "", q = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -126,7 +143,7 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   const scopeYear = opts.year ?? null;
   const note = (opts.note || "").trim().slice(0, 240) || null;
   const rows = parseCSV(text);
-  if (rows.length < 2) return { ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] };
+  if (rows.length < 2) return stamp({ ...state, ledger: [{ file: fileName, kind: "unreadable", matched: 0, of: 0, assumptions: ["no rows found"], date: today() }, ...state.ledger] });
   const { map, assumptions } = readHeaders(rows[0], rows.slice(1));
   /* a numeric field mapped onto a column of words (KS2 Banding, Source…) is set aside */
   ["prior", "ks2em", "ks2read", "cats"].forEach((k) => {
@@ -208,17 +225,21 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
       [["ppg", map.ppg], ["fsm", map.fsm], ["eal", map.eal], ["sen", map.sen], ["ehcp", map.ehcp ?? map.sen]].forEach(([k, col]) => { if (col == null) delete p[k]; });
       const i = roll.findIndex((x) => x.upn === upn);
       if (i >= 0) roll[i] = { ...roll[i], ...p }; else roll.push(p);
+      (led.upns = led.upns || []).push(upn);
       led.matched++;
     });
     if (led.held) led.assumptions = [...assumptions, `${led.held} rows held, UPN missing or malformed (temporary UPNs are accepted; blanks are not): ${(led.heldNames || []).slice(0, 10).join(", ")}${led.held > 10 ? "\u2026" : ""}`];
-    led.years = [...new Set(roll.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
-    return { ...state, roll, ledger: [led, ...state.ledger] };
+    const ledger = [led, ...state.ledger];
+    const pruned = pruneRoll(roll, ledger); /* leavers leave when no remaining roll file vouches for them */
+    if (pruned.length < roll.length) led.assumptions = [...led.assumptions, `${roll.length - pruned.length} pupils left the spine: no roll file on the ledger vouches for them any more`];
+    led.years = [...new Set(pruned.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
+    return stamp({ ...state, roll: pruned, ledger });
   }
 
   if (kind === "unknown" || !state.roll.length) {
     const heads = rows[0].map((c) => String(c).trim()).filter(Boolean);
     led.assumptions = [...assumptions, !state.roll.length ? "no roll yet: upload the MIS roll first, it is the spine" : "could not classify the columns", `columns seen: ${heads.slice(0, 14).join(", ")}${heads.length > 14 ? ` and ${heads.length - 14} more` : ""}`];
-    return { ...state, ledger: [led, ...state.ledger] };
+    return stamp({ ...state, ledger: [led, ...state.ledger] });
   }
 
   const evidence = [...state.evidence]; const review = [...state.review];
@@ -246,7 +267,7 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : []), ...ctxNote()];
     const touched2 = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
     led.years = [...new Set(roll.filter((p) => touched2.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
-    return { ...state, roll, evidence, review, ledger: [led, ...state.ledger] };
+    return stamp({ ...state, roll, evidence, review, ledger: [led, ...state.ledger] });
   }
   const roll2 = state.roll.map((p) => ({ ...p }));
   body.forEach((r) => {
@@ -273,19 +294,20 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   led.assumptions = [...led.assumptions, ...ctxNote()];
   const touched = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
   led.years = [...new Set(roll2.filter((p) => touched.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
-  return { ...state, roll: roll2, evidence, review, ledger: [led, ...state.ledger] };
+  return stamp({ ...state, roll: roll2, evidence, review, ledger: [led, ...state.ledger] });
 }
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[%\s]/g, "")); return isFinite(n) ? n : null; };
 const pctFrom = (r, map) => { const s = num(r[map.sessions]), a = num(r[map.absent]); return s ? Math.round(1000 * (s - (a || 0)) / s) / 10 : null; };
 const today = () => new Date().toLocaleDateString("en-GB");
 
-/* an upload the user removes takes its evidence with it */
+/* an upload the user removes takes its evidence with it; a removed roll file
+   takes only the pupils no remaining roll file vouches for, never the school */
 export function removeUpload(state, led) {
   const evidence = state.evidence.filter((e) => e.file !== led.file);
   const review = state.review.filter((r) => r.file !== led.file);
   const ledger = state.ledger.filter((l) => l !== led);
-  const roll = led.kind === "roll" ? [] : state.roll;
-  return { ...state, roll, evidence, review, ledger };
+  const roll = led.kind === "roll" ? pruneRoll(state.roll, ledger) : state.roll;
+  return stamp({ ...state, roll, evidence, review, ledger });
 }
 
 /* ── the reading slip: every file is read back before a single number lands ──
