@@ -3,7 +3,7 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName, namesPreview } from "./model.js";
 import { vaultMembership, vaultLoad, vaultSave, planSync } from "./vault.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf, reasonFor } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
@@ -217,7 +217,7 @@ function Constellation() {
                 {year == null
                   ? <>dot: steady · <b style={{ color: "#2F7A39" }}>improving</b> · <b style={{ color: "#B3261E" }}>declining</b> · click a year to coil it</>
                   : lens
-                  ? <>the {lens}+ bar: <i style={swatch("#2F7A39")} />secure above · <i style={swatch("#C6A035")} />at it · <i style={swatch("#B3261E")} />below · dimmed, no En+Ma prediction yet</>
+                  ? <>the {lens}+ venn: <i style={swatch("#2F7A39")} />both · <i style={swatch("#6A0CA0")} />English only · <i style={swatch("#C6A035")} />maths only · <i style={swatch("#B4475A")} />neither · dimmed, no prediction yet</>
                   : <>pulled by: <i style={swatch("#6A0CA0")} />learning · <i style={swatch("#C6A035")} />engagement · <i style={swatch("#B3261E")} />both · <i style={swatch("#CBB8DF")} />on track</>}
               </span>
             </div>
@@ -227,10 +227,11 @@ function Constellation() {
               {chosen && <PupilCard key={chosen.upn} p={chosen} onClose={() => setPick(null)} />}
             </div>
             {year != null && !lens && <SeriousRegister pupils={scopePupils.filter((q) => q.year === year)} onPick={setPick} />}
+            {year != null && lens && <BasicsRegister pupils={scopePupils.filter((q) => q.year === year)} bar={lens} onPick={setPick} />}
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
                 ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle; “stats ›” flips a strip over to the year’s own numbers, lined up so flipped years read as one table."
-                : "The heart holds the year's on-track children, evenly spread; the rim names the furthest behind, the register beneath names every serious child, and colour is what pulls each one. The grade lens re-reads the same circle against a bar in English and maths: secure above it at the heart, the margin ringed, below it named. Back, and the circle unrolls."}
+                : "The heart holds the year's on-track children, evenly spread; the rim names the furthest behind, the register beneath names every serious child, and colour is what pulls each one. The grade lens folds the circle into a venn: both subjects at the bar in the middle, English only to the left, maths only to the right, the children with neither gathered beneath and named below. Back, and the circle unrolls."}
             </p>
           </>
           );
@@ -329,7 +330,8 @@ function Constellation() {
                 </div>
               ))}
             </div>
-            {years.map((y, i) => <div key={y} className="asi-rise" style={{ "--asi-d": `${260 + i * 150}ms` }}><QuintileGrid year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} /></div>)}
+            <AnalysisBoard pupils={pupils} />
+            {years.map((y, i) => <div key={y} className="asi-rise" style={{ "--asi-d": `${660 + i * 150}ms` }}><QuintileGrid year={y} pupils={pupils.filter((p) => p.year === y)} onPick={(u) => { setPick(u); setYear(computed[u]?.year ?? null); setTab("view"); }} /></div>)}
           </div>
         )}
       </div>
@@ -440,7 +442,8 @@ function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onP
     if (lens) {
       const gg = gradesOf(p);
       if (!gg) return "#CBB8DF";
-      return gg.g >= lens + 1 ? "#2F7A39" : gg.g >= lens ? "#C6A035" : "#B3261E";
+      const e = gg.en >= lens, m = gg.ma >= lens;
+      return e && m ? "#2F7A39" : e ? "#6A0CA0" : m ? "#C6A035" : "#B4475A";
     }
     const pu = pullOf(p);
     return pu ? PULLC[pu] : "#CBB8DF";
@@ -489,28 +492,46 @@ function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onP
         </g>
       )}
 
-      {/* mandala chrome */}
-      {mand && mandA > 0.01 && (
+      {/* mandala chrome, or the venn when a grade lens is on */}
+      {mand && mandA > 0.01 && (() => { const gm = lens ? gmands[yearShown] : null; const V = gm && gm.venn; return (
         <g opacity={mandA}>
-          <circle cx={CX} cy={CY} r={R_RIM} fill="#ffffff" />
-          <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(179,38,30,.3)" />
-          <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.45)" />
-          <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".4" />
-          <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
-          {(() => { const gm = lens ? gmands[yearShown] : null; return (
-          <g fontSize="10.5" textAnchor="middle">
-            <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">{gm ? `secure above the bar · ${gm.counts.sec}` : `on track · ${mand.counts.calm}`}</text>
-            <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">{gm ? `at ${lens} exactly · ${gm.counts.at}` : `some concern · ${mand.counts.watch}`}</text>
-            <text x={CX} y={CY - R_RIM - 10} fill="#B3261E">{gm ? `below the bar · ${gm.counts.below}, named` : `serious · ${mand.counts.serious}, named`}</text>
-            {gm && gm.counts.out > 0 && <text x={CX} y={SKY_H - 30} fill="#6F6580" fontSize="10">{gm.counts.out} without an En+Ma prediction keep their concern seats, dimmed</text>}
-          </g> ); })()}
-          <g onClick={onBack} style={{ cursor: "pointer" }}>
-            <circle cx={CX} cy={CY} r="42" fill="#ffffff" opacity=".85" />
-            <text x={CX} y={CY - 2} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown}</text>
-            <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{lens ? `the ${lens}+ lens · En & Ma` : `${mand.counts.n} in view`}</text>
-          </g>
-          {(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden} more unnamed on the rim: {lens ? "their dots and cards still open" : "the register beneath names every one"}</text>}
-          {(lens && gmands[yearShown] ? gmands[yearShown].labels : mand.labels).map((L) => (
+          {V ? (
+            <>
+              <circle cx={V.cxL} cy={V.vy} r={V.R} fill="rgba(106,12,160,.045)" stroke="rgba(106,12,160,.45)" strokeWidth="1.2" />
+              <circle cx={V.cxR} cy={V.vy} r={V.R} fill="rgba(198,160,53,.05)" stroke="rgba(198,160,53,.6)" strokeWidth="1.2" />
+              <g fontSize="11" fontWeight="600">
+                <text x={V.cxL - V.R * 0.42} y={V.vy - V.R - 14} textAnchor="middle" fill="#4B0875">English at {V.bar}+ &middot; {gm.counts.en + gm.counts.both}</text>
+                <text x={V.cxR + V.R * 0.42} y={V.vy - V.R - 14} textAnchor="middle" fill="#8a6d1c">Maths at {V.bar}+ &middot; {gm.counts.ma + gm.counts.both}</text>
+                <text x={CX} y={V.lensTop - 12} textAnchor="middle" fill="#2F7A39">both &middot; {gm.counts.both}</text>
+                {gm.counts.none > 0 && <text x={CX} y={V.vy + V.R + 52} textAnchor="middle" fill="#B4475A">neither yet &middot; {gm.counts.none}</text>}
+              </g>
+              <g onClick={onBack} style={{ cursor: "pointer" }}>
+                <text x={CX} y={34} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown} &middot; the {V.bar}+ venn</text>
+                <text x={CX} y={52} textAnchor="middle" fontSize="10" fill="#6F6580">English &amp; maths predictions &middot; {gm.counts.n - gm.counts.out} children placed</text>
+              </g>
+              {gm.counts.out > 0 && <text x={CX} y={SKY_H - 30} textAnchor="middle" fill="#6F6580" fontSize="10">{gm.counts.out} without an En+Ma prediction keep their concern seats, dimmed</text>}
+            </>
+          ) : (
+            <>
+              <circle cx={CX} cy={CY} r={R_RIM} fill="#ffffff" />
+              <circle cx={CX} cy={CY} r={R_RIM} fill="none" stroke="rgba(179,38,30,.3)" />
+              <circle cx={CX} cy={CY} r={R_WATCH} fill="none" stroke="rgba(198,160,53,.45)" />
+              <circle cx={CX} cy={CY} r={R_ON} fill="#F4EEFA" opacity=".4" />
+              <circle cx={CX} cy={CY} r={R_ON} fill="none" stroke="rgba(106,12,160,.22)" />
+              <g fontSize="10.5" textAnchor="middle">
+                <text x={CX} y={CY - R_ON - 8} fill="#2F7A39">on track &middot; {mand.counts.calm}</text>
+                <text x={CX} y={CY - R_WATCH - 8} fill="#8a6d1c">some concern &middot; {mand.counts.watch}</text>
+                <text x={CX} y={CY - R_RIM - 10} fill="#B3261E">serious &middot; {mand.counts.serious}, named</text>
+              </g>
+              <g onClick={onBack} style={{ cursor: "pointer" }}>
+                <circle cx={CX} cy={CY} r="42" fill="#ffffff" opacity=".85" />
+                <text x={CX} y={CY - 2} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown}</text>
+                <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{mand.counts.n} in view</text>
+              </g>
+            </>
+          )}
+          {(gm || mand).hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{(gm || mand).hidden} more unnamed on the rim: the register beneath names every one</text>}
+          {(gm ? gm.labels : mand.labels).map((L) => (
             <g key={L.upn} onClick={() => onPick(L.upn)} style={{ cursor: "pointer" }}>
               <line x1={L.x1} y1={L.y1} x2={L.x2} y2={L.y2} stroke="rgba(34,18,51,.25)" strokeWidth="0.8" />
               <text x={L.tx} y={L.ty} textAnchor={L.anchor} fontSize="11.5" fontWeight="600" fill="#221233">{L.name}</text>
@@ -518,7 +539,7 @@ function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onP
             </g>
           ))}
         </g>
-      )}
+      ); })()}
 
       {/* the children */}
       {pupils.map((p) => {
@@ -551,8 +572,8 @@ function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onP
           <g key={p.upn} onClick={() => !dim && scene.mode !== "coil" && onPick(p.upn)} style={{ cursor: dim ? "default" : "pointer" }} opacity={dim ? 0.07 : ghost ? 0.15 : op}>
             <title>{p.name} · Year {p.year}</title>
             {on && <circle cx={x} cy={y} r={r + 6.5} fill="rgba(198,160,53,.32)" />}
-            <circle cx={x} cy={y} r={r} fill={fillFor(p, inYearWorld)} stroke={inYearWorld && p.dir === "declining" ? "#B3261E" : inYearWorld && p.dir === "improving" ? "#2F7A39" : "#FBFAF7"} strokeWidth={inYearWorld && p.dir !== "steady" ? 1.1 : 0.7} opacity={p.conf === "thin" ? 0.55 : 0.95} />
-            {p.capped && !coiling && <circle cx={x} cy={y} r={r + 3.2} fill="none" stroke="#B3261E" strokeWidth="0.9" strokeDasharray="2 2.4" />}
+            <circle cx={x} cy={y} r={r} fill={fillFor(p, inYearWorld)} stroke={inYearWorld && !lens && p.dir === "declining" ? "#B3261E" : inYearWorld && !lens && p.dir === "improving" ? "#2F7A39" : "#FBFAF7"} strokeWidth={inYearWorld && !lens && p.dir !== "steady" ? 1.1 : 0.7} opacity={p.conf === "thin" ? 0.55 : 0.95} />
+            {p.capped && !coiling && !(inYearWorld && lens) && <circle cx={x} cy={y} r={r + 3.2} fill="none" stroke="#B3261E" strokeWidth="0.9" strokeDasharray="2 2.4" />}
           </g>
         );
       })}
@@ -604,6 +625,152 @@ function StatsRow({ r, shoal, st }) {
   );
 }
 
+/* ── the analysis board: Insights grown into a dashboard. Everything here is
+      computed from the same measures the sky draws, so the two always agree. ── */
+const medv = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+function HBar({ label, v, max = 100, color = PURPLE, right }) {
+  return (
+    <div style={{ margin: "4px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: INK }}>
+        <span>{label}</span><span style={{ fontVariantNumeric: "tabular-nums", color: MUTED }}>{right ?? (v == null ? "–" : v)}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 999, background: LILAC, marginTop: 2 }}>
+        {v != null && <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, (v / max) * 100))}%`, borderRadius: 999, background: color }} />}
+      </div>
+    </div>
+  );
+}
+function Panel({ kickText, title, children, wide, delay }) {
+  return (
+    <div className="asi-rise" style={{ ...card, gridColumn: wide ? "1 / -1" : "auto", "--asi-d": `${delay || 0}ms` }}>
+      <div style={kick}>{kickText}</div>
+      <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 17, margin: "4px 0 8px" }}>{title}</h3>
+      {children}
+    </div>
+  );
+}
+function AnalysisBoard({ pupils }) {
+  const ps = pupils.filter((p) => p.concern != null);
+  if (ps.length < 10) return null;
+  /* the gaps */
+  const dims = [["Pupil Premium", (p) => p.ppg], ["SEN", (p) => p.sen], ["EAL", (p) => p.eal], ["Girls", (p) => p.gender === "F", "Boys", (p) => p.gender === "M"]];
+  const gapRows = [];
+  dims.forEach(([label, test, restLabel, restTest]) => {
+    const g = ps.filter(test), r = restTest ? ps.filter(restTest) : ps.filter((p) => !test(p));
+    if (g.length < 5 || r.length < 5) return;
+    const gm = medv(g.map((p) => p.progress)), rm = medv(r.map((p) => p.progress));
+    if (gm == null || rm == null) return;
+    gapRows.push({ label, restLabel: restLabel || "everyone else", g: gm, r: rm, ge: medv(g.map((p) => p.engagement)), re: medv(r.map((p) => p.engagement)), n: g.length });
+  });
+  /* attendance */
+  const att = ps.filter((p) => p.nowAtt != null);
+  const ladder = [["96% and above", att.filter((p) => p.nowAtt >= 96).length, "#2F7A39"],
+    ["92 to 96%", att.filter((p) => p.nowAtt >= 92 && p.nowAtt < 96).length, GOLD],
+    ["90 to 92%", att.filter((p) => p.nowAtt >= 90 && p.nowAtt < 92).length, "#8a6d1c"],
+    ["below 90%, persistent absence", att.filter((p) => p.nowAtt < 90).length, "#B4475A"]];
+  const attMean = att.length ? Math.round(10 * att.reduce((a, p) => a + p.nowAtt, 0) / att.length) / 10 : null;
+  /* movement against each year's own starting point */
+  const years2 = [...new Set(ps.map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
+  const moves = years2.map((y) => {
+    const yp = ps.filter((p) => p.year === y && p.priorP != null && p.wins && p.wins.length > 1);
+    if (yp.length < 8) return null;
+    const wins = yp[0].wins;
+    const pts = wins.map((w, i) => medv(yp.map((p) => (p.perWin && p.perWin[i] != null ? p.perWin[i] - p.priorP : null))));
+    return pts.some((v) => v != null) ? { y, wins, pts, n: yp.length } : null;
+  }).filter(Boolean);
+  /* subject drag: how often a subject sits among a child's weakest two */
+  const drag = {};
+  ps.forEach((p) => {
+    if (!p.subjects || p.subjects.length < 4) return;
+    const seen = new Set();
+    p.subjects.forEach((s) => { if (!seen.has(s.s)) { seen.add(s.s); (drag[s.s] = drag[s.s] || { n: 0, low: 0 }).n++; } });
+    new Set([...p.subjects].sort((a, b) => a.pct - b.pct).slice(0, 2).map((s) => s.s)).forEach((s) => drag[s].low++);
+  });
+  const dragRows = Object.entries(drag).filter(([, v]) => v.n >= 10).map(([s, v]) => ({ s, pct: Math.round((100 * v.low) / v.n), n: v.n })).sort((a, b) => b.pct - a.pct).slice(0, 10);
+  /* tutor groups */
+  const regs = {};
+  ps.forEach((p) => { if (p.reg) (regs[`Y${p.year} ${p.reg}`] = regs[`Y${p.year} ${p.reg}`] || []).push(p); });
+  const regRows = Object.entries(regs).filter(([, a]) => a.length >= 6).map(([r, a]) => ({ r, v: medv(a.map((p) => p.progress)), n: a.length })).filter((x) => x.v != null).sort((a, b) => a.v - b.v);
+  const regShow = regRows.length > 14 ? [...regRows.slice(0, 7), ...regRows.slice(-7)] : regRows;
+  /* the basics, per year */
+  const basics = years2.map((y) => {
+    const G = ps.filter((p) => p.year === y).map((p) => ({ p, g: gradesOf(p) })).filter((x) => x.g);
+    if (G.length < 10) return null;
+    const share = (b) => Math.round((100 * G.filter((x) => x.g.g >= b).length) / G.length);
+    const pp = G.filter((x) => x.p.ppg), np = G.filter((x) => !x.p.ppg);
+    const ppGap = pp.length >= 5 && np.length >= 5 ? Math.round((100 * np.filter((x) => x.g.g >= 4).length) / np.length) - Math.round((100 * pp.filter((x) => x.g.g >= 4).length) / pp.length) : null;
+    return { y, n: G.length, p4: share(4), p5: share(5), p7: share(7), ppGap };
+  }).filter(Boolean);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
+      {moves.length > 0 && (
+        <Panel wide kickText="Movement" title="Each year against its own starting point, window by window" delay={180}>
+          <svg viewBox="0 0 1100 215" width="100%">
+            <line x1="60" y1="105" x2="1080" y2="105" stroke="rgba(34,18,51,.25)" strokeDasharray="3 3" />
+            <text x="52" y="109" textAnchor="end" fontSize="10" fill={MUTED}>start</text>
+            {moves.map((m, mi) => {
+              const X = (i) => 80 + (i * 960) / Math.max(1, m.wins.length - 1);
+              const Y = (v) => Math.max(14, Math.min(200, 105 - v * 2.8));
+              const c = YEARC[mi % YEARC.length];
+              const last = m.pts.map((v, i) => [v, i]).filter(([v]) => v != null).pop();
+              return (
+                <g key={m.y}>
+                  {m.pts.map((v, i) => (i > 0 && v != null && m.pts[i - 1] != null) ? <line key={"l" + i} x1={X(i - 1)} y1={Y(m.pts[i - 1])} x2={X(i)} y2={Y(v)} stroke={c} strokeWidth="2" /> : null)}
+                  {m.pts.map((v, i) => v != null ? <circle key={"c" + i} cx={X(i)} cy={Y(v)} r="3.4" fill={c} /> : null)}
+                  {last && <text x={X(last[1]) + 8} y={Y(last[0]) + 4} fontSize="11" fontWeight="600" fill={c}>Y{m.y} {last[0] > 0 ? "+" : ""}{last[0]}</text>}
+                </g>
+              );
+            })}
+          </svg>
+          <p style={{ fontSize: 11, color: MUTED, margin: "2px 0 0" }}>The line is each year's median percentile against where its children started; above the dashed line, the year is outperforming its own intake. Windows run left to right in time.</p>
+        </Panel>
+      )}
+      {gapRows.length > 0 && (
+        <Panel kickText="The gaps" title="Median learning, each group against the rest" delay={260}>
+          {gapRows.map((g) => (
+            <div key={g.label} style={{ margin: "10px 0 2px" }}>
+              <HBar label={`${g.label} · ${g.n} children`} v={g.g} color={PURPLE} />
+              <HBar label={g.restLabel} v={g.r} color={GOLD} />
+              <div style={{ fontSize: 11, color: g.g - g.r <= -8 ? "#B4475A" : MUTED, marginTop: 1 }}>learning gap {g.g - g.r > 0 ? "+" : ""}{g.g - g.r}{g.ge != null && g.re != null ? `; engagement gap ${g.ge - g.re > 0 ? "+" : ""}${g.ge - g.re}` : ""}</div>
+            </div>
+          ))}
+        </Panel>
+      )}
+      {att.length >= 10 && (
+        <Panel kickText="Attendance" title={`The ladder · mean ${attMean}%`} delay={340}>
+          {ladder.map(([l, n, c]) => <HBar key={l} label={l} v={n} max={Math.max(1, att.length)} color={c} right={`${n} children`} />)}
+          <p style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>Attendance is the loudest single predictor in the room; the {ladder[3][1]} below 90% each carry it into their engagement score and their seat on the map.</p>
+        </Panel>
+      )}
+      {dragRows.length > 0 && (
+        <Panel kickText="Subjects" title="How often a subject sits among a child's weakest two" delay={420}>
+          {dragRows.map((d) => <HBar key={d.s} label={`${d.s} · ${d.n} children`} v={d.pct} color={d.pct >= 40 ? "#B4475A" : PURPLE} right={`${d.pct}%`} />)}
+          <p style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>Every child has a weakest two; a subject sitting far above its fair share is carrying more than its load.</p>
+        </Panel>
+      )}
+      {regShow.length >= 4 && (
+        <Panel kickText="Tutor groups" title="Median learning by form, lowest first" delay={500}>
+          {regShow.map((x) => <HBar key={x.r} label={`${x.r} · ${x.n}`} v={x.v} color={x.v < 50 ? "#B4475A" : PURPLE} />)}
+          {regRows.length > 14 && <p style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>The seven lowest and seven highest of {regRows.length} forms.</p>}
+        </Panel>
+      )}
+      {basics.length > 0 && (
+        <Panel kickText="The basics" title="English and maths together, on current predictions" delay={580}>
+          {basics.map((b) => (
+            <div key={b.y} style={{ margin: "8px 0" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Year {b.y} &middot; {b.n} with En+Ma predictions{b.ppGap != null ? ` · disadvantage gap at 4+: ${b.ppGap > 0 ? "+" : ""}${b.ppGap}` : ""}</div>
+              <HBar label="4+ in both" v={b.p4} right={`${b.p4}%`} color={PURPLE} />
+              <HBar label="5+ in both" v={b.p5} right={`${b.p5}%`} color={DEEP} />
+              <HBar label="7+ in both" v={b.p7} right={`${b.p7}%`} color={GOLD} />
+            </div>
+          ))}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
 /* ── the register: every serious child in readable columns, furthest behind
       first, grouped by what pulls them. The rim names the worst of it; this
       names all of it, and either route opens the same card. ── */
@@ -632,6 +799,43 @@ function SeriousRegister({ pupils, onPick }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ── the basics register: under the venn, who has both, who is one subject
+      away (and in which), who has neither yet — names, not counts ── */
+function BasicsRegister({ pupils, bar, onPick }) {
+  const G = pupils.map((q) => ({ q, g: gradesOf(q) })).filter((x) => x.g);
+  if (G.length < 6) return null;
+  const en = G.filter((x) => x.g.en >= bar && x.g.ma < bar).sort((a, b) => b.g.ma - a.g.ma);
+  const ma = G.filter((x) => x.g.ma >= bar && x.g.en < bar).sort((a, b) => b.g.en - a.g.en);
+  const none = G.filter((x) => x.g.en < bar && x.g.ma < bar).sort((a, b) => (b.g.en + b.g.ma) - (a.g.en + a.g.ma));
+  const both = G.length - en.length - ma.length - none.length;
+  const COLS = [
+    [`English ${bar}+, maths behind`, en, "#6A0CA0", (x) => `Ma ${x.g.ma} · needs ${bar}`],
+    [`Maths ${bar}+, English behind`, ma, "#8a6d1c", (x) => `En ${x.g.en} · needs ${bar}`],
+    ["Neither yet", none, "#B4475A", (x) => `En ${x.g.en} · Ma ${x.g.ma}`],
+  ];
+  return (
+    <div style={{ ...card, maxWidth: 1160, margin: "6px auto 16px" }}>
+      <div style={kick}>The basics register &middot; {bar}+ in English and maths together: <span style={{ color: "#2F7A39" }}>{both} of {G.length} have both</span></div>
+      <p style={{ fontSize: 12, color: MUTED, margin: "6px 0 4px" }}>The children one subject away are the sharpest use of the next term: closest to the bar first.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "4px 26px", marginTop: 6 }}>
+        {COLS.map(([label, xs, colr, sub]) => xs.length > 0 && (
+          <div key={label}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: colr, letterSpacing: ".08em", textTransform: "uppercase", margin: "6px 0 4px" }}>{label} &middot; {xs.length}</div>
+            <div style={{ columnWidth: 160, columnGap: 18 }}>
+              {xs.map((x) => (
+                <button key={x.q.upn} onClick={() => onPick(x.q.upn)} style={{ display: "block", width: "100%", border: "none", cursor: "pointer", background: "transparent", textAlign: "left", padding: "3px 0", fontFamily: "inherit", breakInside: "avoid" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{x.q.name}</span>
+                  <span style={{ fontSize: 10.5, color: MUTED, display: "block" }}>{sub(x)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -883,7 +1087,8 @@ function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <select value={v == null ? "" : v} onChange={(e) => chg(k, e.target.value === "" ? null : +e.target.value)} style={{ ...sel, color: v == null ? MUTED : INK }}>
                   <option value="">not in this file</option>
-                  {v === -1 && <option value={-1}>surname + forename</option>}
+                  {k === "name" && (v === -1 || ((slip.fields.forename ?? slip.autoMap.forename) != null && (slip.fields.surname ?? slip.autoMap.surname) != null)) && <option value={-1}>forename + surname together</option>}
+                  {k !== "name" && v === -1 && <option value={-1}>forename + surname together</option>}
                   {slip.headers.map((h, i) => (h ? <option key={i} value={i}>{h}</option> : null))}
                 </select>
                 {corrected(k) && <span style={{ fontSize: 10, color: "#8a6d1c", fontWeight: 600, whiteSpace: "nowrap" }}>your word</span>}
@@ -892,6 +1097,15 @@ function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard
           ))}
         </div>
       )}
+      {!unread && slip.fields.name !== undefined && slip.text && (() => {
+        const names = namesPreview(slip.text, { name: slip.fields.name, forename: slip.fields.forename ?? slip.autoMap.forename, surname: slip.fields.surname ?? slip.autoMap.surname });
+        return names.length > 0 && (
+          <div style={{ fontSize: 12.5, color: DEEP, margin: "9px 0 0" }}>
+            Names will read as: <b>{names.join(" · ")}</b>&hellip;
+            {slip.fields.name !== -1 && (slip.fields.forename ?? slip.autoMap.forename) != null && (slip.fields.surname ?? slip.autoMap.surname) != null && !/\s/.test(names[0] || "") && <span style={{ color: "#8a6d1c" }}> (only one word? choose &ldquo;forename + surname together&rdquo; above)</span>}
+          </div>
+        );
+      })()}
       {slip.assumptions?.length > 0 && (
         <div style={{ fontSize: 11.5, color: MUTED, margin: "8px 0 0", maxWidth: 680 }}>
           {slip.assumptions.map((a, i) => <div key={i} style={{ margin: "2px 0" }}>&middot; {a}</div>)}

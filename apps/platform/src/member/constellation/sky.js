@@ -140,32 +140,42 @@ export function gradesOf(p) {
   return { g: Math.min(ge, gm), en: ge, ma: gm };
 }
 export function layoutGradeMandala(pupils, bar) {
-  const byU = {}, labels = [];
+  /* the grade lens is a venn: English at the bar on the left, maths on the
+     right, both in the intersection (the basics measure, literally drawn),
+     and the children with neither gathered beneath, every dot still a child */
+  const byU = {};
   const G = new Map();
   pupils.forEach((p) => G.set(p.upn, gradesOf(p)));
   const withG = pupils.filter((p) => G.get(p.upn));
-  const sec = withG.filter((p) => G.get(p.upn).g >= bar + 1).sort((a, b) => G.get(b.upn).g - G.get(a.upn).g || (a.upn < b.upn ? -1 : 1));
-  const at = withG.filter((p) => { const g = G.get(p.upn).g; return g >= bar && g < bar + 1; }).sort((a, b) => (b.concern ?? 0) - (a.concern ?? 0) || (a.upn < b.upn ? -1 : 1));
-  const below = withG.filter((p) => G.get(p.upn).g < bar).sort((a, b) => G.get(b.upn).g - G.get(a.upn).g || (a.upn < b.upn ? -1 : 1));
-  heart(byU, sec);
-  at.forEach((p, i) => {
-    const ang = -Math.PI / 2 + ((i + 0.5) / Math.max(1, at.length)) * 2 * Math.PI;
-    const rad = (R_ON + R_WATCH) / 2 + (h01(p.upn) - 0.5) * 30;
-    byU[p.upn] = { x: CX + rad * Math.cos(ang), y: CY + rad * Math.sin(ang), ang };
+  const both = [], en = [], ma = [], none = [];
+  withG.forEach((p) => { const g = G.get(p.upn); (g.en >= bar && g.ma >= bar ? both : g.en >= bar ? en : g.ma >= bar ? ma : none).push(p); });
+  const strongest = (a) => a.sort((x, y) => (G.get(y.upn).en + G.get(y.upn).ma) - (G.get(x.upn).en + G.get(x.upn).ma) || (x.upn < y.upn ? -1 : 1));
+  [both, en, ma, none].forEach(strongest);
+  const R = 200, dx = 116, vy = CY - 42, cxL = CX - dx, cxR = CX + dx;
+  const inL = (x, y) => (x - cxL) ** 2 + (y - vy) ** 2 <= (R - 12) ** 2;
+  const inR = (x, y) => (x - cxR) ** 2 + (y - vy) ** 2 <= (R - 12) ** 2;
+  const fill = (ps, cx0, cy0, test) => {
+    let placed = 0;
+    for (let i = 0; placed < ps.length && i < 12000; i++) {
+      const ang = i * GA, rad = 9 * Math.sqrt(i + 0.5);
+      const x = cx0 + rad * Math.cos(ang), y = cy0 + rad * Math.sin(ang);
+      if (!test(x, y)) continue;
+      byU[ps[placed].upn] = { x, y, ang: Math.atan2(y - CY, x - CX) };
+      placed++;
+    }
+    for (; placed < ps.length; placed++) { const a2 = placed * GA; byU[ps[placed].upn] = { x: cx0 + 24 * Math.cos(a2), y: cy0 + 24 * Math.sin(a2), ang: 0 }; }
+  };
+  fill(both, CX, vy, (x, y) => inL(x, y) && inR(x, y));
+  fill(en, cxL - 48, vy, (x, y) => inL(x, y) && !inR(x, y));
+  fill(ma, cxR + 48, vy, (x, y) => inR(x, y) && !inL(x, y));
+  none.forEach((p, i) => {
+    const perRow = 30, row = Math.floor(i / perRow), k = i % perRow, n2 = Math.min(none.length - row * perRow, perRow);
+    byU[p.upn] = { x: CX + (k - (n2 - 1) / 2) * 15, y: vy + R + 74 + row * 15, ang: Math.PI / 2 };
   });
-  below.forEach((p, i) => {
-    const ang = -Math.PI / 2 + ((i + 0.5) / Math.max(1, below.length)) * 2 * Math.PI;
-    const d = Math.min(3, Math.max(1, bar - G.get(p.upn).g));
-    const rad = R_WATCH + 14 + ((d - 0.5) / 2.5) * (R_RIM - R_WATCH - 20) + (h01(p.upn) - 0.5) * 7;
-    const x = CX + rad * Math.cos(ang), y = CY + rad * Math.sin(ang);
-    byU[p.upn] = { x, y, ang };
-    const gg = G.get(p.upn);
-    if (bar - gg.g >= 2) labels.push(mkLabel(p, x, y, ang, `predicted En ${gg.en} · Ma ${gg.ma}`, gg.g));
-  });
-  const { fit } = settleRim(budget(labels));
-  const hidden = labels.length - fit.length;
-  return { byU, labels: fit, hidden,
-    counts: { n: pupils.length, sec: sec.length, at: at.length, below: below.length, out: pupils.length - withG.length } };
+  return { byU, labels: [], hidden: 0,
+    venn: { cxL, cxR, vy, R, bar, lensTop: vy - Math.sqrt(Math.max(0, R * R - dx * dx)) },
+    counts: { n: pupils.length, both: both.length, en: en.length, ma: ma.length, none: none.length, out: pupils.length - withG.length,
+      sec: both.length, at: en.length + ma.length, below: none.length } };
 }
 
 /* ── the coil: polar interpolation around the centre, every dot sweeping the

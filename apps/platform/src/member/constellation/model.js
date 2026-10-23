@@ -66,7 +66,7 @@ export function parseCSV(text) {
 const WINDOW_RE = /(michaelmas|lenten|trinity|autumn|spring|summer|advent|ap ?\d|term ?\d|assessment ?\d)/i;
 const HEADS = {
   upn: /^(?!.*(former|previous|old))(.*\bupn\b|unique pupil.*)$/i, name: /^((legal|preferred|pupil|student) )?(full )?name$|pupil ?name|student ?name|surname.?forename/i,
-  forename: /forename|first ?name/i, surname: /surname|last ?name/i,
+  forename: /forename|first ?name|given ?name/i, surname: /surname|last ?name|family ?name/i,
   dob: /dob|date of birth|birth ?date/i, year: /year ?gro?u?p?$|^yr$|^year$|nc ?year/i,
   reg: /^reg(istration)? ?(group)?$|^form( group)?$|^tutor ?(group)?$|^class$/i,
   ks2read: /ks2.*read(ing)?|read(ing)?.*(ks2|scaled)/i,
@@ -99,12 +99,16 @@ export function readHeaders(headerRow, body) {
       else if (map.forename != null && map.surname != null) { map.name = -1; assumptions.push("name assembled from forename + surname"); }
     }
   }
-  /* a name column of single words is a surname list: a child deserves their whole name */
+  /* a name column of single words, or one that merely repeats the surname
+     column, is a surname list: a child deserves their whole name */
   if (body && body.length >= 8 && map.name != null && map.name >= 0 && map.forename != null && map.surname != null) {
-    const vals = body.slice(0, 40).map((r) => (r[map.name] || "").trim()).filter(Boolean);
-    if (vals.length >= 5 && vals.filter((v) => /\s/.test(v)).length < vals.length / 2) {
+    const sample = body.slice(0, 40);
+    const vals = sample.map((r) => (r[map.name] || "").trim()).filter(Boolean);
+    const single = vals.length >= 5 && vals.filter((v) => /\s/.test(v)).length < vals.length / 2;
+    const dupSur = vals.length >= 5 && sample.filter((r) => (r[map.name] || "").trim() && (r[map.name] || "").trim().toLowerCase() === (r[map.surname] || "").trim().toLowerCase()).length > vals.length * 0.6;
+    if (single || dupSur) {
       map.name = -1;
-      assumptions.push("the name column held single words: names assembled from forename + surname instead");
+      assumptions.push(dupSur ? "the name column repeats the surname column: names assembled from forename + surname instead" : "the name column held single words: names assembled from forename + surname instead");
     }
   }
   return { map, assumptions };
@@ -349,9 +353,9 @@ export function removeUpload(state, led) {
    export in that dialect arrives already understood. */
 export const KIND_LABELS = { roll: "the school roll", attendance: "attendance", tracker: "a tracker · termly assessments", assessment: "assessments", engagement: "conduct & homework", enrichment: "enrichment", intervention: "interventions", unknown: "not readable yet", unreadable: "unreadable" };
 export const KIND_CHOICES = ["roll", "attendance", "tracker", "assessment", "engagement", "enrichment", "intervention"];
-export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", ks2em: "KS2 En+Ma band", ks2read: "KS2 reading", cats: "CATs mean", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", ehcp: "EHCP", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
+export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", forename: "forename", surname: "surname", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", ks2em: "KS2 En+Ma band", ks2read: "KS2 reading", cats: "CATs mean", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", ehcp: "EHCP", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
 export const FIELDS_BY_KIND = {
-  roll: ["upn", "name", "year", "reg", "dob", "prior", "ks2em", "ks2read", "cats", "gender", "ppg", "fsm", "eal", "sen", "ehcp"],
+  roll: ["upn", "name", "forename", "surname", "year", "reg", "dob", "prior", "ks2em", "ks2read", "cats", "gender", "ppg", "fsm", "eal", "sen", "ehcp"],
   attendance: ["upn", "name", "att", "unauth"],
   tracker: ["upn", "name", "year", "prior"],
   assessment: ["upn", "name", "subject", "score", "date"],
@@ -359,6 +363,11 @@ export const FIELDS_BY_KIND = {
   enrichment: ["upn", "name"], intervention: ["upn", "name"],
   unknown: ["upn", "name", "att", "unauth", "score"], unreadable: [],
 };
+/* the slip's proof: the first few names exactly as the reader will store them */
+export function namesPreview(text, m) {
+  if (m.name == null) return [];
+  return parseCSV(text).slice(1, 5).map((r) => cellName(r, m)).filter(Boolean).slice(0, 3);
+}
 export function fingerprintOf(headers) {
   const s = headers.map((h) => String(h || "").trim().toLowerCase().replace(/\s+/g, " ")).join("␟");
   let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -372,7 +381,7 @@ function forcedFrom(slip, fixes = {}) {
   for (const [k, idx] of Object.entries(fixes.fields || {})) {
     if (idx === displayCol(slip.autoMap, k)) continue; /* back to what the reader saw: no force */
     if (k === "att") { m.att = idx; m.attPlus = idx; } else m[k] = idx;
-    f.notes.push(idx == null ? `${FIELD_LABELS[k] || k}: set aside on your word` : `${FIELD_LABELS[k] || k} read from “${slip.headers[idx] ?? "column " + (idx + 1)}” on your word`);
+    f.notes.push(idx == null ? `${FIELD_LABELS[k] || k}: set aside on your word` : idx === -1 ? "names assembled from forename + surname on your word" : `${FIELD_LABELS[k] || k} read from “${slip.headers[idx] ?? "column " + (idx + 1)}” on your word`);
   }
   if (Object.keys(m).length) f.map = m;
   if (slip.remembered && (f.map || f.kind)) f.notes.unshift(`this file’s shape was remembered from ${slip.remembered.file}`);
@@ -408,6 +417,7 @@ export function inspect(state, fileName, text, opts = {}) {
   if (mem.kind && mem.kind !== auto.kind) fixes.kind = mem.kind;
   const ff = {};
   for (const [k, hname] of Object.entries(mem.fields || {})) {
+    if (hname === "(forename + surname)") { if (displayCol(map, k) !== -1) ff[k] = -1; continue; }
     const i = headers.findIndex((h) => h.toLowerCase() === String(hname).toLowerCase());
     if (i >= 0 && i !== displayCol(map, k)) ff[k] = i;
   }
@@ -423,7 +433,11 @@ export function commitSlip(state, slip, fixes) {
   const dialects = { ...(state.dialects || {}) };
   if (forced && slip.fingerprint) {
     const byName = {};
-    for (const [k, idx] of Object.entries(fx.fields || {})) if (idx != null && idx >= 0 && idx !== displayCol(slip.autoMap, k)) byName[k] = slip.headers[idx];
+    for (const [k, idx] of Object.entries(fx.fields || {})) {
+      if (idx == null || idx === displayCol(slip.autoMap, k)) continue;
+      if (idx === -1) byName[k] = "(forename + surname)";
+      else if (idx >= 0) byName[k] = slip.headers[idx];
+    }
     const old = (state.dialects || {})[slip.fingerprint];
     dialects[slip.fingerprint] = { kind: (next.ledger[0] && next.ledger[0].kind) || slip.kind, fields: { ...((old && old.fields) || {}), ...byName }, file: slip.fileName, when: today(), cols: slip.headers.length };
   }
