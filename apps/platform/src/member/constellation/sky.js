@@ -73,9 +73,13 @@ export function layoutShoal(pupils, years) {
       the full circle: within every ring the children sweep clockwise from
       strongest to furthest behind, so serious names spread around the rim. ── */
 const GA = Math.PI * (3 - Math.sqrt(5)); /* the golden angle: an even field, no spokes */
-function mkLabel(p, x, y, ang, why) {
+/* only the furthest behind are named on the rim itself: a wall of names reads as
+   noise, so the budget keeps the circle legible and the register carries the rest */
+const LABEL_BUDGET = 26;
+const budget = (labels) => [...labels].sort((a, b) => (a.c ?? 0) - (b.c ?? 0)).slice(0, LABEL_BUDGET);
+function mkLabel(p, x, y, ang, why, c) {
   const right = Math.cos(ang) >= -0.02;
-  return { upn: p.upn, name: p.name, why,
+  return { upn: p.upn, name: p.name, why, c: c ?? p.concern ?? 0,
     x1: x + 7 * Math.cos(ang), y1: y + 7 * Math.sin(ang),
     x2: CX + (R_RIM + 14) * Math.cos(ang), y2: CY + (R_RIM + 14) * Math.sin(ang),
     tx: CX + (R_RIM + 20) * Math.cos(ang), ty: CY + (R_RIM + 20) * Math.sin(ang),
@@ -117,7 +121,8 @@ export function layoutMandala(pupils) {
       if (b === 2) labels.push(mkLabel(p, x, y, ang, reasonFor(p)));
     });
   });
-  const { fit, hidden } = settleRim(labels);
+  const { fit } = settleRim(budget(labels));
+  const hidden = labels.length - fit.length;
   return { byU, labels: fit, hidden, rings: [], sectorMeta: [],
     counts: { n: bands[0].length + bands[1].length + bands[2].length,
       calm: bands[0].length, watch: bands[1].length, serious: bands[2].length } };
@@ -155,9 +160,10 @@ export function layoutGradeMandala(pupils, bar) {
     const x = CX + rad * Math.cos(ang), y = CY + rad * Math.sin(ang);
     byU[p.upn] = { x, y, ang };
     const gg = G.get(p.upn);
-    if (bar - gg.g >= 2) labels.push(mkLabel(p, x, y, ang, `predicted En ${gg.en} · Ma ${gg.ma}`));
+    if (bar - gg.g >= 2) labels.push(mkLabel(p, x, y, ang, `predicted En ${gg.en} · Ma ${gg.ma}`, gg.g));
   });
-  const { fit, hidden } = settleRim(labels);
+  const { fit } = settleRim(budget(labels));
+  const hidden = labels.length - fit.length;
   return { byU, labels: fit, hidden,
     counts: { n: pupils.length, sec: sec.length, at: at.length, below: below.length, out: pupils.length - withG.length } };
 }

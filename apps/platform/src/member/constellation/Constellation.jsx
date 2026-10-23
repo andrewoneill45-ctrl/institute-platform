@@ -3,9 +3,9 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName } from "./model.js";
 import { vaultMembership, vaultLoad, vaultSave, planSync } from "./vault.js";
-import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf } from "./sky.js";
+import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf, reasonFor } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
@@ -160,7 +160,7 @@ function Constellation() {
   const resolve = (item, upn) => {
     const s = { ...state, review: state.review.filter((r) => r !== item), touched: Date.now() };
     if (upn) {
-      s.aliases = { ...s.aliases, [item.name.toLowerCase().replace(/[^a-z]/g, "")]: upn };
+      s.aliases = { ...s.aliases, [normName(item.name)]: upn };
       s.evidence = [...s.evidence]; // re-ingest the held row via alias
       const fake = "x\n"; void fake;
       s.evidence.push({ upn, file: item.file, conf: "resolved", date: new Date().toLocaleDateString("en-GB"), t: item.kind === "attendance" ? "attendance" : item.kind === "assessment" ? "assessment" : item.kind, ...(item.kind === "enrichment" ? { what: item.file } : {}) });
@@ -226,10 +226,11 @@ function Constellation() {
               <Sky pupils={pupils} years={years} year={year} lens={lens} onOpenYear={(y) => { setYear(y); setPick(null); }} onBack={() => { setYear(null); setPick(null); }} inGroup={inGroup} pick={pick} onPick={setPick} />
               {chosen && <PupilCard key={chosen.upn} p={chosen} onClose={() => setPick(null)} />}
             </div>
+            {year != null && !lens && <SeriousRegister pupils={scopePupils.filter((q) => q.year === year)} onPick={setPick} />}
             <p style={{ fontSize: 11.5, color: MUTED, margin: "0 auto", maxWidth: 680, textAlign: "center" }}>
               {year == null
                 ? "Each strip is a year group, each dot a child placed by how they are doing. A healthy year leans left. Click a year and its strip coils into a circle; “stats ›” flips a strip over to the year’s own numbers, lined up so flipped years read as one table."
-                : "The heart holds the year's on-track children, evenly spread; the rim carries every serious child's name and reason, and colour is what pulls each child. The grade lens re-reads the same circle against a bar in English and maths: secure above it at the heart, the margin ringed, below it named. Back, and the circle unrolls."}
+                : "The heart holds the year's on-track children, evenly spread; the rim names the furthest behind, the register beneath names every serious child, and colour is what pulls each one. The grade lens re-reads the same circle against a bar in English and maths: secure above it at the heart, the margin ringed, below it named. Back, and the circle unrolls."}
             </p>
           </>
           );
@@ -294,8 +295,8 @@ function Constellation() {
               <p style={{ fontSize: 12.5, color: MUTED, margin: "6px 0 10px" }}>Every number on the map walks back to a named file, a date and the assumptions made. Under a minute, in front of anyone.</p>
               {state.ledger.length ? groupLedger(state.ledger).map(([label, entries]) => (
                 <div key={label} style={{ marginBottom: 6 }}>
-                  <div style={{ ...kick, marginTop: 12 }}>{label}</div>
-                  {entries.slice(0, 8).map((l, i) => (
+                  <div style={{ ...kick, marginTop: 12 }}>{label}{entries.length > 1 ? ` · ${entries.length} files` : ""}</div>
+                  {entries.map((l, i) => (
                     <div key={i} style={{ borderTop: "1px solid rgba(106,12,160,.12)", padding: "9px 0", fontSize: 12.5 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <span><b>{l.file}</b> · read as <b style={{ color: DEEP }}>{l.kind}</b> · {l.matched}/{l.of} matched{l.held ? `, ${l.held} held` : ""} · {l.date}</span>
@@ -508,7 +509,7 @@ function Sky({ pupils, years, year, lens, onOpenYear, onBack, inGroup, pick, onP
             <text x={CX} y={CY - 2} textAnchor="middle" fontFamily="Fraunces, serif" fontWeight="600" fontSize="21" fill="#221233">Year {yearShown}</text>
             <text x={CX} y={CY + 15} textAnchor="middle" fontSize="10" fill="#6F6580">{lens ? `the ${lens}+ lens · En & Ma` : `${mand.counts.n} in view`}</text>
           </g>
-          {(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden} more on the rim without room for a label: their dots and cards still open</text>}
+          {(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden > 0 && <text x={CX} y={SKY_H - 14} textAnchor="middle" fontSize="10.5" fill="#6F6580">{(lens && gmands[yearShown] ? gmands[yearShown] : mand).hidden} more unnamed on the rim: {lens ? "their dots and cards still open" : "the register beneath names every one"}</text>}
           {(lens && gmands[yearShown] ? gmands[yearShown].labels : mand.labels).map((L) => (
             <g key={L.upn} onClick={() => onPick(L.upn)} style={{ cursor: "pointer" }}>
               <line x1={L.x1} y1={L.y1} x2={L.x2} y2={L.y2} stroke="rgba(34,18,51,.25)" strokeWidth="0.8" />
@@ -603,6 +604,39 @@ function StatsRow({ r, shoal, st }) {
   );
 }
 
+/* ── the register: every serious child in readable columns, furthest behind
+      first, grouped by what pulls them. The rim names the worst of it; this
+      names all of it, and either route opens the same card. ── */
+function SeriousRegister({ pupils, onPick }) {
+  const ser = pupils.filter((q) => q.band === 2).sort((a, b) => (a.concern ?? 0) - (b.concern ?? 0));
+  if (ser.length < 10) return null; /* a short rim reads fine on its own */
+  const PULLS = [["learning and engagement", "both", "#B3261E"], ["engagement", "engagement", "#8a6d1c"], ["learning", "learning", "#4B0875"]];
+  return (
+    <div style={{ ...card, maxWidth: 1160, margin: "6px auto 16px" }}>
+      <div style={kick}>The register &middot; every serious child, furthest behind first</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "4px 26px", marginTop: 10 }}>
+        {PULLS.map(([label, key, colr]) => {
+          const ps = ser.filter((q) => (pullOf(q) || "learning") === key);
+          if (!ps.length) return null;
+          return (
+            <div key={key}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: colr, letterSpacing: ".08em", textTransform: "uppercase", margin: "6px 0 4px" }}>pulled by {label} &middot; {ps.length}</div>
+              <div style={{ columnWidth: 170, columnGap: 18 }}>
+                {ps.map((q) => (
+                  <button key={q.upn} onClick={() => onPick(q.upn)} style={{ display: "block", width: "100%", border: "none", cursor: "pointer", background: "transparent", textAlign: "left", padding: "3px 0", fontFamily: "inherit", breakInside: "avoid" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{q.name}</span>
+                    <span style={{ fontSize: 10.5, color: MUTED, display: "block" }}>{reasonFor(q)} &middot; {q.concern}/100</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const WORD = (v) => (v == null ? null : v >= 75 ? "strong" : v >= 62 ? "secure" : v >= 40 ? "some concern" : "serious concern");
 const SLAB = { fontSize: 11, fontWeight: 600, color: "#4B0875", margin: "12px 0 6px" };
 function Meter({ label, v, family, sub }) {
@@ -653,6 +687,13 @@ function GradeTable({ rows }) {
 
 function PupilCard({ p, onClose }) {
   const [out, setOut] = useState(false);
+  const [allSub, setAllSub] = useState(false);
+  const missing = [];
+  if (p.engParts && p.engParts.conduct == null) missing.push("conduct and homework");
+  if (p.engParts && p.engParts.participation == null) missing.push("taking part");
+  if (p.enrichment == null) missing.push("enrichment");
+  if (p.interventions == null) missing.push("interventions");
+  const missingLine = missing.length > 1 ? missing.slice(0, -1).join(", ") + " or " + missing[missing.length - 1] : missing[0];
   const bandC = p.band === 0 ? "#2F7A39" : p.band === 1 ? "#8a6d1c" : p.band === 2 ? "#B3261E" : "#6F6580";
   const bandD = p.band === 0 ? "#1E5A28" : p.band === 1 ? "#6b540e" : p.band === 2 ? "#7e150f" : "#4a4456";
   const close = () => { if (out) return; setOut(true); setTimeout(onClose, 500); };
@@ -673,29 +714,42 @@ function PupilCard({ p, onClose }) {
       <div style={{ fontSize: 11.5, color: MUTED_, margin: "3px 0 7px" }}>Year {p.year}{p.reg ? ` · ${p.reg}` : ""}{p.gender ? ` · ${p.gender === "M" ? "Boy" : "Girl"}` : ""}{p.ppg ? " · Pupil Premium" : ""}{p.fsm && !p.ppg ? " · FSM" : ""}{p.ehcp ? " · EHCP" : p.sen ? " · SEN" : ""}{p.eal ? " · EAL" : ""}</div>
       {p.capped && <p style={{ fontSize: 11.5, color: "#B3261E", margin: "0 0 4px" }}>Held visible by the no-compensation rule: strength elsewhere cannot average away the core concern.</p>}
       {p.priorQ && p.nowQ && <p style={{ fontSize: 12, color: MUTED_, margin: "0 0 2px" }}>Started in the {["", "bottom", "second", "middle", "fourth", "top"][p.priorQ]} fifth of the cohort; now performing in the {["", "bottom", "second", "middle", "fourth", "top"][p.nowQ]} fifth.</p>}
-      {p.ks4 ? <GradeTable rows={p.ks4} /> : p.subjects?.length > 1 && (
-        <>
-          <div style={SLAB}>Subjects · strongest to weakest, percentile in the cohort</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {p.subjects.slice(0, 12).map((x) => (
-              <span key={x.s} style={{ fontSize: 10.5, borderRadius: 999, padding: "3px 9px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA" }}>{x.s} <b>{x.pct}</b></span>
-            ))}
-          </div>
-        </>
-      )}
+      {p.ks4 ? <GradeTable rows={p.ks4} /> : p.subjects?.length > 1 && (() => {
+        const subs = p.subjects;
+        const many = subs.length > 7 && !allSub;
+        const strongest = many ? subs.slice(0, 3) : subs;
+        const weakest = many ? subs.slice(-3) : [];
+        const chipS = (x, i) => <span key={x.s + i} style={{ fontSize: 10.5, borderRadius: 999, padding: "3px 9px", background: x.pct >= 60 ? "#E7F3EB" : x.pct <= 25 ? "#F9E4E2" : "#F4EEFA" }}>{x.s} <b>{x.pct}</b></span>;
+        return (
+          <>
+            <div style={SLAB}>Subjects · percentile in the cohort</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+              {strongest.map(chipS)}
+              {many && <span style={{ fontSize: 10.5, color: MUTED_ }}>&hellip;</span>}
+              {weakest.map(chipS)}
+              {subs.length > 7 && <button onClick={() => setAllSub(!allSub)} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#4B0875", fontSize: 10.5, fontWeight: 700, padding: "3px 4px", fontFamily: "inherit", textDecoration: "underline" }}>{allSub ? "fewer" : `all ${subs.length}`}</button>}
+            </div>
+          </>
+        );
+      })()}
       <div style={SLAB}>How the pupil is doing</div>
       <Meter label="Learning" v={p.progress} />
       <Meter label="Engagement" v={p.engagement} />
       {p.engParts && (p.engParts.attendance != null || p.engParts.conduct != null || p.engParts.participation != null) && (
         <div style={{ margin: "-3px 0 6px 10px" }}>
-          <Meter sub label={p.nowAtt != null ? `Attendance (${p.nowAtt}% against ${p.expected}% expected)` : "Attendance"} v={p.engParts.attendance} />
-          <Meter sub label="Conduct and homework" v={p.engParts.conduct} />
-          <Meter sub label="Taking part" v={p.engParts.participation} />
+          {p.engParts.attendance != null && <Meter sub label={p.nowAtt != null ? `Attendance (${p.nowAtt}% against ${p.expected}% expected)` : "Attendance"} v={p.engParts.attendance} />}
+          {p.engParts.conduct != null && <Meter sub label="Conduct and homework" v={p.engParts.conduct} />}
+          {p.engParts.participation != null && <Meter sub label="Taking part" v={p.engParts.participation} />}
         </div>
       )}
-      <div style={SLAB}>What the school is doing</div>
-      <Meter label="Enrichment" v={p.enrichment} family="prov" />
-      <Meter label="Interventions" v={p.interventions} family="prov" />
+      {(p.enrichment != null || p.interventions != null) && (
+        <>
+          <div style={SLAB}>What the school is doing</div>
+          {p.enrichment != null && <Meter label="Enrichment" v={p.enrichment} family="prov" />}
+          {p.interventions != null && <Meter label="Interventions" v={p.interventions} family="prov" />}
+        </>
+      )}
+      {missing.length > 0 && <p style={{ fontSize: 10.5, color: MUTED_, margin: "6px 0 0" }}>No evidence yet for {missingLine}.</p>}
       {p.wins?.length > 1 && (
         <>
           <div style={SLAB}>Percentile across assessment windows</div>

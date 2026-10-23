@@ -96,7 +96,15 @@ export function readHeaders(headerRow, body) {
       let best = -1, bestU = 0;
       headerRow.forEach((hd, i) => { if (/name/i.test(String(hd)) && !/status|type|flag|file/i.test(String(hd))) { const u = uniq(i); if (u > bestU) { bestU = u; best = i; } } });
       if (best >= 0 && best !== map.name) { map.name = best; assumptions.push("name column re-chosen by distinctness"); }
-      else if (map.forename != null && map.surname != null) { map.name = -1; assumptions.push("name assembled from surname + forename"); }
+      else if (map.forename != null && map.surname != null) { map.name = -1; assumptions.push("name assembled from forename + surname"); }
+    }
+  }
+  /* a name column of single words is a surname list: a child deserves their whole name */
+  if (body && body.length >= 8 && map.name != null && map.name >= 0 && map.forename != null && map.surname != null) {
+    const vals = body.slice(0, 40).map((r) => (r[map.name] || "").trim()).filter(Boolean);
+    if (vals.length >= 5 && vals.filter((v) => /\s/.test(v)).length < vals.length / 2) {
+      map.name = -1;
+      assumptions.push("the name column held single words: names assembled from forename + surname instead");
     }
   }
   return { map, assumptions };
@@ -110,8 +118,11 @@ export function classify(map) {
   if (map.upn != null && (map.year != null || map.dob != null)) return "roll";
   return "unknown";
 }
-const cellName = (r, map) => map.name === -1 ? `${(r[map.surname] || "").trim()}, ${(r[map.forename] || "").trim()}` : (r[map.name] || "").trim();
-const normName = (s) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
+/* children get their full names, forename first; a "Surname, Forename" cell is turned round */
+const flipName = (s) => { const m = /^([^,]+),\s*(.+)$/.exec(s); return m ? `${m[2].trim()} ${m[1].trim()}` : s; };
+const cellName = (r, map) => map.name === -1 ? `${(r[map.forename] || "").trim()} ${(r[map.surname] || "").trim()}`.trim() : flipName((r[map.name] || "").trim());
+/* word-sorted, so "Kozubal, Ada", "Ada Kozubal" and "KOZUBAL Ada" all match one child */
+export const normName = (s) => (s || "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean).sort().join("");
 const normDob = (s) => { const m = (s || "").match(/(\d{1,4})[/\-.](\d{1,2})[/\-.](\d{1,4})/); if (!m) return ""; let [, a, b, c] = m; if (a.length === 4) return `${a}-${b.padStart(2, "0")}-${c.padStart(2, "0")}`; return `${c.length === 2 ? "20" + c : c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`; };
 export const validUPN = (u) => /^[A-Z]\d{12}$/i.test((u || "").trim()) || /^[A-Z]\d{11}[A-Z]$/i.test((u || "").trim());
 
@@ -176,6 +187,23 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     assumptions.push(kind === "attendance"
       ? "file named as attendance: read as attendance, never as assessments"
       : "file named as attendance, but no attendance % or sessions column was recognised: stored unread rather than inventing assessments. Tell Claude the column names and the reader will learn them");
+  }
+  /* attendance columns lie in cleaned exports: a zero-filled "% Present + AEA"
+     must not outrank the living "% Present", and fractions of 1 are percentages */
+  let attScale = 1;
+  if (kind === "attendance") {
+    const body0 = rows.slice(1);
+    const sample = (ci) => (ci == null ? [] : body0.slice(0, 60).map((r) => num(r[ci])).filter((v) => v != null));
+    const lively = (vs) => vs.length >= 3 && vs.filter((v) => v > 1).length > vs.length / 2;
+    if (map.attPlus != null && !lively(sample(map.attPlus)) && map.att != null && lively(sample(map.att))) {
+      assumptions.push(`“${String(rows[0][map.attPlus]).trim()}” holds no living values: attendance read from “${String(rows[0][map.att]).trim()}” instead`);
+      map.attPlus = null;
+    }
+    const vs = sample(map.attPlus ?? map.att);
+    if (vs.length >= 3 && vs.every((v) => v <= 1.001) && vs.some((v) => v > 0)) {
+      attScale = 100;
+      assumptions.push("attendance arrived as fractions of 1: read as percentages");
+    }
   }
   const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
   const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
@@ -280,9 +308,11 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName });
     if (kind === "attendance") {
       const pcol = map.attPlus ?? map.att;
-      const pv = pcol != null ? num(r[pcol]) : pctFrom(r, map);
+      const pv0 = pcol != null ? num(r[pcol]) : pctFrom(r, map);
+      const pv = pv0 == null ? null : Math.round(pv0 * attScale * 10) / 10;
+      const un0 = map.unauth != null ? num(r[map.unauth]) : null;
       if (pv == null) { led.matched--; led.blank = (led.blank || 0) + 1; }
-      else evidence.push({ ...base, t: "attendance", pct: pv, unauth: map.unauth != null ? num(r[map.unauth]) : null, when: map.date != null ? (r[map.date] || "").trim() : "current" });
+      else evidence.push({ ...base, t: "attendance", pct: pv, unauth: un0 == null ? null : Math.round(un0 * attScale * 10) / 10, when: map.date != null ? (r[map.date] || "").trim() : "current" });
     }
     if (kind === "engagement") evidence.push({ ...base, t: "engagement", praise: num(r[map.praise]), sanction: num(r[map.sanction]), homework: num(r[map.homework]) });
     if (kind === "enrichment") evidence.push({ ...base, t: "enrichment", what: map.event != null ? (r[map.event] || "").trim() : fileName, when: map.date != null ? (r[map.date] || "").trim() : "" });
