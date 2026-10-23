@@ -141,6 +141,7 @@ export default function Prizm() {
   useEffect(() => { setForeword(null); }, [scope, blocks]);
   useEffect(() => { setSegs({}); }, [scope]);
   const [pendingVault, setPendingVault] = useState(null);
+  const [pendingAsk, setPendingAsk] = useState(null);
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -158,11 +159,20 @@ export default function Prizm() {
       /* arrive at a kept report: ?vault=<id> opens it once the vault loads */
       const v = p.get("vault");
       if (v) setPendingVault(v);
-      /* arrive with a question (the map's search hands these over): box pre-filled */
+      /* arrive with a question (the map's search hands these over) */
       const ask = p.get("ask");
-      if (ask) setQ(ask.slice(0, 300));
+      if (ask) setPendingAsk(ask.slice(0, 300));
     } catch { /* no params */ }
   }, []);
+  /* a handed-over question is asked the moment the dataset is in */
+  useEffect(() => {
+    if (!pendingAsk || !all) return;
+    const t = pendingAsk;
+    setPendingAsk(null);
+    setQ(t);
+    send(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAsk, all]);
   useEffect(() => {
     if (!pendingVault || !saved.length) return;
     const r = saved.find((x) => String(x.id) === String(pendingVault));
@@ -226,7 +236,7 @@ export default function Prizm() {
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
-  function pick(c) { setScope(c.sc); applyImplied(c.sc, q); setQ(""); }
+  function pick(c) { setScope(c.sc); applyImplied(c.sc, q); setQ(""); boxRef.current && boxRef.current.blur(); }
   function openExample(ex) { setTitle(""); setBlocks(ex.blocks || DEFAULT_BLOCKS); setScope(ex.sc); }
   function addBlock(t) { setBlocks((b) => (b.includes(t) ? b : [...b, t])); }
   function removeBlock(t) { setBlocks((b) => b.filter((x) => x !== t)); }
@@ -259,9 +269,19 @@ export default function Prizm() {
       setMsgs((m) => [...m, { role: "assistant", content: data.reply || "Done." }]);
       setNote(data.reply || null);
     } catch {
-      setNote("The reader is out of reach just now, but everything works by hand: type a place, a trust or a school and choose it.");
+      /* no reader? compose locally from the words themselves */
+      const res = all ? searchEntities(all, text) : null;
+      const best = res && res.composed && res.composed[0];
+      if (best) {
+        setScope(best.sc); applyImplied(best.sc, text);
+        setNote("The reader is out of reach just now, so Prizm composed this locally from your words.");
+      } else {
+        setQ(text);
+        setNote("The reader is out of reach just now, but everything works by hand: type a place, a trust or a school and choose it.");
+      }
     }
     clearInterval(tick); setStage(""); setThinking(false);
+    boxRef.current && boxRef.current.blur(); /* give the keyboard back to the page */
   }
 
   function buildFindings() {
@@ -370,11 +390,19 @@ export default function Prizm() {
     </div>
   );
 
+  /* a full question goes to the reader even when chips are showing; a short
+     phrase picks the chip. Arrows belong to the page unless chips are open. */
+  const looksLikeQuestion = (t) => /\?\s*$/.test(t) || (/^(which|what|where|who|whose|how|why|do|does|is|are|can|show me|tell me|compare|rank)\b/i.test(t) && t.split(/\s+/).length >= 5);
   const onBoxKey = (e) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, chips.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
-    else if (e.key === "Enter") { if (chips.length) pick(chips[Math.min(sel, chips.length - 1)]); else if (q.trim().length >= 8) send(); }
-    else if (e.key === "Escape") { setQ(""); }
+    if (e.key === "ArrowDown") { if (!chips.length) return; e.preventDefault(); setSel((s) => Math.min(s + 1, chips.length - 1)); }
+    else if (e.key === "ArrowUp") { if (!chips.length) return; e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
+    else if (e.key === "Enter") {
+      const t = q.trim();
+      if (t.length >= 8 && looksLikeQuestion(t)) send();
+      else if (chips.length) pick(chips[Math.min(sel, chips.length - 1)]);
+      else if (t.length >= 8) send();
+    }
+    else if (e.key === "Escape") { setQ(""); boxRef.current && boxRef.current.blur(); }
   };
 
   /* ── the opening: one box, worked briefs, the vault ── */

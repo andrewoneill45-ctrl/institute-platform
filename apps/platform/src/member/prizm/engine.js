@@ -282,6 +282,7 @@ export function parseQuery(raw) {
   eat(/\b(in )?the most deprived (fifth|quintile|areas?)\b/, () => { f.idaci = 5; });
   eat(/\b(in )?the least deprived (fifth|quintile|areas?)\b/, () => { f.idaci = 1; });
   eat(/\bidaci (quintile )?([1-5])\b/, (m) => { f.idaci = +m[2]; });
+  eat(/\b(highest|most|largest|biggest) (ehcp?|ehc[- ]plans?|send)( shares?| rates?| proportions?| levels?)?\b/, () => { order = { ...(order || { limit: 25 }), by: "ehcp" }; });
   eat(/\b(high[- ]fsm|deprived|disadvantaged (areas?|intakes?|communities))\b/, () => { f.minFsm = f.minFsm ?? 35; });
   eat(/\b(low[- ]fsm|affluent|leafy)\b/, () => { f.maxFsm = f.maxFsm ?? 15; });
   eat(/\bfsm (over|above|at least) (\d{1,2})\s*%?/, (m) => { f.minFsm = +m[2]; });
