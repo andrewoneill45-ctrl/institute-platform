@@ -134,8 +134,9 @@ export function layoutMandala(pupils) {
    English + maths prediction keep their concern seat, dimmed, and are counted. */
 export function gradesOf(p) {
   if (!p.ks4 || !p.ks4.length) return null;
-  const en = p.ks4.find((r) => /engl|^en\b/i.test(r.s)), ma = p.ks4.find((r) => /math|^ma\b/i.test(r.s));
-  const ge = en ? en.pred ?? en.now : null, gm = ma ? ma.pred ?? ma.now : null;
+  /* English counts as the best of Language and Literature, as the basics measure intends */
+  const best = (re) => p.ks4.filter((r) => re.test(r.s)).map((r) => r.pred ?? r.now).filter((g) => g != null).sort((a, b) => b - a)[0] ?? null;
+  const ge = best(/engl|^en\b/i), gm = best(/math|^ma\b/i);
   if (ge == null || gm == null) return null;
   return { g: Math.min(ge, gm), en: ge, ma: gm };
 }

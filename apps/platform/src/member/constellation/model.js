@@ -210,7 +210,13 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     }
   }
   const winOf = (hd) => { const m = String(hd).match(WINDOW_RE); if (!m) return null; const y = String(hd).match(/\by(?:ea)?r? ?(\d{1,2})\b/i); return (y ? "Y" + y[1] + " " : "") + m[0]; };
-  const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
+  const subjOf = (hd, fallback) => { const s = String(hd).replace(WINDOW_RE, "").replace(/\by(?:ea)?r? ?\d{1,2}\b/i, "").replace(/\b(?:20)?\d\d[\/_-]\d\d\b/g, " ").replace(/[%\s\u00b7:-]+/g, " ").trim(); return s || fallback; };
+  /* measure columns: a wide tracker often carries Grade / QoB / Prediction / MEG
+     per subject per window. Grades are performance; predictions and targets are
+     the grade table's business and must never pollute the progress percentiles. */
+  const MEASC = [[/\bmeg\b|\btarget\b/i, "target"], [/\bpredict(ion|ed)?\b/i, "pred"], [/\bqo[bp]\b/i, "qob"], [/\b(grade|working ?at|working|wag|current)\b/i, "now"]];
+  const measOf = (hd) => { const m = MEASC.find(([re]) => re.test(String(hd))); return m ? m[1] : null; };
+  const cleanBase = (s) => String(s).replace(/\bmeg\b|\btarget\b|\bpredict(?:ion|ed)?\b|\bqo[bp](?:\s*\/\s*qo[bp])?\b|\bgrade\b|\bworking ?at\b|\bworking\b|\bwag\b|\bcurrent\b/gi, " ").replace(/[%\s\u00b7:/-]+/g, " ").trim();
   const body = rows.slice(1);
   const led = { file: fileName, kind, matched: 0, of: body.length, assumptions, held: 0, date: today(), scope: scopeYear, years: [], note };
 
@@ -288,15 +294,20 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
         const v = parseFloat(String(r[wc.i] ?? "").replace(/[%\s]/g, ""));
         if (!isFinite(v)) return;
         const when = wc.single ? subject : (winOf(wc.h) || wc.h);
-        const subj = wc.single ? subjOf(wc.h, subject) : subjOf(wc.h, subject);
-        evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when });
+        const rawSubj = subjOf(wc.h, subject);
+        const meas = measOf(wc.h);
+        const subj = meas ? (cleanBase(rawSubj) || rawSubj) : rawSubj;
+        evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "assessment", subject: subj, score: v, when: when, ...(meas ? { meas } : {}) });
       });
       harvest(roll.find((x) => x.upn === m.upn), r);
       const priorCol = map.prior ?? map.ks2em ?? map.cats;
       if (priorCol != null) { const pr = num(r[priorCol]); if (pr != null) { evidence.push({ upn: m.upn, file: fileName, conf: m.conf, date: today(), t: "prior", score: pr }); const p = roll.find((x) => x.upn === m.upn); if (p && p.prior == null) { p.prior = pr; priorFilled++; } } }
     });
     const winSet = [...new Set(windowCols.map((wc) => wc.single ? subject : (winOf(wc.h) || wc.h)))];
-    led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`, ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : []), ...ctxNote()];
+    const measN = windowCols.filter((wc) => measOf(wc.h)).length;
+    led.assumptions = [...led.assumptions, `read as a tracker: ${winSet.length} assessment window${winSet.length > 1 ? "s" : ""}, ${windowCols.length} graded columns (${winSet.slice(0, 4).join(", ")}${winSet.length > 4 ? "\u2026" : ""})`,
+      ...(measN ? [`${measN} columns carry grades, predictions or targets: working-at grades drive progress; predictions and MEGs build the grade table and the venn`] : []),
+      ...(priorFilled ? [`prior attainment filled for ${priorFilled} pupils from the tracker`] : []), ...ctxNote()];
     const touched2 = new Set(evidence.slice(state.evidence.length).map((e) => e.upn));
     led.years = [...new Set(roll.filter((p) => touched2.has(p.upn)).map((p) => p.year).filter(Boolean))].sort((a, b) => a - b);
     return stamp({ ...state, roll, evidence, review, ledger: [led, ...state.ledger] });
@@ -464,15 +475,18 @@ export function computeAll(state) {
     const ev = state.evidence;
     const termRank = (w) => { const s = String(w).toLowerCase(); const m = s.match(/(20\d\d)/); const yr = m ? +m[1] * 10 : 0; if (/michaelmas|advent|autumn/.test(s)) return yr + 0; if (/lenten|lent|spring/.test(s)) return yr + 1; if (/trinity|summer/.test(s)) return yr + 2; const n = s.match(/(?:ap|term|assessment) ?(\d)/); if (n) return yr + (+n[1] - 1); return null; };
     const wins = [...new Set(ev.filter((e) => e.t === "assessment" && e.when !== "prior" && cohort.some((p) => p.upn === e.upn)).map((e) => e.when))].sort((a, b) => { const ra = termRank(a), rb = termRank(b); if (ra != null && rb != null && ra !== rb) return ra - rb; return String(a) < String(b) ? -1 : 1; });
+    /* performance only in the percentile stream: working-at grades and raw
+       scores. Predictions, MEGs and QoBs belong to the grade table, not here. */
+    const streamOf = (e) => e.meas == null || e.meas === "now";
     const scoreSets = {};
-    ev.forEach((e) => { if (e.t === "assessment" && e.score != null) { const k = e.subject + "|" + e.when; (scoreSets[k] = scoreSets[k] || []).push(e); } });
+    ev.forEach((e) => { if (e.t === "assessment" && e.score != null && streamOf(e)) { const k = e.subject + "|" + e.when; (scoreSets[k] = scoreSets[k] || []).push(e); } });
     for (const k in scoreSets) scoreSets[k].sorted = scoreSets[k].map((e) => e.score).sort((a, b) => a - b);
     for (const p of cohort) {
       const mine = ev.filter((e) => e.upn === p.upn);
       /* progress */
       const perWin = wins.map((w) => {
-        const es = mine.filter((e) => e.t === "assessment" && e.when === w && e.score != null);
-        const ps = es.map((e) => pctile(e.score, scoreSets[e.subject + "|" + w].sorted)).filter((x) => x != null);
+        const es = mine.filter((e) => e.t === "assessment" && e.when === w && e.score != null && streamOf(e));
+        const ps = es.map((e) => { const set = scoreSets[e.subject + "|" + w]; return set ? pctile(e.score, set.sorted) : null; }).filter((x) => x != null);
         return ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null;
       });
       const curP = [...perWin].reverse().find((x) => x != null) ?? null;
@@ -516,22 +530,33 @@ export function computeAll(state) {
       let capped = false;
       if (band != null && worstCore - band > 1) { band = worstCore - 1; capped = true; }
       const dir = (progress != null && dirP < -6) || trend < -1.5 ? "declining" : (dirP > 6 || trend > 1.5) ? "improving" : "steady";
-      const lastWin = [...wins].reverse().find((w) => mine.some((e) => e.t === "assessment" && e.when === w && e.score != null));
-      const latest = lastWin == null ? [] : mine.filter((e) => e.t === "assessment" && e.when === lastWin && e.score != null);
-      const subjects = latest.map((e) => ({ s: e.subject, pct: pctile(e.score, scoreSets[e.subject + "|" + lastWin].sorted) }))
+      const lastWin = [...wins].reverse().find((w) => mine.some((e) => e.t === "assessment" && e.when === w && e.score != null && streamOf(e)));
+      const latest = lastWin == null ? [] : mine.filter((e) => e.t === "assessment" && e.when === lastWin && e.score != null && streamOf(e));
+      const subjects = latest.map((e) => { const set = scoreSets[e.subject + "|" + lastWin]; return { s: e.subject, pct: set ? pctile(e.score, set.sorted) : null }; })
         .filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct);
-      /* KS4 at a glance: columns named Subject + MEG / Prediction / Grade split into a grade table */
-      const MEAS = [[/\b(meg|target)\b/i, "target"], [/\bpredict(ion|ed)?\b/i, "pred"], [/\b(grade|current|working|wag)\b/i, "now"], [/\bqob\b/i, "qob"]];
-      const baseOf = (s) => s.replace(/\b(meg|target|prediction|predicted|predict|grade|current|working|wag|qob)\b/gi, "").replace(/\b(20)?\d\d[\/_-]\d\d\b/g, "").replace(/\s+/g, " ").trim();
-      const kmap = {};
-      latest.forEach((e) => {
-        if (!(e.score <= 9.5)) return; /* grade scale only: a 54% never reads as "predicted 54" */
-        const m = MEAS.find(([re]) => re.test(e.subject)); if (!m) return;
-        const b = baseOf(e.subject) || e.subject;
-        (kmap[b] = kmap[b] || { s: b })[m[1]] = e.score;
-      });
-      let ks4 = Object.values(kmap).filter((x) => x.now != null || x.pred != null || x.target != null);
-      ks4 = ks4.length >= 2 ? ks4.sort((a, b) => ((a.pred ?? a.now ?? 99) - (a.target ?? 0)) - ((b.pred ?? b.now ?? 99) - (b.target ?? 0))) : null;
+      /* KS4 at a glance: measure columns (or measure-worded subject names) split
+         into a grade table, taken from the latest window that actually carries
+         grades — a later stream of raw marks must not bury the predictions */
+      const MEAS = [[/\b(meg|target)\b/i, "target"], [/\bpredict(ion|ed)?\b/i, "pred"], [/\b(grade|current|working|wag)\b/i, "now"], [/\bqo[bp]\b/i, "qob"]];
+      const baseOf = (s) => s.replace(/\b(meg|target|prediction|predicted|predict|grade|current|working|wag|qob|qop)\b/gi, "").replace(/\b(20)?\d\d[\/_-]\d\d\b/g, "").replace(/[\s\/]+/g, " ").trim();
+      const kmapOf = (w) => {
+        const km = {};
+        mine.forEach((e) => {
+          if (e.t !== "assessment" || e.when !== w || e.score == null) return;
+          if (!(e.score <= 9.5)) return; /* grade scale only: a 54% never reads as "predicted 54" */
+          let meas = e.meas && e.meas !== "now" ? e.meas : null;
+          if (e.meas === "now") meas = "now";
+          if (!meas) { const m = MEAS.find(([re]) => re.test(e.subject)); if (!m) return; meas = m[1]; }
+          const b = (e.meas ? e.subject : baseOf(e.subject)) || e.subject;
+          (km[b] = km[b] || { s: b })[meas] = e.score;
+        });
+        return Object.values(km).filter((x) => x.now != null || x.pred != null || x.target != null);
+      };
+      let ks4 = null;
+      for (const w of [...wins].sort((a, b) => (termRank(b) ?? -1) - (termRank(a) ?? -1))) {
+        const rows = kmapOf(w);
+        if (rows.length >= 2) { ks4 = rows.sort((a, b) => ((a.pred ?? a.now ?? 99) - (a.target ?? 0)) - ((b.pred ?? b.now ?? 99) - (b.target ?? 0))); break; }
+      }
       const evCount = mine.length;
       out[p.upn] = { ...p, year: Number(year), progress, attendance, engagement, engParts: { attendance, conduct, participation }, enrichment, interventions,
         concern, band, capped, dir, priorQ: quintile(priorP), nowQ: quintile(curP), curP, priorP, perWin, wins,
