@@ -3,12 +3,37 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName, namesPreview } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, keepText, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName, namesPreview } from "./model.js";
 import { vaultMembership, vaultLoad, vaultSave, planSync } from "./vault.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf, reasonFor } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
+
+/* ── the file text, squeezed for the vault and opened again for a re-read ── */
+const KEEP_CAP = 4_000_000; /* characters; a file past this is read once and not kept */
+async function packText(text) {
+  if (!text || text.length > KEEP_CAP) return null;
+  try {
+    if (typeof CompressionStream === "undefined") return text.length <= 400_000 ? { t: text } : null;
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+    const buf = new Uint8Array(await new Response(stream).arrayBuffer());
+    let s = "";
+    for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    return { z: btoa(s) };
+  } catch { return text.length <= 400_000 ? { t: text } : null; }
+}
+async function unpackText(rec) {
+  if (!rec) return null;
+  if (rec.t != null) return rec.t;
+  try {
+    const bin = atob(rec.z);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(stream).text();
+  } catch { return null; }
+}
 const DIR = { improving: "#2F7A39", steady: GOLD, declining: "#B3261E" };
 const shadow = "0 1px 2px rgba(34,18,51,.04), 0 16px 44px rgba(34,18,51,.09)";
 const card = { background: "#fff", borderRadius: 20, boxShadow: shadow, padding: "22px 24px" };
@@ -138,24 +163,48 @@ function Constellation() {
     setUpYear(null);
   }
   const fixSlip = (slip, fixes) => setSlips((cur) => cur.map((s) => (s.id === slip.id ? reinspect(state, s, fixes) : s)));
-  const commitOne = (slip) => {
-    const next = commitSlip(state, slip);
+  const slipOpts = (slip) => ({ year: slip.fixes?.year ?? slip.opts?.year ?? null, note: slip.opts?.note || null });
+  const commitOne = async (slip) => {
+    let next = commitSlip(state, slip);
+    next = keepText(next, slip.fileName, await packText(slip.text), slipOpts(slip));
     setState(next);
     setSlips((cur) => cur.filter((s) => s.id !== slip.id).map((s) => (s.kind === "unreadable" ? s : reinspect(next, s, s.fixes))));
   };
   const discardOne = (slip) => setSlips((cur) => cur.filter((s) => s.id !== slip.id));
-  const commitAll = () => {
+  const commitAll = async () => {
     let st = state;
     const ordered = [...slips].filter((s) => s.kind !== "unreadable").sort((a, b) => (a.kind === "roll" ? 0 : 1) - (b.kind === "roll" ? 0 : 1));
     const done = new Set();
     for (const sl of ordered) {
       if (sl.kind !== "roll" && !st.roll.length) continue; /* nothing to attach to: the slip stays, waiting for the roll */
       st = commitSlip(st, sl);
+      st = keepText(st, sl.fileName, await packText(sl.text), slipOpts(sl));
       done.add(sl.id);
     }
     if (!done.size) return;
     setState(st);
     setSlips((cur) => cur.filter((s) => !done.has(s.id)).map((s) => (s.kind === "unreadable" || done.has(s.id) ? s : reinspect(st, s, s.fixes))));
+  };
+  /* re-read from the vault's kept text: the same file through today's reader */
+  const [rereading, setRereading] = useState(false);
+  const reread = async (fileNames) => {
+    if (rereading) return;
+    setRereading(true);
+    try {
+      let st = state;
+      const kindOf = (f) => (st.ledger.find((l) => l.file === f) || {}).kind;
+      const order = [...fileNames].sort((a, b) => (kindOf(a) === "roll" ? 0 : 1) - (kindOf(b) === "roll" ? 0 : 1));
+      for (const f of order) {
+        const rec = (st.texts || {})[f];
+        if (!rec) continue;
+        const text = await unpackText(rec);
+        if (!text) continue;
+        const slip = inspect(st, f, text, rec.opts || {});
+        if (slip.kind === "unreadable") continue;
+        st = commitSlip(st, slip);
+      }
+      setState(st);
+    } finally { setRereading(false); }
   };
   const resolve = (item, upn) => {
     const s = { ...state, review: state.review.filter((r) => r !== item), touched: Date.now() };
@@ -275,7 +324,7 @@ function Constellation() {
                 Drop files or click to choose
                 <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
-              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d, touched: Date.now() }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
+              <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d, touched: Date.now() }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results, and the files themselves, live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={kick}>Held for review · never guessed</div>
@@ -292,8 +341,13 @@ function Constellation() {
               )}
             </div>
             <div style={{ ...card }}>
-              <div style={kick}>The evidence ledger</div>
-              <p style={{ fontSize: 12.5, color: MUTED, margin: "6px 0 10px" }}>Every number on the map walks back to a named file, a date and the assumptions made. Under a minute, in front of anyone.</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                <div style={kick}>The evidence ledger</div>
+                {Object.keys(state.texts || {}).length >= 2 && (
+                  <button disabled={rereading} onClick={() => reread(Object.keys(state.texts))} style={{ border: "none", cursor: "pointer", background: "#fff", color: DEEP, borderRadius: 999, padding: "6px 13px", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit", boxShadow: shadow, opacity: rereading ? 0.5 : 1 }}>{rereading ? "Re-reading…" : `↻ Re-read all ${Object.keys(state.texts).length} kept files`}</button>
+                )}
+              </div>
+              <p style={{ fontSize: 12.5, color: MUTED, margin: "6px 0 10px" }}>Every number on the map walks back to a named file, a date and the assumptions made. Under a minute, in front of anyone. Files are kept in the vault, squeezed, so when the reader improves, &#8635; reads them again; no one digs out the export twice.</p>
               {state.ledger.length ? groupLedger(state.ledger).map(([label, entries]) => (
                 <div key={label} style={{ marginBottom: 6 }}>
                   <div style={{ ...kick, marginTop: 12 }}>{label}{entries.length > 1 ? ` · ${entries.length} files` : ""}</div>
@@ -301,7 +355,10 @@ function Constellation() {
                     <div key={i} style={{ borderTop: "1px solid rgba(106,12,160,.12)", padding: "9px 0", fontSize: 12.5 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <span><b>{l.file}</b> · read as <b style={{ color: DEEP }}>{l.kind}</b> · {l.matched}/{l.of} matched{l.held ? `, ${l.held} held` : ""} · {l.date}</span>
-                        <button onClick={() => { const roll = l.kind === "roll"; if (window.confirm(roll ? "Remove this roll file? Pupils whom another roll file on the ledger still vouches for stay on the spine; pupils only this file vouches for leave it, with their evidence unattached until a roll that carries them returns." : "Remove this file and all the evidence it brought in?")) setState(removeUpload(state, l)); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 14, padding: 0, lineHeight: 1 }}>&times;</button>
+                        <span style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                          {(state.texts || {})[l.file] && <button disabled={rereading} title="Read this file again through the current reader" onClick={() => reread([l.file])} style={{ border: "none", cursor: "pointer", background: "transparent", color: DEEP, fontSize: 14, padding: 0, lineHeight: 1, opacity: rereading ? 0.4 : 1 }}>&#8635;</button>}
+                          <button onClick={() => { const roll = l.kind === "roll"; if (window.confirm(roll ? "Remove this roll file? Pupils whom another roll file on the ledger still vouches for stay on the spine; pupils only this file vouches for leave it, with their evidence unattached until a roll that carries them returns." : "Remove this file and all the evidence it brought in?")) setState(removeUpload(state, l)); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 14, padding: 0, lineHeight: 1 }}>&times;</button>
+                        </span>
                       </div>
                       {l.note && <div style={{ color: DEEP, fontSize: 11.5, marginTop: 2, fontStyle: "italic" }}>&ldquo;{l.note}&rdquo;</div>}
                       {l.assumptions?.length > 0 && <div style={{ color: MUTED, fontSize: 11.5, marginTop: 2 }}>{l.assumptions.join("; ")}</div>}

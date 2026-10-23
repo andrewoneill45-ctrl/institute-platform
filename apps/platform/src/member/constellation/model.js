@@ -27,7 +27,7 @@ export async function saveState(schoolId, state) {
 export function rowsToCsv(aoa) {
   return aoa.map((r) => r.map((c) => '"' + String(c ?? "").replace(/"/g, '""') + '"').join(",")).join("\n");
 }
-export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {}, dialects: {} });
+export const blankState = () => ({ roll: [], evidence: [], ledger: [], review: [], aliases: {}, dialects: {}, texts: {} });
 /* every committed change carries its moment, so two copies of the school can be told apart by age */
 const stamp = (s) => ({ ...s, touched: Date.now() });
 
@@ -173,7 +173,9 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
   if (forced && forced.notes && forced.notes.length) assumptions.push(...forced.notes);
   if (rows[0].some((c) => /gcse|final grade|results? 20\d\d/i.test(String(c)))) assumptions.push("contains final outcomes: if this is a finished cohort it is self-evaluation and belongs in Lens, not here");
   const idCols = new Set(Object.values(map));
-  const numericish = (i) => rows.slice(1, 12).filter((r) => isFinite(parseFloat(String(r[i]).replace(/[%\s]/g, "")))).length >= 3;
+  /* sampled across the whole file, not the first few children: an option subject
+     most pupils don't take must still land for the children who do */
+  const numericish = (i) => { let n = 0; for (let ri = 1; ri < Math.min(rows.length, 600); ri++) { if (isFinite(parseFloat(String(rows[ri][i]).replace(/[%\s]/g, "")))) { n++; if (n >= 3) return true; } } return false; };
   let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
   /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
   if (windowCols.length < 2 && classify(map) !== "roll" && !/attend|behaviou?r|conduct/i.test(fileName)) {
@@ -352,7 +354,15 @@ export function removeUpload(state, led) {
   const review = state.review.filter((r) => r.file !== led.file);
   const ledger = state.ledger.filter((l) => l !== led);
   const roll = led.kind === "roll" ? pruneRoll(state.roll, ledger) : state.roll;
-  return stamp({ ...state, roll, evidence, review, ledger });
+  const texts = { ...(state.texts || {}) };
+  delete texts[led.file];
+  return stamp({ ...state, roll, evidence, review, ledger, texts });
+}
+/* the vault keeps each file's text, squeezed, so a better reader can re-read it
+   without anyone digging the export out again */
+export function keepText(state, fileName, packed, opts) {
+  if (!packed) return state;
+  return { ...state, texts: { ...(state.texts || {}), [fileName]: { ...packed, opts: opts || {} } } };
 }
 
 /* ── the reading slip: every file is read back before a single number lands ──
@@ -543,12 +553,18 @@ export function computeAll(state) {
         const km = {};
         mine.forEach((e) => {
           if (e.t !== "assessment" || e.when !== w || e.score == null) return;
-          if (!(e.score <= 9.5)) return; /* grade scale only: a 54% never reads as "predicted 54" */
+          let sc = e.score;
+          /* double-award science arrives as a grade pair ("87" is 8-7): its midpoint */
+          if (sc > 9.5 && sc <= 99 && /scien|combined|double/i.test(e.subject)) {
+            const a = Math.floor(sc / 10), b = sc % 10;
+            if (a >= 1 && a <= 9 && b >= 1 && b <= 9) sc = (a + b) / 2;
+          }
+          if (!(sc <= 9.5)) return; /* grade scale only: a 54% never reads as "predicted 54" */
           let meas = e.meas && e.meas !== "now" ? e.meas : null;
           if (e.meas === "now") meas = "now";
           if (!meas) { const m = MEAS.find(([re]) => re.test(e.subject)); if (!m) return; meas = m[1]; }
           const b = (e.meas ? e.subject : baseOf(e.subject)) || e.subject;
-          (km[b] = km[b] || { s: b })[meas] = e.score;
+          (km[b] = km[b] || { s: b })[meas] = sc;
         });
         return Object.values(km).filter((x) => x.now != null || x.pred != null || x.target != null);
       };
