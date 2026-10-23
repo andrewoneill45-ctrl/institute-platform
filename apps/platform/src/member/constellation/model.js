@@ -75,8 +75,9 @@ const HEADS = {
   prior: /^(?!.*(banding|source|estimat))(?=.*(ks2|prior|baseline|cat4|cats|sats)).*/i,
   attPlus: /% ?present ?\+ ?aea/i,
   att: /attendance ?%|% ?att(end)?|attendance$|percent(age)? ?attend|attend(ance)? ?pct|% ?present$/i, sessions: /sessions|possible/i, absent: /absen/i, unauth: /% ?unauth/i,
-  subject: /subject|course/i, score: /score|mark\b|grade|gcse|result/i,
-  date: /date$|window|term|assessment ?(point|date)/i,
+  rtype: /result ?type/i, rmeasure: /^measure$/i,
+  subject: /subject|course/i, score: /score|mark\b|grade|gcse|result(?! ?(type|set))/i,
+  date: /date$|window|term|reporting ?period|assessment ?(point|date)/i,
   praise: /praise|achievement ?points|positive/i, sanction: /sanction|behaviour ?points|negative|demerit/i,
   homework: /homework|completion/i, event: /trip|visit|event|club|activity|enrichment/i,
   intervention: /intervention|programme|tuition|support ?group/i, dosage: /attended|dosage|sessions ?attended/i,
@@ -177,8 +178,9 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
      most pupils don't take must still land for the children who do */
   const numericish = (i) => { let n = 0; for (let ri = 1; ri < Math.min(rows.length, 600); ri++) { if (isFinite(parseFloat(String(rows[ri][i]).replace(/[%\s]/g, "")))) { n++; if (n >= 3) return true; } } return false; };
   let windowCols = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => WINDOW_RE.test(c.h) && numericish(c.i));
-  /* wide single-point sheets: many subject columns, no term words (end-of-year grades) */
-  if (windowCols.length < 2 && classify(map) !== "roll" && !/attend|behaviou?r|conduct/i.test(fileName)) {
+  /* wide single-point sheets: many subject columns, no term words (end-of-year
+     grades). A file with its own Subject column is long format, never wide. */
+  if (windowCols.length < 2 && map.subject == null && classify(map) !== "roll" && !/attend|behaviou?r|conduct/i.test(fileName)) {
     const wideId = new Set(Object.entries(map).filter(([k]) => k !== "score" && k !== "subject").map(([, i]) => i));
     const wide = rows[0].map((hd, i) => ({ h: (hd || "").trim(), i })).filter((c) => c.h && !wideId.has(c.i) && numericish(c.i) && !/ks2|cat|prior|baseline|admission|adno|upn|house|point/i.test(c.h));
     if (wide.length >= 3 && (map.upn != null || map.name != null)) windowCols = wide.map((c) => ({ ...c, single: true }));
@@ -315,6 +317,17 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     return stamp({ ...state, roll, evidence, review, ledger: [led, ...state.ledger] });
   }
   const roll2 = state.roll.map((p) => ({ ...p }));
+  /* long-format measures: a "Result Type" or "Measure" column can mark a row as
+     a prediction, target or grade; those rows feed the grade table and the venn */
+  const rowMeas = (r) => {
+    if (map.rtype == null && map.rmeasure == null) return null;
+    const tv = `${map.rtype != null ? r[map.rtype] || "" : ""} ${map.rmeasure != null ? r[map.rmeasure] || "" : ""}`.toLowerCase();
+    if (/predict/.test(tv)) return "pred";
+    if (/\bmeg\b|target/.test(tv)) return "target";
+    if (/\bgrade\b|working|current|\bwag\b/.test(tv)) return "now";
+    return null;
+  };
+  let measRows = 0;
   body.forEach((r) => {
     const m = matchPupil(r, map, roll2, state.aliases, scopeYear);
     if (!m) { led.held++; return; }
@@ -322,7 +335,11 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     led.matched++;
     harvest(roll2.find((x) => x.upn === m.upn), r);
     const base = { upn: m.upn, file: fileName, conf: m.conf, date: today() };
-    if (kind === "assessment") evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName });
+    if (kind === "assessment") {
+      const meas = rowMeas(r);
+      if (meas === "pred" || meas === "target") measRows++;
+      evidence.push({ ...base, t: "assessment", subject: map.subject != null ? r[map.subject] : fileName.replace(/\.[^.]+$/, ""), score: num(r[map.score]), when: map.date != null ? (r[map.date] || "").trim() : fileName, ...(meas ? { meas } : {}) });
+    }
     if (kind === "attendance") {
       const pcol = map.attPlus ?? map.att;
       const pv0 = pcol != null ? num(r[pcol]) : pctFrom(r, map);
@@ -335,6 +352,7 @@ export function ingest(state, fileName, text, opts = {}, forced = null) {
     if (kind === "enrichment") evidence.push({ ...base, t: "enrichment", what: map.event != null ? (r[map.event] || "").trim() : fileName, when: map.date != null ? (r[map.date] || "").trim() : "" });
     if (kind === "intervention") evidence.push({ ...base, t: "intervention", what: (r[map.intervention] || "").trim(), dosage: map.dosage != null ? num(r[map.dosage]) : null });
   });
+  if (measRows) led.assumptions = [...led.assumptions, `${measRows} rows are predictions or targets (from the result-type column): they build the grade table and the venn, not the progress stream`];
   if (led.blank) led.assumptions = [...led.assumptions, `${led.blank} rows carried no attendance values and were skipped`];
   if (kind === "attendance" && led.held > 0) led.assumptions = [...led.assumptions, `${led.held} rows matched no pupil on the roll (leavers or other cohorts in the history): ignored`];
   if (scopeYear != null && led.held > led.matched) led.assumptions = [...led.assumptions, `most rows fell outside the Year ${scopeYear} scope chosen at upload: if this file covers the whole school, remove it and add it again with "Whole school" selected`];
@@ -374,12 +392,12 @@ export function keepText(state, fileName, packed, opts) {
    export in that dialect arrives already understood. */
 export const KIND_LABELS = { roll: "the school roll", attendance: "attendance", tracker: "a tracker · termly assessments", assessment: "assessments", engagement: "conduct & homework", enrichment: "enrichment", intervention: "interventions", unknown: "not readable yet", unreadable: "unreadable" };
 export const KIND_CHOICES = ["roll", "attendance", "tracker", "assessment", "engagement", "enrichment", "intervention"];
-export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", forename: "forename", surname: "surname", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", ks2em: "KS2 En+Ma band", ks2read: "KS2 reading", cats: "CATs mean", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", ehcp: "EHCP", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", praise: "praise points", sanction: "sanctions", homework: "homework" };
+export const FIELD_LABELS = { upn: "the child (UPN)", name: "the child’s name", forename: "forename", surname: "surname", year: "year group", reg: "tutor group", dob: "date of birth", prior: "prior attainment", ks2em: "KS2 En+Ma band", ks2read: "KS2 reading", cats: "CATs mean", gender: "gender", ppg: "pupil premium", fsm: "free school meals", eal: "EAL", sen: "SEN", ehcp: "EHCP", att: "attendance %", unauth: "unauthorised %", subject: "subject", score: "the score", date: "the window", rtype: "result type (grade or prediction)", praise: "praise points", sanction: "sanctions", homework: "homework" };
 export const FIELDS_BY_KIND = {
   roll: ["upn", "name", "forename", "surname", "year", "reg", "dob", "prior", "ks2em", "ks2read", "cats", "gender", "ppg", "fsm", "eal", "sen", "ehcp"],
   attendance: ["upn", "name", "att", "unauth"],
   tracker: ["upn", "name", "year", "prior"],
-  assessment: ["upn", "name", "subject", "score", "date"],
+  assessment: ["upn", "name", "subject", "score", "date", "rtype"],
   engagement: ["upn", "name", "praise", "sanction", "homework"],
   enrichment: ["upn", "name"], intervention: ["upn", "name"],
   unknown: ["upn", "name", "att", "unauth", "score"], unreadable: [],
