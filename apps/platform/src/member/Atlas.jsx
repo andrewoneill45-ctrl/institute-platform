@@ -1,5 +1,5 @@
 import { Suspense, lazy, Component, useState } from "react";
-import PrismCanvas from "./prism/PrismCanvas.jsx";
+import { useNavigate } from "react-router-dom";
 
 const AtlasApp = lazy(() => import("../atlas/App.jsx"));
 const Q = "M31.5 31.5 A 18.5 18.5 0 1 1 68.5 31.5 A 18.5 18.5 0 1 1 68.5 68.5 A 18.5 18.5 0 1 1 31.5 68.5 A 18.5 18.5 0 1 1 31.5 31.5 Z";
@@ -51,18 +51,18 @@ function Landing({ onMap, onPrism }) {
           <button style={card} onClick={onPrism}>
             <div style={{ fontSize: 11, letterSpacing: ".13em", textTransform: "uppercase", color: "#C6A035", fontWeight: 700, marginBottom: 10 }}>Understand</div>
             <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 19, color: "#221233", marginBottom: 6 }}>
-              Ask Prism
+              Ask Prizm
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C6A035" strokeWidth="2" style={{ marginLeft: 8 }}>
                 <path d="M12 3 3 19h18Z" /><path d="M12 3v16" opacity=".55" />
               </svg>
             </div>
             <p style={{ fontSize: 13.5, color: "#6F6580", margin: 0, lineHeight: 1.5 }}>
-              Ask a question and get a canvas of living evidence: charts you can reshape, an argument beneath, a briefing PDF at the end.
+              Say what you need to understand and the report studio composes it before your eyes: every figure computed, downloadable as one beautiful file.
             </p>
           </button>
         </div>
         <p style={{ fontSize: 12.5, color: "#6F6580", marginTop: 34 }}>
-          Both doors lead everywhere: questions typed into the map's search summon Prism too.
+          Both doors lead everywhere: a question typed into the map's search opens Prizm too.
         </p>
       </div>
     </div>
@@ -70,13 +70,13 @@ function Landing({ onMap, onPrism }) {
 }
 
 export default function Atlas() {
+  const navigate = useNavigate();
   /* a ?urn= deep link (Prizm's charts click through here) goes straight to the map */
   const [door, setDoor] = useState(() => {
     try { if (new URLSearchParams(window.location.search).get("urn")) return "map"; } catch { /* no params */ }
     return sessionStorage.getItem("asi-atlas-door") || "";
   });
-  const choose = (d) => { sessionStorage.setItem("asi-atlas-door", "map"); setDoor("map");
-    if (d === "prism") setTimeout(() => window.dispatchEvent(new CustomEvent("asi-prism", { detail: "" })), 60); };
+  const choose = () => { sessionStorage.setItem("asi-atlas-door", "map"); setDoor("map"); };
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", transform: "translate(0)" }}>
       <Boundary>
@@ -86,9 +86,8 @@ export default function Atlas() {
             <AtlasApp />
           </Suspense>
         ) : (
-          <Landing onMap={() => choose("map")} onPrism={() => choose("prism")} />
+          <Landing onMap={choose} onPrism={() => navigate("/members/prizm")} />
         )}
-        <PrismCanvas />
       </Boundary>
     </div>
   );

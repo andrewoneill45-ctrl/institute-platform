@@ -1,7 +1,8 @@
 /* ─── Full-screen overlay ──────────────── */
 .simf-overlay {
   position: fixed; inset: 0; z-index: 600;
-  background: #ffffff;
+  background: #FBFAF7;
+  background-image: radial-gradient(700px 380px at 50% -60px, rgba(106,12,160,.07), transparent 70%);
   overflow-y: auto;
   animation: simfFadeIn 0.2s ease;
 }
@@ -16,7 +17,7 @@
 .simf-close {
   position: fixed; top: 16px; right: 24px; z-index: 610;
   background: #221233; color: white; border: none;
-  border-radius: 10px; padding: 10px 20px;
+  border-radius: 999px; padding: 10px 20px;
   font-family: inherit; font-size: 0.85rem; font-weight: 700;
   cursor: pointer; transition: background 120ms;
   display: flex; align-items: center; gap: 6px;
@@ -25,12 +26,15 @@
 
 /* ─── Header ───────────────────────────── */
 .simf-header { margin-bottom: 28px; }
-.simf-title { font-size: 1.5rem; font-weight: 800; color: #221233; margin: 0 0 6px; }
+.simf-kick { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #C6A035; font-weight: 700; margin: 6px 0 10px; }
+.simf-title { font-family: Fraunces, Georgia, serif; font-size: 1.9rem; font-weight: 600; letter-spacing: -.015em; color: #221233; margin: 0 0 6px; }
+.simf-prizm { font-family: inherit; border: 1px solid rgba(34,18,51,.14); background: #fff; color: #221233; border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+.simf-prizm:hover { background: #F4EEFA; }
 .simf-subtitle { font-size: 0.88rem; color: #6F6580; line-height: 1.5; margin: 0 0 14px; max-width: 800px; }
 .simf-ctx-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .simf-ctx-tag {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 14px; background: #F5F2F9; border-radius: 99px; font-size: 0.78rem;
+  padding: 5px 14px; background: #fff; border: 1px solid #EAE4F1; border-radius: 99px; font-size: 0.78rem;
 }
 .simf-ctx-k { color: #A79FB5; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .simf-ctx-v { color: #221233; font-weight: 700; }

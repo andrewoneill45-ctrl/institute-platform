@@ -10,7 +10,7 @@ const p90 = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x
 const pctAbove = (a, v) => a.length ? Math.round(a.filter(x => x > v).length / a.length * 100) : null;
 
 const PHASE_COLORS = { Primary: '#6A0CA0', Secondary: '#3E5F8A', Special: '#B3532A', 'All-through': '#C6A035' };
-const OFSTED_COLORS = { Outstanding: '#2F7A39', Good: '#6A0CA0', 'Requires improvement': '#C79A3B', Inadequate: '#B03050' };
+const OFSTED_COLORS = { Outstanding: '#4B0875', Good: '#6A0CA0', 'Requires improvement': '#C6A035', Inadequate: '#B4475A' };
 
 const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
   const [tab, setTab] = useState('overview');
@@ -149,8 +149,15 @@ const StatsPanel = ({ filtered, allSchools, onClose, activeFilters }) => {
       <div className="sp2-panel" onClick={e => e.stopPropagation()}>
         <button className="sp2-close" onClick={onClose}>✕ Close</button>
 
-        <h2 className="sp2-title">{isFiltered ? 'Filtered Analysis' : 'All Schools'}</h2>
-        <p className="sp2-subtitle">{s.n.toLocaleString()} state-funded schools in England</p>
+        <div className="sp2-kick">Insights</div>
+        <h2 className="sp2-title">{isFiltered ? 'The view, in numbers' : 'England, in numbers'}</h2>
+        <p className="sp2-subtitle">{s.n.toLocaleString()} state-funded schools{isFiltered ? ' in the current view' : ' in England'}</p>
+        {isFiltered && filtered.length > 0 && filtered.length <= 150 && (
+          <button className="simf-prizm" style={{ marginTop: 0, marginBottom: 14 }}
+            onClick={() => { window.location.href = `/members/prizm?spec=${encodeURIComponent(JSON.stringify({ scope: { type: 'urns', urns: filtered.map(x => String(x.urn)) } }))}`; }}>
+            Open these {filtered.length} schools in Prizm →
+          </button>
+        )}
 
         {/* Tabs */}
         <div className="sp2-tabs">

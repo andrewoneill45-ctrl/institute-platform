@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { parseSearchQuery } from '../utils/searchParser';
 const aiParseSearch = async () => null;
 const hasApiKey = () => false;
@@ -16,6 +17,7 @@ const QUICK_FILTERS = [
 ];
 
 const SearchBar = ({ schools, query, onQueryChange, onSearch, onAiSearch, resultCount, activeFilters, onClearFilters }) => {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState(query || '');
   const [suggestions, setSuggestions] = useState([]);
@@ -92,7 +94,7 @@ const SearchBar = ({ schools, query, onQueryChange, onSearch, onAiSearch, result
   const keyDown = e => {
     if (e.key === 'Enter') {
       const v = (e.target.value || '').trim();
-      if (isQuestion(v)) { window.dispatchEvent(new CustomEvent('asi-prism', { detail: v })); setOpen(false); return; }
+      if (isQuestion(v)) { navigate(`/members/prizm?ask=${encodeURIComponent(v)}`); setOpen(false); return; }
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(p => Math.min(p + 1, suggestions.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setSelIdx(p => Math.max(p - 1, -1)); }

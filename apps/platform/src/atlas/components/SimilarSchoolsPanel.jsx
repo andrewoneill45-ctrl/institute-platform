@@ -44,7 +44,7 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
       <div className="simf-overlay">
         <div className="simf-full">
           <button className="simf-close" onClick={onClose}>✕ Close</button>
-          <h2 className="simf-title">Similar Schools</h2>
+          <h2 className="simf-title">Schools like this one</h2>
           <p style={{ color: '#6F6580', fontSize: '0.95rem' }}>Not enough contextual data to find similar schools for {s.name}.</p>
         </div>
       </div>
@@ -57,10 +57,15 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
         <button className="simf-close" onClick={onClose}>✕ Close</button>
 
         <div className="simf-header">
-          <h2 className="simf-title">Similar Schools to {s.name}</h2>
+          <div className="simf-kick">The fair comparison</div>
+          <h2 className="simf-title">Schools like {s.name}</h2>
           <p className="simf-subtitle">
-            10 schools with the most similar intake profile, based on FSM, SEN, EAL, school size, pupil stability and region. Outcomes shown for comparison only.
+            The ten schools whose intake most resembles this one's, weighed by FSM, SEN, EAL, size, pupil stability and region. Same hand, different schools; outcomes shown for comparison only.
           </p>
+          <button className="simf-prizm"
+            onClick={() => { window.location.href = `/members/prizm?spec=${encodeURIComponent(JSON.stringify({ scope: { type: 'urns', urns: [String(s.urn), ...results.map(r => String(r.school.urn))] } }))}`; }}>
+            Open these schools as a Prizm report →
+          </button>
           <div className="simf-ctx-row">
             {s.fsm_pct != null && <CtxTag label="FSM" value={s.fsm_pct + '%'} />}
             {s.sen_all_pct != null && <CtxTag label="SEN" value={s.sen_all_pct + '%'} />}
@@ -97,12 +102,8 @@ const SimilarSchoolsPanel = ({ school, allSchools, onClose, onSelectSchool }) =>
                     );
                     const pct = ((val - mn) / range) * 100;
                     const isTarget = r.isTarget;
-                    let barColor = isTarget ? '#6A0CA0' : '#6F6580';
-                    if (isP8) barColor = isTarget ? '#6A0CA0' : val >= 0 ? '#2F7A39' : '#B03050';
-                    else if (!isTarget) {
-                      const tv = s[metric.field];
-                      if (tv != null) barColor = val > tv + 2 ? '#2F7A39' : val < tv - 2 ? '#B03050' : '#6F6580';
-                    }
+                    /* the house's duet: the school in purple, its peers in gold */
+                    const barColor = isTarget ? '#6A0CA0' : '#C6A035';
 
                     return (
                       <div key={rs.urn || i}

@@ -158,6 +158,9 @@ export default function Prizm() {
       /* arrive at a kept report: ?vault=<id> opens it once the vault loads */
       const v = p.get("vault");
       if (v) setPendingVault(v);
+      /* arrive with a question (the map's search hands these over): box pre-filled */
+      const ask = p.get("ask");
+      if (ask) setQ(ask.slice(0, 300));
     } catch { /* no params */ }
   }, []);
   useEffect(() => {
