@@ -83,7 +83,7 @@ export default function MemberLayout() {
         </div>
       </header>
 
-      <main className={fullBleed ? "shell-bleed" : "shell-body member-body"}>
+      <main className={fullBleed ? "shell-bleed" : "shell-body member-body"} tabIndex={-1} data-scroller="1">
         {fullBleed ? <Outlet key={outletKey} /> : <div className="container"><Outlet key={outletKey} /></div>}
       </main>
 

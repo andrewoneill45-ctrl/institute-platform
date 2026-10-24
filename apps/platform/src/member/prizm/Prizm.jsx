@@ -12,6 +12,10 @@ import { listReports, saveReport, deleteReport } from "./reports.js";
    you need, take the scope apart token by token, and edit the report in the
    report. Every figure is computed on the device from the national dataset. */
 
+/* the shell's main is the page's scroller: scroll it, and hand it the keyboard */
+const scroller = () => (typeof document !== "undefined" && document.querySelector("[data-scroller]")) || null;
+const scrollPageTop = () => { const s = scroller(); if (s) s.scrollTo({ top: 0, behavior: "smooth" }); else window.scrollTo({ top: 0, behavior: "smooth" }); };
+const givePageKeys = () => { const s = scroller(); if (s) s.focus({ preventScroll: true }); };
 const INK = "#221233", MUTED = "#6F6580", PAPER = "#FBFAF7", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", HAIR = "rgba(34,18,51,.14)";
 const DEFAULT_BLOCKS = ["headlines", "cohort", "movement", "gap", "scatter"];
 
@@ -145,7 +149,7 @@ export default function Prizm() {
   }, []);
   /* the eleven-census flow layer is heavy: fetched only when a flow is asked for */
   useEffect(() => { if (!flows && blocks.includes("flow")) getFlows().then(setFlows); }, [blocks, flows]);
-  useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
+  useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); scrollPageTop(); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   useEffect(() => { setForeword(null); }, [scope, blocks]);
   useEffect(() => { setSegs({}); }, [scope]);
@@ -309,7 +313,7 @@ export default function Prizm() {
     const brief = q.trim();
     setEcho(brief && brief.toLowerCase() !== (c.label || "").toLowerCase() ? { brief, label: `${c.label}${c.tag ? " \u00b7 " + c.tag : ""}` } : null);
     setNote(null); setQ(""); setChoices(null);
-    boxRef.current && boxRef.current.blur();
+    boxRef.current && boxRef.current.blur(); givePageKeys();
   }
   function openExample(ex) { setTitle(""); setBlocks(ex.blocks || DEFAULT_BLOCKS); setScope(ex.sc); setEcho(null); setChoices(null); }
   function addBlock(t) { setBlocks((b) => (b.includes(t) ? b : [...b, t])); }
@@ -367,7 +371,7 @@ export default function Prizm() {
       }
     }
     clearInterval(tick); setStage(""); setThinking(false);
-    boxRef.current && boxRef.current.blur(); /* give the keyboard back to the page */
+    boxRef.current && boxRef.current.blur(); givePageKeys(); /* give the keyboard back to the page */
   }
 
   function buildFindings() {
@@ -517,7 +521,7 @@ export default function Prizm() {
       if (t.length >= 8) send();
       else if (chip) pick(chip);
     }
-    else if (e.key === "Escape") { setQ(""); boxRef.current && boxRef.current.blur(); }
+    else if (e.key === "Escape") { setQ(""); boxRef.current && boxRef.current.blur(); givePageKeys(); }
   };
 
   /* ── the opening: one box, worked briefs, the vault ── */

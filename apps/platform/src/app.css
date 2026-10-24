@@ -109,7 +109,8 @@
 .shell-menu a svg,.shell-menu button svg{color:var(--purple)}
 .shell-menu button kbd{margin-left:auto}
 .shell-menu hr{border:none;border-top:1px solid var(--hair);margin:6px 0}
-.shell-bleed{flex:1;min-height:0;overflow:hidden}
+.shell-bleed{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+.shell-bleed:focus{outline:none}
 .shell-body{flex:1;min-height:0;overflow:auto}
 .shell-tabbar{display:none}
 @keyframes shellPop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
