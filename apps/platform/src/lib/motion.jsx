@@ -25,6 +25,8 @@ export function ensureMotionCss() {
   .asi-lift { transition: transform ${MOTION.settle}ms ${MOTION.ease}, box-shadow ${MOTION.settle}ms ${MOTION.ease}; }
   .asi-lift:hover { transform: translateY(-6px); box-shadow: 0 3px 6px rgba(34,18,51,.06), 0 34px 80px rgba(34,18,51,.17); }
   @keyframes asiSpin { to { transform: rotate(360deg); } }
+  .asi-think { stroke-dasharray: 300; animation: asiThink 1.9s cubic-bezier(.45,.1,.55,.9) infinite; }
+  @keyframes asiThink { 0% { stroke-dashoffset: 300; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -300; } }
   @keyframes asiCardIn { from { opacity: 0; transform: translateX(76px) scale(.96); } to { opacity: 1; transform: none; } }
   @keyframes asiCardOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(76px) scale(.97); } }
 }`;
@@ -44,6 +46,20 @@ export function Quatrefoil({ size = 40, stroke = "#6A0CA0", width = 7, draw = tr
     <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" style={{ display: "block", margin: "0 auto" }}>
       <path d={QUATREFOIL} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" className={draw ? "asi-draw" : undefined} />
     </svg>
+  );
+}
+
+/* the roundel thinking: the quatrefoil drawing and undrawing until the answer lands */
+export function Thinking({ size = 20, label, style }) {
+  useEffect(ensureMotionCss, []);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0, ...style }} role="status" aria-live="polite">
+      <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" style={{ display: "block", flexShrink: 0 }}>
+        <path d={QUATREFOIL} fill="none" stroke="#6A0CA0" strokeWidth="9" strokeLinecap="round" opacity="0.22" />
+        <path d={QUATREFOIL} fill="none" stroke="#6A0CA0" strokeWidth="9" strokeLinecap="round" className="asi-think" />
+      </svg>
+      {label && <span style={{ fontSize: 12.5, lineHeight: 1.5, color: "#4B0875", fontStyle: "italic" }}>{label}</span>}
+    </span>
   );
 }
 

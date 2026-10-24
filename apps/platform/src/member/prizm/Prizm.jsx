@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDataset, getDatasetCore, getEarly, getFlows } from "../../lib/dataset.js";
-import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
+import { ensureMotionCss, Loading, Thinking } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary } from "./engine.js";
 import { renderBlock, coverHtml, reportHtml, forewordHtml, schoolDashHtml, attachTipCard, PZ_CSS } from "./render.js";
@@ -220,6 +220,8 @@ export default function Prizm() {
   }, [title, scope, blocks, all]);
   /* reports and dashes compute only once every figure is present */
   const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early, flows }) : null), [all, full, spec, scope, early, flows]);
+  /* the eleven-census layer travels only when asked for: say so while it does */
+  const waitingFlows = !!(computed && blocks.includes("flow") && !flows);
   const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn, { early }) : null), [all, full, dashUrn, early]);
   /* one school is not a cohort: a single-school scope pivots to the full picture */
   const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early }) : null), [all, computed, early]);
@@ -431,7 +433,9 @@ export default function Prizm() {
               style={{ width: "100%", boxSizing: "border-box", padding: "16px 18px", borderRadius: 14, border: `1.5px solid ${HAIR}`, fontSize: 16, background: "#fff", boxShadow: "0 10px 36px rgba(34,18,51,.08)" }} />
             {chipPanel}
           </div>
-          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8 }}>Enter chooses the first suggestion · arrow keys to move · a full sentence goes to the reader</div>
+          {thinking
+            ? <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Thinking size={24} label={stage || "Thinking…"} /></div>
+            : <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8 }}>Enter chooses the first suggestion · arrow keys to move · a full sentence goes to the reader</div>}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 10, marginTop: 34, textAlign: "left" }}>
             {EXAMPLES.map((ex) => (
@@ -505,10 +509,12 @@ export default function Prizm() {
             </div>
           )}
 
-          {(note || thinking) && !dash && (
+          {(note || thinking || waitingFlows) && !dash && (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 8, background: "rgba(106,12,160,.06)", border: "1px solid rgba(106,12,160,.16)", borderRadius: 10, padding: "8px 12px" }}>
-              <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: "#4B0875" }}>{thinking ? stage : note}</span>
-              {!thinking && <button onClick={() => setNote(null)} style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>}
+              {thinking ? <Thinking label={stage || "Thinking…"} style={{ flex: 1 }} />
+                : waitingFlows ? <Thinking label="The eleven censuses are arriving for the cohort flow…" style={{ flex: 1 }} />
+                : <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: "#4B0875" }}>{note}</span>}
+              {!thinking && !waitingFlows && <button onClick={() => setNote(null)} style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>}
             </div>
           )}
 
