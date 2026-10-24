@@ -242,7 +242,7 @@ export default function Prizm() {
     undoRef.current = { scope, title, blocks, q: opts.brief || "" };
     setNote(null); /* a stale note never outlives the read it belonged to */
     setScope(v.scope);
-    if (opts.title) setTitle(opts.title);
+    setTitle(opts.title || ""); /* a new read never inherits the last one's title */
     if (opts.blocks && opts.blocks.length) setBlocks(opts.blocks);
     if (opts.brief) applyImplied(v.scope, opts.brief);
     setEcho(opts.brief ? { brief: opts.brief, label: `${scopeShort(v.scope)} · ${v.n} school${v.n === 1 ? "" : "s"}` } : null);
@@ -339,7 +339,7 @@ export default function Prizm() {
       const c = all ? composeFromText(all, text) : { confidence: "none" };
       if (c.confidence === "sure") {
         applyVerified(c.sc, { brief: text });
-        setNote("The reader is out of reach just now, so Prizm composed this from your words.");
+        setNote(c.note || "The reader is out of reach just now, so Prizm composed this from your words.");
       } else if (c.confidence === "maybe") {
         setChoices({ brief: text, options: c.candidates, filters: c.filters || {} });
         setNote("The reader is out of reach just now. Your words could mean more than one thing:");

@@ -229,7 +229,11 @@ export function parseQuery(raw) {
   const eat = (re, fn) => { const m = rest.match(re); if (m) { fn(m); rest = rest.replace(new RegExp(re.source, "g"), " "); } };
   /* phase first: "primary/primaries" becomes the generic noun so every other
      pattern ("good primaries", "small primaries") still reads naturally */
-  if (/\b(primary|primaries|ks2|key stage 2|sats|juniors?)\b/.test(rest)) {
+  /* both phases named: neither is a filter (a report holds one phase; the
+     caller says so plainly) */
+  const bothPhases = /\b(primary|primaries)\b/.test(rest) && /\b(secondary|secondaries)\b/.test(rest);
+  if (bothPhases) rest = rest.replace(/\b(both )?(primary|primaries)( (and|&|or) )?(secondary|secondaries)?\b/g, " schools ").replace(/\b(secondary|secondaries)\b/g, " schools ");
+  if (!bothPhases && /\b(primary|primaries|ks2|key stage 2|sats|juniors?)\b/.test(rest)) {
     f.phase = "primary";
     rest = rest.replace(/\bprimar(y|ies)\b/g, "schools").replace(/\b(ks2|key stage 2|sats|juniors?)( (results|data|outcomes))?\b/g, " ").replace(/\s+/g, " ");
     if (!/^\s/.test(rest)) rest = " " + rest;
@@ -346,7 +350,7 @@ export function parseQuery(raw) {
   eat(/\bby spend(?:ing)?\b/, () => { order = { ...(order || { limit: 25 }), by: "spend" }; });
   eat(/\b(highest|biggest) spend(?:ers|ing)?\b/, () => { order = { ...(order || { limit: 25 }), by: "spend" }; });
   if (order) f.order = order;
-  return { filters: f, hasF: Object.keys(f).length > 0, rest: rest.replace(/\s+/g, " ").trim() };
+  return { filters: f, hasF: Object.keys(f).length > 0, rest: rest.replace(/\s+/g, " ").trim(), bothPhases };
 }
 
 /* small edit distance for typo-tolerant place names */
@@ -370,9 +374,9 @@ function placeNames(all) {
   PLACE_CACHE.set(all, v);
   return v;
 }
-const COMMON = new Set(["more", "most", "with", "from", "have", "what", "when", "where", "will", "over", "under", "about", "their", "there", "than", "that", "this", "then", "since", "best", "good", "high", "low", "very", "into", "near", "like", "some", "many", "much", "year", "years", "data", "results", "show", "give", "need", "want", "look", "looking"]);
+const COMMON = new Set(["both", "tell", "about", "education", "overall", "summary", "picture", "across", "whole", "country", "national", "nationally", "england", "english", "please", "could", "would", "should", "compare", "between", "against", "more", "most", "with", "from", "have", "what", "when", "where", "will", "over", "under", "about", "their", "there", "than", "that", "this", "then", "since", "best", "good", "high", "low", "very", "into", "near", "like", "some", "many", "much", "year", "years", "data", "results", "show", "give", "need", "want", "look", "looking"]);
 function fuzzyPlaces(all, rest) {
-  const qt = toks(rest).filter((t) => t.length >= 4 && !GENERIC.has(t) && !COMMON.has(t));
+  const qt = toks(rest).filter((t) => t.length >= 5 && !GENERIC.has(t) && !COMMON.has(t));
   if (!qt.length) return [];
   const names = placeNames(all);
   const out = [];
@@ -380,7 +384,7 @@ function fuzzyPlaces(all, rest) {
     for (const [name, n] of Object.entries(names[kind])) {
       const nt = toks(name);
       if (!nt.length) continue;
-      const okAll = nt.every((t) => qt.some((q) => lev(t, q) <= (t.length >= 6 && q.length >= 6 ? 2 : 1)));
+      const okAll = nt.every((t) => qt.some((q) => t === q || (t.length >= 5 && lev(t, q) <= (t.length >= 6 && q.length >= 6 ? 2 : 1))));
       if (okAll) out.push({ kind, name, n, score: nt.length });
     }
   }
@@ -482,10 +486,17 @@ export function searchEntities(all, q) {
       }
     }
   }
-  /* typo tolerance, for short queries only: a sentence never fuzzy-matches a
-     place out of its stray words ("have" is not Havant) */
+  /* the plainest word wins: "England", "national", "the country" with no
+     particular place named means the nation, never a fuzzy guess */
+  const NATIONAL = /\b(england|national(ly)?|nationwide|the (whole )?country|across the country)\b/;
+  if (!bases.length && NATIONAL.test(raw)) {
+    bases = [{ type: "england" }];
+    if (!hasF) { const n = resolveScope(all, { type: "england" }).length; out.composed = [{ label: scopeLabel({ type: "england" }), n, sc: { type: "england" } }]; }
+  }
+  /* typo tolerance, for short typed lookups only: a sentence never
+     fuzzy-matches a place out of its stray words ("both" is not Bath) */
   const meat = toks(hasF ? rest : raw).filter((t) => !GENERIC.has(t));
-  if (!bases.length && !out.schools.length && meat.length && meat.length <= 4) {
+  if (!bases.length && !out.schools.length && meat.length && toks(raw).length <= 3) {
     const fz = fuzzyPlaces(all, meat.join(" "));
     bases = fz.map((p) => ({ type: p.kind, name: p.name }));
     if (!hasF) fz.forEach((p) => { const list = p.kind === "region" ? out.regions : p.kind === "la" ? out.las : p.kind === "pcon" ? (out.pcons = out.pcons || []) : out.towns; if (!list.some((x) => x.name === p.name)) list.push({ name: p.name, n: p.n }); });
@@ -576,7 +587,9 @@ export function verifyScope(all, scope) {
 }
 export function composeFromText(all, text) {
   const res = searchEntities(all, text);
-  if (res.composed && res.composed.length) return { confidence: "sure", sc: res.composed[0].sc, label: res.composed[0].label };
+  const both = parseQuery((text || "").toLowerCase()).bothPhases;
+  const phaseNote = both ? "A Prizm report holds one phase at a time: this is the secondary picture, and \u201cThe primary phase\u201d gives you the other." : null;
+  if (res.composed && res.composed.length) return { confidence: "sure", sc: res.composed[0].sc, label: res.composed[0].label, note: phaseNote };
   const { filters } = parseQuery((text || "").toLowerCase());
   const qt = toks(text);
   const hits = [];
