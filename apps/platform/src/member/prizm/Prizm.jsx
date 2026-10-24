@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDataset, getDatasetCore, getEarly, getFlows } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading, Thinking } from "../../lib/motion.jsx";
+import ContextPanel, { fetchContext, contextHtml } from "./ContextPanel.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary, verifyScope, composeFromText, resolveEntity } from "./engine.js";
 import { renderBlock, coverHtml, reportHtml, forewordHtml, schoolDashHtml, attachTipCard, PZ_CSS } from "./render.js";
@@ -124,6 +125,7 @@ export default function Prizm() {
   const [echo, setEcho] = useState(null); /* the member's words beside how they were read, with undo */
   const undoRef = useRef(null);
   const [foreword, setForeword] = useState(null);
+  const [ctxCache, setCtxCache] = useState({}); /* the story behind the figures, per scope: fetched on request only */
   const [fwBusy, setFwBusy] = useState(false);
   const [saved, setSaved] = useState([]);
   const [keeping, setKeeping] = useState(false);
@@ -229,6 +231,22 @@ export default function Prizm() {
   /* one school is not a cohort: a single-school scope pivots to the full picture */
   const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early }) : null), [all, computed, early]);
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
+  const ctxKey = singleDash ? "s:" + singleDash.s.urn : scope ? JSON.stringify(scope) : null;
+  const ctxLabel = singleDash ? `${singleDash.s.name}, ${singleDash.s.la}` : scope ? scopeShort(scope) : "";
+  async function askContext() {
+    if (!ctxKey || ctxCache[ctxKey] === "busy") return;
+    const key = ctxKey;
+    setCtxCache((c) => ({ ...c, [key]: "busy" }));
+    try {
+      const kind = singleDash ? "one school" : scope.type === "urns" ? "a set of schools" : { trust: "multi-academy trust", la: "local authority", region: "region", town: "town", pcon: "parliamentary constituency", england: "England" }[scope.type] || "";
+      const schools = singleDash ? [] : (computed ? computed.schools.slice(0, 8).map((s) => s.name) : []);
+      const res = await fetchContext({ scope: ctxLabel, kind, schools });
+      setCtxCache((c) => ({ ...c, [key]: res }));
+    } catch (e) {
+      setCtxCache((c) => ({ ...c, [key]: { error: true, slow: !!(e && e.slow) } }));
+    }
+  }
+  const ctxState = ctxKey ? ctxCache[ctxKey] : undefined;
   const isPrimary = scope && scope.phase === "primary";
 
   /* ── the honesty layer: every scope verified, every read echoed, undo kept ── */
@@ -411,7 +429,10 @@ export default function Prizm() {
   }
   function download() {
     if (!computed) return;
-    const blob = new Blob([reportHtml(spec, computed, foreword, singleDash ? schoolDashHtml(singleDash) : undefined)], { type: "text/html;charset=utf-8" });
+    const base = reportHtml(spec, computed, foreword, singleDash ? schoolDashHtml(singleDash) : undefined);
+    const ctxBlock = ctxState && ctxState.items ? contextHtml(ctxState) : "";
+    const html = ctxBlock ? (base.includes("</body>") ? base.replace("</body>", ctxBlock + "</body>") : base + ctxBlock) : base;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = (spec.title || "prizm-report").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) + ".html";
@@ -638,9 +659,14 @@ export default function Prizm() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={spec.title} aria-label="Report title"
               style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", fontFamily: "inherit", fontSize: 11.5, color: MUTED, padding: "0 0 10px", outline: "none", borderBottom: `1px dashed ${HAIR}`, marginBottom: 14 }} />
             {singleDash ? (
-              <div dangerouslySetInnerHTML={{ __html: forewordHtml(foreword) + schoolDashHtml(singleDash) }} />
+              <>
+                <div dangerouslySetInnerHTML={{ __html: forewordHtml(foreword) }} />
+                <ContextPanel label={ctxLabel} state={ctxState} onAsk={askContext} />
+                <div dangerouslySetInnerHTML={{ __html: schoolDashHtml(singleDash) }} />
+              </>
             ) : (<>
             <div dangerouslySetInnerHTML={{ __html: coverHtml(spec, computed) + forewordHtml(foreword) }} />
+            <ContextPanel label={ctxLabel} state={ctxState} onAsk={askContext} />
             {(() => {
               let togglePlaced = false;
               const grammarsIn = !isPrimary && !scope.noGrammar ? computed.schools.filter((s) => /grammar/i.test(s.name || "")).length : 0;
