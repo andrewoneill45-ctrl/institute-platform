@@ -344,12 +344,17 @@ function distributionHtml(d, ctx) {
   const W = 1000, H = 250, B = 34;
   const maxN = Math.max(...d.bins.map((b) => b.n));
   const bw = (W - 60) / d.bins.length;
-  const bars = d.bins.map((b, i) => { const h = (b.n / maxN) * (H - B - 30); return `<rect x="${40 + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="var(--lilac)"/>`; }).join("");
+  /* a scope that IS most of the nation has no subset to mark: 3,300 gold
+     strokes are a wall, not a chart. The nation gets its own shape instead. */
+  const national = !vs && d.marks.length > d.total * 0.5;
+  const bars = d.bins.map((b, i) => { const h = (b.n / maxN) * (H - B - 30); return `<rect x="${40 + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="${national ? "var(--gold)" : "var(--lilac)"}"${national ? ` ${hit([`${KS2 ? "RWM" : "A8"} ${b.lo} to ${b.hi}`, `${b.n} schools`])}` : ""}/>`; }).join("");
   const line = (m, color) => { const px = 40 + (Math.max(0, Math.min(SPAN - 0.1, m.a8)) / SPAN) * (W - 60); return `<line x1="${px.toFixed(1)}" y1="26" x2="${px.toFixed(1)}" y2="${H - B}" stroke="${color}" stroke-width="4" stroke-opacity="0.85"${hit([m.name, KS2 ? `RWM ${f0(m.a8)}` : `A8 ${f1(m.a8)}`], m.urn)}/>`; };
-  const marks = (vs ? vs.marks.map((m) => line(m, "var(--purple)")).join("") : "") + d.marks.map((m) => line(m, "var(--gold)")).join("");
+  const marks = national ? "" : (vs ? vs.marks.map((m) => line(m, "var(--purple)")).join("") : "") + d.marks.map((m) => line(m, "var(--gold)")).join("");
   const medX = 40 + (d.med / SPAN) * (W - 60);
   return section("Where they sit", vs
     ? `${esc(L.a)} in gold, ${esc(L.b)} in purple, set in the national distribution of ${d.total.toLocaleString("en-GB")} schools.`
+    : national
+    ? `The shape of the nation: ${d.total.toLocaleString("en-GB")} schools by ${KS2 ? "RWM expected standard" : "Attainment 8"}, half either side of the median.`
     : `Each gold line is a school in scope, set in the national distribution of ${d.total.toLocaleString("en-GB")} schools${KS2 ? " by RWM expected standard" : ""}.`, null,
     `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img">${bars}<line x1="${medX}" y1="26" x2="${medX}" y2="${H - B}" stroke="var(--nat)" stroke-dasharray="3 4"/><text class="tick" x="${medX}" y="18" text-anchor="middle">England median ${KS2 ? f0(d.med) : f1(d.med)}</text>${marks}${XT.map((v) => `<text class="tick" x="${40 + (v / SPAN) * (W - 60)}" y="${H - 14}" text-anchor="middle">${v}${KS2 ? "%" : ""}</text>`).join("")}</svg>`
     + (vs ? legend([["var(--gold)", L.a || "Scope"], ["var(--purple)", L.b || "Comparison"]]) : ""));
