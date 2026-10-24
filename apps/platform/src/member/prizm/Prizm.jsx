@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDataset, getDatasetCore, getEarly } from "../../lib/dataset.js";
+import { getDataset, getDatasetCore, getEarly, getFlows } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary } from "./engine.js";
@@ -41,6 +41,7 @@ const EXAMPLES = [
   { t: "The primary picture in the north west", sub: "KS2 2024/25, the latest published", sc: { type: "region", name: "North West", phase: "primary" } },
   { t: "Secondary schools in deficit — does money buy outcomes?", sub: "the 2024-25 accounts, spend set against attainment", sc: { type: "england", deficit: true }, blocks: ["headlines", "finance", "cohort"] },
   { t: "Where do the children with the highest needs learn?", sub: "EHC plans across England, the January 2026 census", sc: { type: "england", minEhcp: 10 }, blocks: ["headlines", "inclusion", "scatter"] },
+  { t: "How United Learning's year groups have changed", sub: "eleven censuses, every cohort walked through", sc: { type: "trust", name: "United Learning Trust" }, blocks: ["headlines", "flow", "behaviour"] },
 ];
 
 /* the scope, taken apart: every piece removable on its own */
@@ -131,11 +132,14 @@ export default function Prizm() {
   /* the door opens on the core; the detail merges into the same rows behind it */
   const [full, setFull] = useState(false);
   const [early, setEarly] = useState(null);
+  const [flows, setFlows] = useState(null);
   useEffect(() => {
     getDatasetCore().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted)));
     getDataset().then(() => setFull(true));
     getEarly().then(setEarly);
   }, []);
+  /* the eleven-census flow layer is heavy: fetched only when a flow is asked for */
+  useEffect(() => { if (!flows && blocks.includes("flow")) getFlows().then(setFlows); }, [blocks, flows]);
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); window.scrollTo({ top: 0, behavior: "smooth" }); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
   useEffect(() => { setForeword(null); }, [scope, blocks]);
@@ -215,7 +219,7 @@ export default function Prizm() {
     };
   }, [title, scope, blocks, all]);
   /* reports and dashes compute only once every figure is present */
-  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early }) : null), [all, full, spec, scope, early]);
+  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early, flows }) : null), [all, full, spec, scope, early, flows]);
   const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn, { early }) : null), [all, full, dashUrn, early]);
   /* one school is not a cohort: a single-school scope pivots to the full picture */
   const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early }) : null), [all, computed, early]);
@@ -232,6 +236,7 @@ export default function Prizm() {
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
     if (/\b(early years|eyfsp|gld|good level of development|phonics|reception)\b/i.test(text || "")) want.push("early");
+    if (/\b(cohort ?flows?|cohorts?|rolls? over time|roll history|falling rolls?|year ?groups? (changed|changing|over time|shrink\w*|grow\w*)|pupil numbers? over time|off.?roll\w*)\b/i.test(text || "")) want.push("flow");
     if (sc.hasCard || sc.ofsted || /\b(report card|ofsted|inspect)/i.test(text || "")) want.push("ofsted");
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
@@ -271,7 +276,14 @@ export default function Prizm() {
     } catch {
       /* no reader? compose locally from the words themselves */
       const res = all ? searchEntities(all, text) : null;
-      const best = res && res.composed && res.composed[0];
+      let best = res && res.composed && res.composed[0];
+      /* a sentence that names one clear entity still composes: take the strongest match */
+      if (!best && res) {
+        const single = [["trusts", "trust"], ["las", "la"], ["pcons", "pcon"], ["towns", "town"], ["regions", "region"]]
+          .flatMap(([k, type]) => (res[k] || []).map((e) => ({ type, name: e.name || e })))
+          .slice(0, 1);
+        if (single.length) best = { sc: { type: single[0].type, name: single[0].name } };
+      }
       if (best) {
         setScope(best.sc); applyImplied(best.sc, text);
         setNote("The reader is out of reach just now, so Prizm composed this locally from your words.");

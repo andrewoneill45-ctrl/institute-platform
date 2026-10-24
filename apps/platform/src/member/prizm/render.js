@@ -412,6 +412,80 @@ function attendanceHtml(d, ctx) {
     columnsSvg({ rows: shown, min: 0, max: Math.min(30, Math.ceil((hi + 2) / 5) * 5), unit: "%", refs: [{ v: d.bench.absMed, label: "England", color: "var(--nat)" }, { v: d.absMean, label: "Scope", color: "var(--gold)" }] }) + tbl);
 }
 
+/* ── the cohort flow: eleven Januaries, each cohort walked stage by stage ── */
+const FLOWC = ["#3D0661", "#6A0CA0", "#8F5BB8", "#B18FD0", "#C6A035", "#8a6d1c", "#B4475A"];
+function flowHtml(d) {
+  if (!d || d.mode !== "flow") return "";
+  const YL = (tp) => tp.slice(2, 4) + "/" + tp.slice(4);
+  const ST = (g) => (g === 0 ? "R" : "Y" + g);
+  const sign = (v) => (v > 0 ? "+" : "") + v;
+  const stages = [];
+  for (let g = d.entry; g <= d.last; g++) stages.push(g);
+
+  /* 1: the years, stacked by stage */
+  const colTotals = d.years.map((tp, yi) => stages.reduce((a, g) => a + (d.totals[yi][g] || 0), 0));
+  const maxT = Math.max(...colTotals, 1);
+  const W = 760, H = 250, pl = 10, pb = 34, pt = 24, cw = (W - 2 * pl) / d.years.length;
+  let stacked = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:760px;height:auto" role="img">`;
+  d.years.forEach((tp, yi) => {
+    let y = H - pb;
+    const x = pl + yi * cw + cw * 0.14, bw = cw * 0.72;
+    stages.forEach((g, gi) => {
+      const v = d.totals[yi][g] || 0;
+      if (!v) return;
+      const h = ((H - pb - pt) * v) / maxT;
+      y -= h;
+      stacked += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h).toFixed(1)}" fill="${FLOWC[gi % FLOWC.length]}"><title>${YL(tp)} · ${ST(g)}: ${v}</title></rect>`;
+    });
+    if (colTotals[yi]) stacked += `<text class="val" x="${(x + bw / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" style="font-size:10.5px;fill:var(--ink)">${colTotals[yi]}</text>`;
+    stacked += `<text class="tick" x="${(x + bw / 2).toFixed(1)}" y="${H - 12}" text-anchor="middle">${YL(tp)}</text>`;
+  });
+  stacked += "</svg>" + legend(stages.map((g, gi) => [FLOWC[gi % FLOWC.length], ST(g)]));
+
+  /* 2: the cohorts, walked diagonally */
+  const starts = d.cohorts.map((c) => c.start);
+  const allV = d.cohorts.flatMap((c) => c.pts.map((p) => p.v)).filter((v) => v > 0);
+  const lo = Math.min(...allV), hi = Math.max(...allV, 1);
+  const CW = 700, CH = 240, cpl = 44, cpr = 120, cpt = 16, cpb = 32;
+  const cx = (k) => cpl + (k / Math.max(1, stages.length - 1)) * (CW - cpl - cpr);
+  const cy = (v) => cpt + (CH - cpt - cpb) * (1 - (v - lo * 0.92) / (hi * 1.04 - lo * 0.92));
+  let lines = `<svg viewBox="0 0 ${CW} ${CH}" style="width:100%;max-width:700px;height:auto" role="img">`;
+  stages.forEach((g, k) => { lines += `<text class="tick" x="${cx(k)}" y="${CH - 10}" text-anchor="middle">${ST(g)}</text>`; });
+  const ends = [];
+  d.cohorts.forEach((c, ci) => {
+    const col = FLOWC[ci % FLOWC.length];
+    const pts = c.pts.filter((p) => p.v > 0);
+    if (pts.length < 2) return;
+    lines += `<polyline points="${pts.map((p) => `${cx(p.g - d.entry).toFixed(1)},${cy(p.v).toFixed(1)}`).join(" ")}" fill="none" stroke="${col}" stroke-width="${c.full ? 2.4 : 1.6}"${c.full ? "" : ' stroke-dasharray="4 4"'} opacity="0.9"/>`;
+    pts.forEach((p) => { lines += `<circle cx="${cx(p.g - d.entry).toFixed(1)}" cy="${cy(p.v).toFixed(1)}" r="3" fill="${col}"><title>${ST(p.g)} in ${YL(d.years[p.yi])}: ${p.v}</title></circle>`; });
+    const lastP = pts[pts.length - 1];
+    ends.push({ y: cy(lastP.v), x: cx(lastP.g - d.entry), col, label: `${YL(d.years[c.y0])} intake · ${sign(lastP.v - c.start)}` });
+  });
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+  ends.forEach((e) => { lines += `<text x="${(e.x + 8).toFixed(1)}" y="${(e.y + 3.5).toFixed(1)}" style="font-size:10.5px;font-weight:600;fill:${e.col}">${esc(e.label)}</text>`; });
+  lines += "</svg>";
+
+  /* 3: shrinkage, named */
+  const shr = d.shrinks.length ? `<details class="pz-fold"><summary>Where cohorts shrank, school by school<span>${d.shrinkN} falls of 8 or more</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Stage</th><th>By January</th><th>From</th><th>To</th><th>Change</th></tr></thead><tbody>${d.shrinks.map((s) => `<tr><td class="nm">${esc(s.name)}</td><td class="num">into ${ST(s.g)}</td><td class="num">${YL(s.year)}</td><td class="num">${s.from}</td><td class="num">${s.to}</td><td class="num" style="color:var(--red);font-weight:600">${s.d}</td></tr>`).join("")}</tbody></table></details>` : "";
+
+  /* 4: exclusions beside the flow */
+  const exTrend = d.excl.length > 2 ? trendSvg(d.excl.map((e) => ({ t: YL(e.tp), v: e.rate })), null, { min: 0, max: Math.max(10, Math.ceil(Math.max(...d.excl.map((e) => e.rate)) / 5) * 5), unit: "", dp: 1 }) : "";
+  const peTotal = d.excl.reduce((a, e) => a + (e.pe > 0 ? e.pe : 0), 0);
+
+  const first = d.intake[0], lastIn = d.intake[d.intake.length - 1];
+  const doneCohorts = d.cohorts.filter((c) => c.full);
+  const worst = doneCohorts.slice().sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+  const headline = `${d.n} of ${d.of} scope school${d.of === 1 ? "" : "s"} carry census history. The ${ST(d.entry)} intake ran from ${first ? first.v : "–"} in ${YL(d.years[first ? first.yi : 0])} to ${lastIn ? lastIn.v : "–"} in ${YL(d.years[lastIn ? lastIn.yi : 0])}${worst ? `; the ${YL(d.years[worst.y0])} cohort changed most on its way through, ${sign(worst.end - worst.start)} between ${ST(d.entry)} and ${ST(d.last)}` : ""}.`;
+  const NOTE = `January school censuses, 2015/16 to 2025/26. A cohort is read diagonally: one January's ${ST(d.entry)} is the next January's ${ST(d.entry + 1)}, so a fall between stages is net movement out of these schools, not absence. Dashed cohorts are still travelling.${d.chainedN ? ` ${d.chainedN} school${d.chainedN === 1 ? "" : "s"} changed URN mid-series (academisation): histories stitched into one line.` : ""} Suspension rate is suspensions per 100 pupils across the scope; small counts the DfE suppresses are left out.`;
+
+  return section("Cohort flow", headline,
+    NOTE,
+    `<p class="pz-note" style="margin:4px 0 6px">The years, stacked ${ST(d.entry)} to ${ST(d.last)}; every column a January.</p>` + stacked +
+    `<p class="pz-note" style="margin:18px 0 6px">Each line one cohort, followed ${ST(d.entry)} to ${ST(d.last)}; falling lines are children leaving these schools.</p>` + lines + shr +
+    (exTrend ? `<p class="pz-note" style="margin:18px 0 6px">Suspensions per 100 pupils across the scope, year by year${peTotal ? `; ${peTotal} permanent exclusions over the period` : ""}.</p>` + exTrend : ""));
+}
+
 function behaviourHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.suspMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}: ${f1(ctx.vs.suspMean)} per 100, ${ctx.vs.pexZero} with none.` : "";
@@ -904,7 +978,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};

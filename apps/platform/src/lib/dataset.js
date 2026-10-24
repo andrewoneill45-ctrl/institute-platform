@@ -95,6 +95,14 @@ export function getEarly() {
   return earlyPromise;
 }
 
+/* the cohort-flow layer: eleven January censuses of year-group rolls plus the
+   exclusions series, per school. Heavy, so fetched only when a flow is asked for. */
+let flowsPromise = null;
+export function getFlows() {
+  if (!flowsPromise) flowsPromise = fetch("/data/flows.json" + V()).then((r) => r.json()).catch(() => ({}));
+  return flowsPromise;
+}
+
 export function getDataset() {
   if (!fullPromise) {
     fullPromise = loadFull().catch((e) => {

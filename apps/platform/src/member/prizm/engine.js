@@ -545,6 +545,7 @@ export const BLOCK_TYPES = [
   { type: "early", name: "The early years", desc: "reception and phonics, authority by authority (school-level is not published)" },
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
+  { type: "flow", name: "Cohort flow", desc: "year-group rolls since 2015/16: each cohort tracked stage by stage, shrinkage named school by school, exclusions running beside" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
   { type: "finance", name: "The money", desc: "spend per pupil, reserves and deficits against England" },
   { type: "destinations", name: "Destinations", desc: "where leavers went, and who wasn't sustained" },
@@ -700,6 +701,69 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec, extras
       vacCount: rows.filter((r) => r.vac != null && r.vac > 0).length,
       bench,
     };
+  }
+  if (type === "flow") {
+    const fl = extras && extras.flows;
+    if (!fl || !fl.schools) return null;
+    const years = fl.years || [];
+    const nY = years.length;
+    /* lineage: follow URN chains backwards so a school academised mid-series keeps one line */
+    const rev = {};
+    for (const [oldU, newU] of Object.entries(fl.chains || {})) (rev[newU] = rev[newU] || []).push(oldU);
+    const rowsOf = (urn) => {
+      const y = {}, x = {};
+      const stack = [String(urn)];
+      let chained = false;
+      while (stack.length) {
+        const u = stack.pop();
+        const r = fl.schools[u];
+        if (r) {
+          Object.entries(r.y || {}).forEach(([yi, c]) => { if (!y[yi]) y[yi] = c; });
+          Object.entries(r.x || {}).forEach(([yi, v]) => { if (!x[yi]) x[yi] = v; });
+        }
+        (rev[u] || []).forEach((o) => { chained = true; stack.push(o); });
+      }
+      return { y, x, chained };
+    };
+    const members = schools.map((s) => ({ s, f: rowsOf(s.urn) })).filter((m) => Object.keys(m.f.y).length);
+    if (!members.length) return null;
+    const chainedN = members.filter((m) => m.f.chained).length;
+    const totals = Array.from({ length: nY }, () => Array(15).fill(0));
+    members.forEach(({ f }) => Object.entries(f.y).forEach(([yi, c]) => c.forEach((v, g) => { totals[+yi][g] += v; })));
+    const bucketTotal = Array(15).fill(0);
+    totals.forEach((row) => row.forEach((v, g) => { bucketTotal[g] += v; }));
+    const secondaryN = bucketTotal.slice(7, 12).reduce((a, b) => a + b, 0);
+    const primaryN = bucketTotal.slice(0, 7).reduce((a, b) => a + b, 0);
+    const entry = secondaryN >= primaryN ? 7 : 0;
+    const last = entry === 7 ? 11 : 6;
+    /* each cohort walked diagonally from its entry year */
+    const cohorts = [];
+    for (let y0 = 0; y0 < nY; y0++) {
+      const pts = [];
+      for (let k = 0; entry + k <= last && y0 + k < nY; k++) pts.push({ yi: y0 + k, g: entry + k, v: totals[y0 + k][entry + k] });
+      if (pts.length >= 2 && pts[0].v > 0) cohorts.push({ y0, pts, start: pts[0].v, end: pts[pts.length - 1].v, full: y0 + (last - entry) < nY });
+    }
+    /* shrinkage, named: a school's year group losing children between stages */
+    const shrinks = [];
+    members.forEach(({ s, f }) => {
+      for (let yi = 0; yi < nY - 1; yi++) {
+        const a = f.y[yi], b = f.y[yi + 1];
+        if (!a || !b) continue;
+        for (let g = entry; g < last; g++) {
+          const d = (b[g + 1] || 0) - (a[g] || 0);
+          if ((a[g] || 0) >= 25 && d <= -8) shrinks.push({ urn: s.urn, name: s.name, year: years[yi + 1], g: g + 1, from: a[g], to: b[g + 1] || 0, d });
+        }
+      }
+    });
+    shrinks.sort((p, q) => p.d - q.d);
+    /* exclusions beside the flow */
+    const excl = years.map((tp, yi) => {
+      let hc = 0, su = 0, pe = 0, got = false;
+      members.forEach(({ f }) => { const v = f.x[yi]; if (!v) return; got = true; if (v[0] > 0) hc += v[0]; if (v[1] > 0) su += v[1]; if (v[2] > 0) pe += v[2]; });
+      return got && hc ? { yi, tp, hc, su, pe, rate: Math.round(1000 * su / hc) / 10 } : null;
+    }).filter(Boolean);
+    const intake = years.map((tp, yi) => ({ yi, v: totals[yi][entry] })).filter((p) => p.v > 0);
+    return { mode: "flow", years, totals, entry, last, cohorts: cohorts.slice(-9), shrinks: shrinks.slice(0, 12), shrinkN: shrinks.length, excl, intake, n: members.length, of: schools.length, chainedN };
   }
   if (type === "early") {
     /* authority-level by necessity: the DfE publishes no school-level EYFSP

@@ -64,7 +64,7 @@
       "lastVersion": "2024-25 financial year (CFR Full Data Workbook + AAR download)",
       "lastPulled": "2026-10-22",
       "output": "apps/platform/public/data/schools.json (fin_* fields)",
-      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to £1,000s at source."
+      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to \u00a31,000s at source."
     },
     {
       "key": "send",
@@ -115,6 +115,28 @@
       "lastPulled": null,
       "output": "apps/platform/public/data/ks2.json (planned)",
       "notes": "The December 2026 release is the tripwire: when the API dataset version moves, the refresh flags it in the run summary so primary-phase Atlas can be built on fresh data."
+    },
+    {
+      "key": "census-rolls",
+      "name": "School census: pupils by national curriculum year group, per school",
+      "publisher": "Department for Education",
+      "route": "ees-release-files + gov.uk archive",
+      "cadence": "Annual (January census, published June); 2015/16 to 2025/26 held",
+      "lastVersion": "2025/26 (published 4 June 2026)",
+      "lastPulled": "2026-10-23",
+      "output": "apps/platform/public/data/flows.json",
+      "notes": "2019/20 to 2025/26 from the EES release all-files zips (spc_school_level_underlying_data*); 2015/16 to 2018/19 from gov.uk SFR underlying-data zips (Schools_NCYear_UD / pupil_characteristics_UD). URN changes at academisation stitched by LAESTAB continuity; GIAS links unavailable from the build environment."
+    },
+    {
+      "key": "exclusions-series",
+      "name": "Suspensions and permanent exclusions, per school, full-year series",
+      "publisher": "Department for Education",
+      "route": "ees-release-files",
+      "cadence": "Annual (full year published each July); exc_school.csv carries 2006/07 to 2024/25, 2015/16 onwards used",
+      "lastVersion": "2024/25 (published 9 July 2026)",
+      "lastPulled": "2026-10-23",
+      "output": "apps/platform/public/data/flows.json",
+      "notes": "trust_name per school per year from the same file gives trust membership windows; suppressed cells (x, z) stored as -1 and left out of rates."
     }
   ]
 }
