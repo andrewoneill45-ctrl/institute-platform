@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getDataset, getDatasetCore, getEarly, getFlows } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading, Thinking } from "../../lib/motion.jsx";
 import { useAuth } from "../../lib/auth.jsx";
-import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary } from "./engine.js";
+import { BLOCK_TYPES, FAITHS, TYPES, searchEntities, computeReport, computeSchoolDash, scopeLabel, scopeShort, attachOfsted, verifyCommentary, verifyScope, composeFromText, resolveEntity } from "./engine.js";
 import { renderBlock, coverHtml, reportHtml, forewordHtml, schoolDashHtml, attachTipCard, PZ_CSS } from "./render.js";
 import { listReports, saveReport, deleteReport } from "./reports.js";
 
@@ -11,7 +11,7 @@ import { listReports, saveReport, deleteReport } from "./reports.js";
    you need, take the scope apart token by token, and edit the report in the
    report. Every figure is computed on the device from the national dataset. */
 
-const INK = "#221233", MUTED = "#6F6580", PAPER = "#FBFAF7", PURPLE = "#6A0CA0", GOLD = "#C6A035", HAIR = "rgba(34,18,51,.14)";
+const INK = "#221233", MUTED = "#6F6580", PAPER = "#FBFAF7", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", HAIR = "rgba(34,18,51,.14)";
 const DEFAULT_BLOCKS = ["headlines", "cohort", "movement", "gap", "scatter"];
 
 /* what the same blocks mean when the scope is the primary estate */
@@ -120,6 +120,9 @@ export default function Prizm() {
   const [note, setNote] = useState(null);
   const [thinking, setThinking] = useState(false);
   const [stage, setStage] = useState("");
+  const [choices, setChoices] = useState(null); /* "which did you mean?" — asked, never guessed */
+  const [echo, setEcho] = useState(null); /* the member's words beside how they were read, with undo */
+  const undoRef = useRef(null);
   const [foreword, setForeword] = useState(null);
   const [fwBusy, setFwBusy] = useState(false);
   const [saved, setSaved] = useState([]);
@@ -200,11 +203,11 @@ export default function Prizm() {
     if (!hits) return [];
     const c = [];
     (hits.composed || []).forEach((x, i) => c.push({ k: "x" + i, group: x.sc.versus ? "Comparison" : "Composed", label: x.label.replace(/ · \d+ schools?$/, ""), tag: `${x.n} school${x.n === 1 ? "" : "s"}`, sc: x.sc }));
-    (hits.regions || []).forEach((r) => c.push({ k: "r" + r.name, group: "Regions", label: r.name, tag: `${r.n} schools`, sc: { type: "region", name: r.name } }));
-    hits.las.forEach((l) => c.push({ k: "l" + l.name, group: "Authorities", label: l.name, tag: `${l.n} schools`, sc: { type: "la", name: l.name } }));
-    hits.trusts.forEach((t) => c.push({ k: "t" + t.name, group: "Trusts", label: t.name, tag: `${t.n} schools`, sc: { type: "trust", name: t.name } }));
-    (hits.pcons || []).forEach((p) => c.push({ k: "p" + p.name, group: "Constituencies", label: p.name, tag: `${p.n} schools`, sc: { type: "pcon", name: p.name } }));
-    (hits.towns || []).forEach((t) => c.push({ k: "w" + t.name, group: "Towns", label: t.name, tag: `${t.n} schools`, sc: { type: "town", name: t.name } }));
+    (hits.regions || []).forEach((r) => c.push({ k: "r" + r.name, group: "Regions", label: r.name, tag: `${r.n} school${r.n === 1 ? "" : "s"}`, sc: { type: "region", name: r.name } }));
+    hits.las.forEach((l) => c.push({ k: "l" + l.name, group: "Authorities", label: l.name, tag: `${l.n} school${l.n === 1 ? "" : "s"}`, sc: { type: "la", name: l.name } }));
+    hits.trusts.forEach((t) => c.push({ k: "t" + t.name, group: "Trusts", label: t.name, tag: `${t.n} school${t.n === 1 ? "" : "s"}`, sc: { type: "trust", name: t.name } }));
+    (hits.pcons || []).forEach((p) => c.push({ k: "p" + p.name, group: "Constituencies", label: p.name, tag: `${p.n} school${p.n === 1 ? "" : "s"}`, sc: { type: "pcon", name: p.name } }));
+    (hits.towns || []).forEach((t) => c.push({ k: "w" + t.name, group: "Towns", label: t.name, tag: `${t.n} school${t.n === 1 ? "" : "s"}`, sc: { type: "town", name: t.name } }));
     hits.schools.forEach((s) => c.push({ k: "s" + s.urn, group: "Schools", label: s.name, tag: s.la, sc: scope && scope.type === "urns" ? { type: "urns", urns: [...new Set([...scope.urns, String(s.urn)])] } : { type: "urns", urns: [String(s.urn)] } }));
     return c.slice(0, 8);
   }, [hits, scope]);
@@ -228,13 +231,52 @@ export default function Prizm() {
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
   const isPrimary = scope && scope.phase === "primary";
 
+  /* ── the honesty layer: every scope verified, every read echoed, undo kept ── */
+  function applyVerified(scRaw, opts = {}) {
+    const v = verifyScope(all, scRaw);
+    if (!v.ok) {
+      setChoices({ brief: opts.brief || "", options: (v.candidates || []).slice(0, 5), filters: {} });
+      if (!v.candidates || !v.candidates.length) setNote(`Nothing in the dataset answers to “${scRaw && scRaw.name ? scRaw.name : "that"}”. Type a place, a trust or a school and choose it.`);
+      return false;
+    }
+    undoRef.current = { scope, title, blocks, q: opts.brief || "" };
+    setNote(null); /* a stale note never outlives the read it belonged to */
+    setScope(v.scope);
+    if (opts.title) setTitle(opts.title);
+    if (opts.blocks && opts.blocks.length) setBlocks(opts.blocks);
+    if (opts.brief) applyImplied(v.scope, opts.brief);
+    setEcho(opts.brief ? { brief: opts.brief, label: `${scopeShort(v.scope)} · ${v.n} school${v.n === 1 ? "" : "s"}` } : null);
+    setChoices(null);
+    return true;
+  }
+  function pickChoice(o) {
+    const filters = (choices && choices.filters) || {};
+    if (o.urns) { applyVerified({ type: "urns", urns: o.urns, ...filters }, { brief: choices && choices.brief }); return; }
+    if (o.type === "england" || (!o.type && /^all england$/i.test(o.name || ""))) { applyVerified({ type: "england", ...filters }, { brief: choices && choices.brief }); return; }
+    if (o.type) { applyVerified({ type: o.type, name: o.name, ...filters }, { brief: choices && choices.brief }); return; }
+    for (const k of ["trust", "la", "region", "town", "pcon"]) {
+      const r = resolveEntity(all, k, o.name);
+      if (r.ok) { applyVerified({ type: k, name: r.name, ...filters }, { brief: choices && choices.brief }); return; }
+    }
+    setNote(`“${o.name}” is not in the dataset under that spelling.`);
+  }
+  function undoRead() {
+    const u = undoRef.current;
+    if (!u) return;
+    setScope(u.scope); setTitle(u.title); setBlocks(u.blocks); setQ(u.q);
+    setEcho(null); setNote(null); setChoices(null);
+    undoRef.current = null;
+  }
+  useEffect(() => { if (!scope) { setEcho(null); } }, [scope]);
+
   /* ── intents ── */
   function applyImplied(sc, text) {
     const want = [];
-    if (sc.minAbs != null || sc.maxAbs != null || sc.minPA != null || sc.maxPA != null) want.push("attendance");
-    if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null) want.push("behaviour");
-    if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null) want.push("destinations");
-    if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null) want.push("workforce");
+    if (sc.minAbs != null || sc.maxAbs != null || sc.minPA != null || sc.maxPA != null || /\b(absen\w*|attendance)\b/i.test(text || "")) want.push("attendance");
+    if (sc.minSusp != null || sc.maxSusp != null || sc.maxPex != null || /\b(suspen\w*|exclu\w*|behaviour)\b/i.test(text || "")) want.push("behaviour");
+    if (sc.minDest != null || sc.maxDest != null || sc.minNotsust != null || /\b(destinations?|neet|leavers)\b/i.test(text || "")) want.push("destinations");
+    if (sc.minTurnover != null || sc.maxTurnover != null || sc.minPtr != null || sc.maxPtr != null || sc.minVac != null || sc.maxVac != null || /\b(workforce|staffing|turnover|vacanc\w*|recruit\w*|retention)\b/i.test(text || "")) want.push("workforce");
+    if (/\b(disadvantage\w*|pupil premium gap|the gap)\b/i.test(text || "")) want.push("gap");
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
     if (/\b(early years|eyfsp|gld|good level of development|phonics|reception)\b/i.test(text || "")) want.push("early");
@@ -243,8 +285,15 @@ export default function Prizm() {
     if (/\b(league|by (local )?authorit|by trust|which (la|authorit|trust))/i.test(text || "")) want.push("league");
     if (want.length) setBlocks((b) => [...b, ...want.filter((w) => !b.includes(w))]);
   }
-  function pick(c) { setScope(c.sc); applyImplied(c.sc, q); setQ(""); boxRef.current && boxRef.current.blur(); }
-  function openExample(ex) { setTitle(""); setBlocks(ex.blocks || DEFAULT_BLOCKS); setScope(ex.sc); }
+  function pick(c) {
+    undoRef.current = { scope, title, blocks, q };
+    setScope(c.sc); applyImplied(c.sc, q);
+    const brief = q.trim();
+    setEcho(brief && brief.toLowerCase() !== (c.label || "").toLowerCase() ? { brief, label: `${c.label}${c.tag ? " \u00b7 " + c.tag : ""}` } : null);
+    setNote(null); setQ(""); setChoices(null);
+    boxRef.current && boxRef.current.blur();
+  }
+  function openExample(ex) { setTitle(""); setBlocks(ex.blocks || DEFAULT_BLOCKS); setScope(ex.sc); setEcho(null); setChoices(null); }
   function addBlock(t) { setBlocks((b) => (b.includes(t) ? b : [...b, t])); }
   function removeBlock(t) { setBlocks((b) => b.filter((x) => x !== t)); }
   function moveBlock(t, dir) {
@@ -268,27 +317,32 @@ export default function Prizm() {
       });
       const data = await r.json();
       if (!r.ok || data.error) throw new Error(data.error || "no answer");
-      if (data.spec) {
-        if (data.spec.scope) { setScope(data.spec.scope); applyImplied(data.spec.scope, text); }
-        if (data.spec.title) setTitle(data.spec.title);
-        if (Array.isArray(data.spec.blocks) && data.spec.blocks.length) setBlocks(data.spec.blocks.map((b) => b.type).filter((t) => BLOCK_TYPES.some((k) => k.type === t)));
-      }
+      const vBlocks = data.spec && Array.isArray(data.spec.blocks) ? data.spec.blocks.map((b) => b.type).filter((t) => BLOCK_TYPES.some((k) => k.type === t)) : null;
+      if (data.spec && data.spec.scope) {
+        const scR = data.spec.scope;
+        /* a national scope for a brief that named something is a dodge, not an answer */
+        const local = scR.type === "england" && !/\b(england|national(ly)?|the country|whole country|every school)\b/i.test(text) && all ? composeFromText(all, text) : null;
+        if (local && (local.confidence === "sure" || (local.candidates && local.candidates.length))) {
+          const opts = local.confidence === "sure" && local.sc.name ? [{ type: local.sc.type, name: local.sc.name }] : local.candidates;
+          setChoices({ brief: text, options: [...opts.slice(0, 4), { type: "england", name: "All England" }], filters: local.filters || {} });
+          setNote("Your words named something more particular than England: which of these did you mean?");
+        } else if (applyVerified(scR, { brief: text, title: data.spec.title, blocks: vBlocks })) {
+          setNote(data.reply || null);
+        } else if (data.reply) setNote(data.reply);
+      } else if (Array.isArray(data.clarify) && data.clarify.length) {
+        setChoices({ brief: text, options: data.clarify.slice(0, 5).map((name) => ({ name })), filters: {} });
+        setNote(data.reply || null);
+      } else setNote(data.reply || null);
       setMsgs((m) => [...m, { role: "assistant", content: data.reply || "Done." }]);
-      setNote(data.reply || null);
     } catch {
-      /* no reader? compose locally from the words themselves */
-      const res = all ? searchEntities(all, text) : null;
-      let best = res && res.composed && res.composed[0];
-      /* a sentence that names one clear entity still composes: take the strongest match */
-      if (!best && res) {
-        const single = [["trusts", "trust"], ["las", "la"], ["pcons", "pcon"], ["towns", "town"], ["regions", "region"]]
-          .flatMap(([k, type]) => (res[k] || []).map((e) => ({ type, name: e.name || e })))
-          .slice(0, 1);
-        if (single.length) best = { sc: { type: single[0].type, name: single[0].name } };
-      }
-      if (best) {
-        setScope(best.sc); applyImplied(best.sc, text);
-        setNote("The reader is out of reach just now, so Prizm composed this locally from your words.");
+      /* no reader? compose from the words at confidence, or ask — never guess */
+      const c = all ? composeFromText(all, text) : { confidence: "none" };
+      if (c.confidence === "sure") {
+        applyVerified(c.sc, { brief: text });
+        setNote("The reader is out of reach just now, so Prizm composed this from your words.");
+      } else if (c.confidence === "maybe") {
+        setChoices({ brief: text, options: c.candidates, filters: c.filters || {} });
+        setNote("The reader is out of reach just now. Your words could mean more than one thing:");
       } else {
         setQ(text);
         setNote("The reader is out of reach just now, but everything works by hand: type a place, a trust or a school and choose it.");
@@ -404,6 +458,22 @@ export default function Prizm() {
     </div>
   );
 
+  /* "which did you mean?" — the band that asks instead of guessing */
+  const KINDW = { trust: "trust", la: "authority", region: "region", town: "town", pcon: "constituency", england: "England", urns: "school" };
+  const choicesBand = choices && choices.options && choices.options.length > 0 && !thinking && (
+    <div style={{ marginTop: 10, background: "#fff", border: "1.5px solid rgba(106,12,160,.3)", borderRadius: 12, padding: "11px 14px", textAlign: "left", boxShadow: "0 10px 30px rgba(34,18,51,.08)" }}>
+      <div style={{ fontSize: 12.5, color: DEEP, fontWeight: 600, marginBottom: 8 }}>Which did you mean{choices.brief ? <> for <i>&ldquo;{choices.brief.slice(0, 90)}&rdquo;</i></> : ""}?</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {choices.options.map((o, i) => (
+          <button key={i} onClick={() => pickChoice(o)} style={{ border: "1px solid rgba(106,12,160,.28)", cursor: "pointer", background: "rgba(106,12,160,.06)", color: INK, borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>
+            {o.name || "All England"}{o.type && KINDW[o.type] && o.type !== "england" ? <span style={{ color: MUTED, fontWeight: 400 }}> &middot; {KINDW[o.type]}{o.n ? ` of ${o.n}` : ""}</span> : null}
+          </button>
+        ))}
+        <button onClick={() => { setChoices(null); setQ(choices.brief || ""); boxRef.current && boxRef.current.focus(); }} style={{ border: "none", cursor: "pointer", background: "transparent", color: MUTED, fontSize: 12, textDecoration: "underline", fontFamily: "inherit" }}>none of these</button>
+      </div>
+    </div>
+  );
+
   /* a full question goes to the reader even when chips are showing; a short
      phrase picks the chip. Arrows belong to the page unless chips are open. */
   const looksLikeQuestion = (t) => /\?\s*$/.test(t) || (/^(which|what|where|who|whose|how|why|do|does|is|are|can|show me|tell me|compare|rank)\b/i.test(t) && t.split(/\s+/).length >= 5);
@@ -412,9 +482,19 @@ export default function Prizm() {
     else if (e.key === "ArrowUp") { if (!chips.length) return; e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
     else if (e.key === "Enter") {
       const t = q.trim();
-      if (t.length >= 8 && looksLikeQuestion(t)) send();
-      else if (chips.length) pick(chips[Math.min(sel, chips.length - 1)]);
-      else if (t.length >= 8) send();
+      if (t.length >= 8 && looksLikeQuestion(t)) { send(); return; }
+      /* a chip is only picked when it covers the meaningful words typed:
+         leftover words that are not block names mean the ask needs composing */
+      const chip = chips.length ? chips[Math.min(sel, chips.length - 1)] : null;
+      if (chip) {
+        const BLOCKWORDS = new Set(["attendance", "absence", "behaviour", "suspensions", "exclusions", "finance", "money", "budget", "send", "inclusion", "ehcp", "ofsted", "results", "outcomes", "performance", "attainment", "destinations", "workforce", "staffing", "turnover", "gap", "disadvantage", "flow", "rolls", "deficit", "report", "picture", "schools", "school", "secondaries", "primaries", "trust", "academies"]);
+        const label = (chip.label + " " + (chip.tag || "")).toLowerCase();
+        const words = (t.toLowerCase().match(/[a-z]{3,}/g) || []).filter((w) => !["the", "and", "for", "with"].includes(w));
+        const leftover = words.filter((w) => !label.includes(w) && !BLOCKWORDS.has(w));
+        if (!leftover.length) { pick(chip); return; }
+      }
+      if (t.length >= 8) send();
+      else if (chip) pick(chip);
     }
     else if (e.key === "Escape") { setQ(""); boxRef.current && boxRef.current.blur(); }
   };
@@ -436,6 +516,10 @@ export default function Prizm() {
           {thinking
             ? <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Thinking size={24} label={stage || "Thinking…"} /></div>
             : <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8 }}>Enter chooses the first suggestion · arrow keys to move · a full sentence goes to the reader</div>}
+          {choicesBand}
+          {!thinking && !choices && note && (
+            <div style={{ marginTop: 10, fontSize: 12.5, color: "#4B0875", background: "rgba(106,12,160,.06)", border: "1px solid rgba(106,12,160,.16)", borderRadius: 10, padding: "8px 12px", textAlign: "left" }}>{note}</div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 10, marginTop: 34, textAlign: "left" }}>
             {EXAMPLES.map((ex) => (
@@ -509,14 +593,23 @@ export default function Prizm() {
             </div>
           )}
 
-          {(note || thinking || waitingFlows) && !dash && (
+          {(note || thinking || waitingFlows || echo) && !dash && (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 8, background: "rgba(106,12,160,.06)", border: "1px solid rgba(106,12,160,.16)", borderRadius: 10, padding: "8px 12px" }}>
               {thinking ? <Thinking label={stage || "Thinking…"} style={{ flex: 1 }} />
                 : waitingFlows ? <Thinking label="The eleven censuses are arriving for the cohort flow…" style={{ flex: 1 }} />
-                : <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: "#4B0875" }}>{note}</span>}
-              {!thinking && !waitingFlows && <button onClick={() => setNote(null)} style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>}
+                : <div style={{ flex: 1, minWidth: 0 }}>
+                    {echo && (
+                      <div style={{ fontSize: 12, color: INK, marginBottom: note ? 3 : 0 }}>
+                        <i>&ldquo;{echo.brief.slice(0, 90)}{echo.brief.length > 90 ? "…" : ""}&rdquo;</i> read as <b>{echo.label}</b>
+                        {undoRef.current && <> &middot; <button onClick={undoRead} style={{ border: "none", background: "transparent", color: "#B4475A", cursor: "pointer", fontSize: 12, textDecoration: "underline", padding: 0, fontFamily: "inherit" }}>not what I meant, undo</button></>}
+                      </div>
+                    )}
+                    {note && <span style={{ fontSize: 12.5, lineHeight: 1.5, color: "#4B0875" }}>{note}</span>}
+                  </div>}
+              {!thinking && !waitingFlows && <button onClick={() => { setNote(null); setEcho(null); }} style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>}
             </div>
           )}
+          {!dash && choicesBand}
 
           {!dash && nextSteps.length > 0 && !thinking && (
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>

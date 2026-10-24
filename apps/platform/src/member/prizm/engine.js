@@ -213,6 +213,8 @@ const toks = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s&']/g, " ").split
 /* 0 = no match; otherwise a score: how many of the candidate's own tokens
    the query contains (so "North East" outranks "East of England" when both
    match "north east"). A plain substring hit scores by full token count. */
+/* words that describe schools in general can never name one entity */
+const GENERIC = new Set(["school", "schools", "secondary", "secondaries", "primary", "primaries", "academy", "academies", "trust", "trusts", "college", "colleges", "education", "pupils", "children", "the", "and", "with", "for", "in", "of"]);
 function matchScore(name, needle, qTokens) {
   const n = (name || "").toLowerCase();
   const nt = toks(name);
@@ -330,8 +332,12 @@ export function parseQuery(raw) {
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(over|above|at least) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.minSpend = +m[2].replace(/,/g, ""); });
   eat(/\b(?:spend(?:ing)?|expenditure) (?:of )?(under|below) £?([\d,]{4,7})(?: per pupil)?\b/, (m) => { f.maxSpend = +m[2].replace(/,/g, ""); });
   eat(/\b(in deficit|carrying (a )?deficits?|with (a )?deficits?|deficit schools?)\b/, () => { f.deficit = true; });
+  eat(/\bdeficits?\b/, () => { f.deficit = true; });
   /* movement */
   eat(/\b(?:the )?(\d{1,3})? ?most improved\b/, (m) => { order = { by: "improvement", limit: m[1] ? +m[1] : 20 }; });
+  /* "falling rolls" is about pupil numbers, not attainment drift: consume it
+     whole so the flow block (added from the words) answers it */
+  eat(/\b(falling|shrinking|declining) rolls?\b/, () => {});
   eat(/\bimproving\b/, () => { f.minDrift = f.minDrift ?? 0.05; });
   eat(/\b(declining|falling)\b/, () => { f.maxDrift = f.maxDrift ?? -0.05; });
   /* ranking */
@@ -364,8 +370,9 @@ function placeNames(all) {
   PLACE_CACHE.set(all, v);
   return v;
 }
+const COMMON = new Set(["more", "most", "with", "from", "have", "what", "when", "where", "will", "over", "under", "about", "their", "there", "than", "that", "this", "then", "since", "best", "good", "high", "low", "very", "into", "near", "like", "some", "many", "much", "year", "years", "data", "results", "show", "give", "need", "want", "look", "looking"]);
 function fuzzyPlaces(all, rest) {
-  const qt = toks(rest).filter((t) => t.length >= 4);
+  const qt = toks(rest).filter((t) => t.length >= 4 && !GENERIC.has(t) && !COMMON.has(t));
   if (!qt.length) return [];
   const names = placeNames(all);
   const out = [];
@@ -373,7 +380,7 @@ function fuzzyPlaces(all, rest) {
     for (const [name, n] of Object.entries(names[kind])) {
       const nt = toks(name);
       if (!nt.length) continue;
-      const okAll = nt.every((t) => qt.some((q) => lev(t, q) <= (t.length >= 6 ? 2 : 1)));
+      const okAll = nt.every((t) => qt.some((q) => lev(t, q) <= (t.length >= 6 && q.length >= 6 ? 2 : 1)));
       if (okAll) out.push({ kind, name, n, score: nt.length });
     }
   }
@@ -418,6 +425,8 @@ export function searchEntities(all, q) {
   const top = (m) => Object.entries(m).sort((a, b) => b[1].sc - a[1].sc || b[1].n - a[1].n).slice(0, 5).map(([name, e]) => ({ name, n: e.n }));
   const pass = (needle) => {
     const qTokens = toks(needle);
+    /* a needle of generic words only ("schools") names nothing */
+    if (!qTokens.length || qTokens.every((t) => GENERIC.has(t))) return { trusts: [], las: [], regions: [], towns: [], pcons: [], schools: [] };
     const trusts = {}, las = {}, regions = {}, towns = {}, pcons = {};
     const schools = [];
     const add = (m, name, sc) => { const e = m[name] || (m[name] = { n: 0, sc }); e.n++; };
@@ -443,11 +452,50 @@ export function searchEntities(all, q) {
     ...(baseHits.towns || []).slice(0, 1).map((t) => ({ type: "town", name: t.name })),
     ...baseHits.trusts.slice(0, 1).map((t) => ({ type: "trust", name: t.name })),
   ];
-  /* typo tolerance: when nothing matches by name, try close spellings */
-  if (!bases.length && !out.schools.length) {
-    const fz = fuzzyPlaces(all, hasF ? rest : raw);
+  /* an entity the full query matched strongly beats every fallback: a filter
+     word eaten out of its own name ("DELTA ACADEMIES TRUST" losing
+     "academies") must not cost the entity the compose */
+  if (hasF && !bases.length) {
+    const rawT = toks(raw);
+    for (const [type, list] of [["region", out.regions], ["la", out.las], ["pcon", out.pcons || []], ["town", out.towns || []], ["trust", out.trusts]]) {
+      const e = (list || [])[0];
+      if (e && toks(e.name).length >= 2 && toks(e.name).every((w) => rawT.includes(w))) {
+        bases.push({ type, name: e.name });
+        /* a filter word living inside the entity's own name was part of the
+           name, not a request: drop the filter it spawned */
+        const nm = e.name.toLowerCase();
+        if (filters.schoolType && new RegExp(filters.schoolType === "academy" ? "academ" : filters.schoolType, "i").test(nm)) delete filters.schoolType;
+        if (filters.faith && nm.includes(filters.faith === "church-of-england" ? "church" : filters.faith)) delete filters.faith;
+        if (filters.gender && nm.includes(filters.gender.toLowerCase())) delete filters.gender;
+        break;
+      }
+    }
+  }
+  /* region shorthand: the names people actually say */
+  const needleStr = " " + (hasF ? rest : raw) + " ";
+  if (!bases.some((b) => b.type === "region")) {
+    for (const [k, nm] of [["yorkshire", "Yorkshire and the Humber"], ["humberside", "Yorkshire and the Humber"], ["east mids", "East Midlands"], ["west mids", "West Midlands"], ["the midlands", "West Midlands"]]) {
+      if (needleStr.includes(" " + k + " ")) {
+        bases.unshift({ type: "region", name: nm });
+        if (!out.regions.some((r) => r.name === nm)) out.regions.unshift({ name: nm, n: resolveScope(all, { type: "region", name: nm }).length });
+        break;
+      }
+    }
+  }
+  /* typo tolerance, for short queries only: a sentence never fuzzy-matches a
+     place out of its stray words ("have" is not Havant) */
+  const meat = toks(hasF ? rest : raw).filter((t) => !GENERIC.has(t));
+  if (!bases.length && !out.schools.length && meat.length && meat.length <= 4) {
+    const fz = fuzzyPlaces(all, meat.join(" "));
     bases = fz.map((p) => ({ type: p.kind, name: p.name }));
     if (!hasF) fz.forEach((p) => { const list = p.kind === "region" ? out.regions : p.kind === "la" ? out.las : p.kind === "pcon" ? (out.pcons = out.pcons || []) : out.towns; if (!list.some((x) => x.name === p.name)) list.push({ name: p.name, n: p.n }); });
+    /* trusts deserve the same forgiveness as places */
+    if (!bases.length) {
+      const rt = resolveEntity(all, "trust", meat.join(" "));
+      const found = rt.ok ? [{ name: rt.name, n: rt.n }] : (rt.candidates || []).map((c) => ({ name: c.name, n: c.n }));
+      if (rt.ok) bases = [{ type: "trust", name: rt.name }];
+      if (!hasF) found.forEach((t) => { if (!out.trusts.some((x) => x.name === t.name)) out.trusts.push(t); });
+    }
   }
   if (hasF) {
     if (!bases.length) bases.push({ type: "england" });
@@ -456,8 +504,98 @@ export function searchEntities(all, q) {
       const n = resolveScope(all, sc).length;
       return n ? { label: scopeLabel(sc), n, sc } : null;
     }).filter(Boolean).slice(0, 4);
+    /* every base zeroed out by the filters: the national read is the honest one */
+    if (!out.composed.length) {
+      const sc = { type: "england", ...filters };
+      const n = resolveScope(all, sc).length;
+      if (n) out.composed = [{ label: scopeLabel(sc), n, sc }];
+    }
   }
   return out;
+}
+
+/* ── the search's honesty layer ─────────────────────────────────────────────
+   Three disciplines the box lives by: every name is resolved against the
+   dataset's own spellings (resolveEntity); every scope anyone proposes, the
+   reader included, is verified before a single chart renders (verifyScope);
+   and a sentence composes a scope only at confidence, otherwise it returns
+   candidates to ASK with, never a guess (composeFromText). */
+function entityNames(all, type) {
+  if (type === "trust") {
+    const m = {};
+    secondaries(all).concat(primaries(all)).forEach((s) => { if (s.trust && s.trust !== "Not supported by a trust") m[s.trust] = (m[s.trust] || 0) + 1; });
+    return m;
+  }
+  return placeNames(all)[type === "la" ? "la" : type] || {};
+}
+export function resolveEntity(all, type, name) {
+  const want = (name || "").trim().toLowerCase();
+  if (!want) return { ok: false, candidates: [] };
+  const names = entityNames(all, type);
+  for (const n of Object.keys(names)) if (n.toLowerCase() === want) return { ok: true, name: n, n: names[n] };
+  /* containment next: "United Learning" finds "UNITED LEARNING TRUST" */
+  const contains = Object.keys(names).filter((n) => n.toLowerCase().includes(want) || want.includes(n.toLowerCase()));
+  if (contains.length === 1) return { ok: true, name: contains[0], n: names[contains[0]], fixed: true };
+  /* then forgiving: every token of the candidate close to a token of the ask */
+  const qt = toks(want).filter((t) => t.length >= 3);
+  const scored = [];
+  for (const [n, count] of Object.entries(names)) {
+    const nt = toks(n);
+    if (!nt.length || !qt.length) continue;
+    const hit = qt.filter((q) => nt.some((t) => t === q || (q.length >= 4 && lev(t, q) <= (t.length >= 6 ? 2 : 1)))).length;
+    if (hit >= Math.max(1, qt.length - 1) && hit >= Math.ceil(nt.length / 2)) scored.push({ name: n, n: count, score: hit * 2 + (nt.length === qt.length ? 1 : 0) });
+  }
+  scored.sort((a, b) => b.score - a.score || b.n - a.n);
+  if (scored.length && (scored.length === 1 || scored[0].score > (scored[1] ? scored[1].score : 0))) {
+    const uniq = contains.length <= 1;
+    if (uniq && scored[0].score >= qt.length * 2) return { ok: true, name: scored[0].name, n: scored[0].n, fixed: true };
+  }
+  const candidates = [...new Set([...contains, ...scored.map((s) => s.name)])].slice(0, 4).map((n) => ({ type, name: n, n: names[n] }));
+  return { ok: false, candidates };
+}
+export function verifyScope(all, scope) {
+  if (!scope || typeof scope !== "object") return { ok: false, candidates: [] };
+  const sc = { ...scope };
+  const KINDS = new Set(["trust", "la", "region", "town", "pcon"]);
+  if (KINDS.has(sc.type)) {
+    const r = resolveEntity(all, sc.type, sc.name);
+    if (!r.ok) {
+      /* the name may belong to another kind: look across all of them */
+      const across = ["trust", "la", "region", "town", "pcon"].flatMap((k) => { const rr = resolveEntity(all, k, sc.name); return rr.ok ? [{ type: k, name: rr.name, n: rr.n }] : rr.candidates; });
+      return { ok: false, candidates: [...new Map(across.map((c) => [c.type + c.name, c])).values()].slice(0, 5) };
+    }
+    sc.name = r.name;
+  }
+  if (sc.versus) {
+    const v = verifyScope(all, { ...sc.versus });
+    if (v.ok) sc.versus = v.scope; else delete sc.versus; /* a broken comparison never breaks the report */
+  }
+  const n = resolveScope(all, sc).length;
+  if (!n) return { ok: false, candidates: [], empty: true, scope: sc };
+  return { ok: true, scope: sc, n };
+}
+export function composeFromText(all, text) {
+  const res = searchEntities(all, text);
+  if (res.composed && res.composed.length) return { confidence: "sure", sc: res.composed[0].sc, label: res.composed[0].label };
+  const { filters } = parseQuery((text || "").toLowerCase());
+  const qt = toks(text);
+  const hits = [];
+  [["region", res.regions], ["la", res.las], ["pcon", res.pcons || []], ["town", res.towns || []], ["trust", res.trusts]].forEach(([type, list]) => {
+    (list || []).forEach((e) => {
+      const nt = toks(e.name);
+      /* a one-word name inside a long sentence is a coincidence, not a request:
+         "strong reading in primaries" must never become the borough of Reading */
+      const strong = nt.length >= 2 ? nt.every((t) => qt.includes(t)) : qt.length <= 3 && qt.includes(nt[0]);
+      hits.push({ type, name: e.name, n: e.n, strong });
+    });
+  });
+  if (res.schools && res.schools.length === 1 && qt.length <= 6) hits.push({ type: "urns", urns: [res.schools[0].urn], name: res.schools[0].name, n: 1, strong: true });
+  const strongs = hits.filter((h) => h.strong);
+  const mk = (h) => (h.type === "urns" ? { type: "urns", urns: h.urns, ...filters } : { type: h.type, name: h.name, ...filters });
+  if (strongs.length === 1) return { confidence: "sure", sc: mk(strongs[0]) };
+  /* several strong reads of the same words, or only weak ones: ask, never guess */
+  const candidates = [...new Map(hits.map((h) => [h.type + (h.name || ""), h])).values()].sort((a, b) => (b.strong ? 1 : 0) - (a.strong ? 1 : 0) || b.n - a.n).slice(0, 5);
+  return { confidence: candidates.length ? "maybe" : "none", candidates, filters };
 }
 
 /* ── national benchmarks, computed once ── */
