@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth.jsx";
 export default function Lens() {
   const { user } = useAuth();
   const mode = user?.lens === "ascc" ? "ascc" : "new";
-  const src = `/lens/index.html?school=${mode}&name=${encodeURIComponent(user?.school || "Your school")}`;
+  const src = `/lens/index.html?school=${mode}&name=${encodeURIComponent(user?.school || user?.scopeName || "Your school")}`;
   return (
     <iframe src={src} title="Lens"
       style={{ width: "100%", height: "100%", border: "none", display: "block", background: "#FBFAF7" }} />

@@ -7,7 +7,7 @@ const INK = "#221233", MUTED = "#6F6580", GOLD = "#C6A035", DEEP = "#4B0875";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 export async function fetchContext({ scope, kind, schools }) {
-  const r = await fetch("/.netlify/functions/context", {
+  const r = await fetch("/api/context", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scope, kind, schools }),
   });

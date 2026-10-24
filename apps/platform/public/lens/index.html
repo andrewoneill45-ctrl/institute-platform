@@ -15,6 +15,15 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script>
+/* inside the members' shell the shell carries the wordmark: hide this one */
+(function(){try{if(window.self!==window.top){document.documentElement.classList.add("asi-embedded");}}catch(e){document.documentElement.classList.add("asi-embedded");}})();
+</script>
+<style>.asi-embedded .asi-wm,.asi-embedded .asi-wm + .asi-div{display:none!important}</style>
+<script>
+/* ⌘K belongs to the shell's command palette: hand it up from inside the frame */
+window.addEventListener("keydown",function(e){if((e.metaKey||e.ctrlKey)&&(e.key==="k"||e.key==="K")&&window.parent!==window){e.preventDefault();try{window.parent.postMessage({type:"asi-palette"},window.location.origin);}catch(_){}}});
+</script>
 </head>
 <body>
   </div>

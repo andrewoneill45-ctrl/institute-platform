@@ -1,4 +1,7 @@
-// Netlify Function: /.netlify/functions/context
+// Netlify EDGE Function: /api/context
+// An edge function, not a serverless one: web searches take 10 to 30 seconds
+// of waiting, and edge functions count only CPU time (50 ms), with 40 s to
+// reply, where serverless functions are cut off at 10 s.
 // Prizm's context desk. Given a report's scope, it searches the web for what
 // has been HAPPENING there (inspections, leadership, mergers, closures,
 // local news, policy) and returns a handful of sourced items. It never
@@ -63,10 +66,16 @@ export function vetItems(content) {
   return { items, note: clean(parsed.note, 200), dropped };
 }
 
+const env = (k) => {
+  try { if (typeof Netlify !== "undefined" && Netlify.env) { const v = Netlify.env.get(k); if (v != null) return v; } } catch {}
+  try { if (typeof Deno !== "undefined" && Deno.env) { const v = Deno.env.get(k); if (v != null) return v; } } catch {}
+  return typeof process !== "undefined" && process.env ? process.env[k] : undefined;
+};
+
 export default async (req) => {
   if (req.method === "OPTIONS") return new Response("", { status: 204, headers: cors("text/plain") });
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "POST only" }), { status: 405, headers: cors("application/json") });
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = env("ANTHROPIC_API_KEY");
   if (!apiKey) return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY is not configured." }), { status: 500, headers: cors("application/json") });
 
   let body;
@@ -82,10 +91,10 @@ export default async (req) => {
 
   const messages = [{ role: "user", content: brief }];
   let content = [];
-  /* Netlify's synchronous functions stop at 10 seconds: finish first, and say
-     so plainly rather than be cut off mid-sentence */
+  /* the edge must start replying within 40 seconds: finish first, and say so
+     plainly rather than be cut off */
   const started = Date.now();
-  const DEADLINE = Number(process.env.CONTEXT_DEADLINE_MS || 9300);
+  const DEADLINE = Number(env("CONTEXT_DEADLINE_MS") || 34000);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), Math.max(1000, DEADLINE - 200));
   try {
@@ -97,7 +106,7 @@ export default async (req) => {
         method: "POST",
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify({
-          model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+          model: env("CLAUDE_MODEL") || "claude-sonnet-4-5",
           max_tokens: 1200,
           system: SYSTEM,
           tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3, user_location: { type: "approximate", country: "GB" } }],
@@ -123,3 +132,5 @@ export default async (req) => {
   const out = vetItems(content);
   return new Response(JSON.stringify(out), { status: 200, headers: cors("application/json") });
 };
+
+export const config = { path: "/api/context" };
