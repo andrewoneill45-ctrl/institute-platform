@@ -1627,7 +1627,7 @@ async function sendAsk() {
     const res = await fetch("/.netlify/functions/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, history: askHistory.slice(-6), stance: askStance, evidence: (typeof s48Digest === "function" ? s48Digest() : "") })
+      body: JSON.stringify({ question: q, history: askHistory.slice(-6), stance: askStance, evidence: [(typeof libDigest === "function" ? libDigest() : ""), (typeof s48Digest === "function" ? s48Digest() : "")].filter(Boolean).join("\n\n") })
     });
     if (!res.ok) {
       let errMsg;
@@ -1962,7 +1962,8 @@ function s48Digest() {
   items.forEach(function (it) {
     if (!it.read) return;
     var line = "[" + it.label + "] " + it.name + ": ";
-    if (it.read.series) it.read.series.forEach(function (s) {
+    if (it.read.reading) line += deskLine(it.read.reading, it.read.unit);
+    else if (it.read.series) it.read.series.forEach(function (s) {
       var ok = s.vals.filter(isFinite);
       line += s.label + " " + s.years[0] + "\u2192" + s.years[s.years.length - 1] + ": " + ok[0] + " \u2192 " + ok[ok.length - 1] + ". ";
     });
@@ -1975,6 +1976,45 @@ function s48Digest() {
   });
   return parts.length ? "SCHOOL EVIDENCE ON FILE (Section 48 vault, uploaded by the school; cite it):\n" + parts.join("\n") : "";
 }
+/* ── the reading desk (it lives in the members' shell, outside this frame) ── */
+var DESK_EMBEDDED = (function () { try { return window.parent && window.parent !== window; } catch (e) { return false; } })();
+function deskOpen(room, labels) { try { window.parent.postMessage({ type: "asi-desk", room: room, labels: labels }, location.origin); } catch (e) {} }
+function deskCite(c, unit) { if (!c || !c.length) return ""; return ' <span class="desk-cite">' + (unit === "slide" ? "slide" : unit === "section" ? "\u00a7" : "p.") + "\u00a0" + c.join(", ") + "</span>"; }
+/* one evidence line for Ask: what the document is and what it says, cited */
+function deskLine(r, unit) {
+  var u = unit === "slide" ? "slide" : unit === "section" ? "section" : "p.";
+  var out = (r.title || "") + (r.date ? " (" + r.date + ")" : "") + ". " + (r.summary || "") + " ";
+  (r.findings || []).slice(0, 5).forEach(function (f) { out += f.text + " [" + u + " " + (f.cite || []).join(",") + "] "; });
+  (r.figures || []).slice(0, 8).forEach(function (f) { out += f.label + ": " + f.value + (f.period ? " (" + f.period + ")" : "") + " [" + u + " " + f.cite + "]. "; });
+  (r.gaps || []).slice(0, 3).forEach(function (f) { out += "Gap: " + f.text + " "; });
+  return out.replace(/\s+/g, " ").slice(0, 1400);
+}
+/* the reading, opened under a document's row */
+function deskReadingHtml(r, unit) {
+  var x = '<div class="desk-doc" style="padding:6px 2px 4px">';
+  if (r.summary) x += '<p class="desk-sum" style="font-size:14px">' + escapeHtml(r.summary) + '</p>';
+  var list = function (title, arr, cls) {
+    if (!arr || !arr.length) return "";
+    return '<div class="desk-sec' + (cls ? " " + cls : "") + '"><h5>' + title + '</h5><ul>' + arr.map(function (f) { return "<li>" + escapeHtml(f.text) + deskCite(f.cite, unit) + "</li>"; }).join("") + "</ul></div>";
+  };
+  x += list("What it says", r.findings) + list("An inspector would credit", r.strengths) + list("An inspector would ask about", r.gaps, "gap");
+  if (r.figures && r.figures.length) x += '<div class="desk-sec"><h5>Figures it states</h5><div class="desk-figs">' + r.figures.map(function (f) { return '<div class="desk-fig"><b>' + escapeHtml(f.value) + "</b><span>" + escapeHtml(f.label) + (f.period ? ", " + escapeHtml(f.period) : "") + "</span>" + deskCite([f.cite], unit) + "</div>"; }).join("") + "</div></div>";
+  if (r.areas && r.areas.length) x += '<div class="desk-sec"><h5>Evidences</h5>' + r.areas.map(function (a) { return '<span class="rdesk-chip">' + escapeHtml(a) + "</span>"; }).join("") + "</div>";
+  return x + "</div>";
+}
+function deskReadCell(it) {
+  var r = it.read.reading;
+  return '<details class="desk-row"><summary><b style="color:#2F7A39">read closely</b> <span class="muted">' + escapeHtml(r.title || "") + "</span></summary>" + deskReadingHtml(r, it.read.unit) + "</details>";
+}
+/* a file filed by the desk arrives here, with its reading */
+window.addEventListener("message", function (e) {
+  if (e.origin !== location.origin || !e.data || e.data.type !== "asi-desk-filed") return;
+  var d = e.data, it = d.item;
+  if (!it || !it.name) return;
+  if (d.room === "s48") { var a = s48Load(); a.unshift(it); s48Save(a); if (d.url) s48Urls[it.name] = d.url; if (document.getElementById("view-s48") && RENDER.s48) RENDER.s48(); }
+  else { var b = libLoad(); b.unshift(it); libSave(b); if (d.url) libUrls[it.name] = d.url; renderLibrary(); }
+});
+
 const S48_KEY = "lens-s48-" + (SCHOOL_MODE === "ascc" ? "ascc" : SCHOOL_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
 const s48Urls = {};
 function s48Load() { try { return JSON.parse(localStorage.getItem(S48_KEY)) || []; } catch { return []; } }
@@ -2020,15 +2060,18 @@ function renderS48() {
     html += '</div>';
     html += '<h2 style="margin-top:26px">Evidence vault</h2>';
     html += '<p class="muted"><b>Self-evaluation: the record, looking back.</b> Finished cohorts, historic results, survey returns, the CSED. Live pupil tracking belongs in Constellation, and nothing moves between the two unless you move it. Tagged to the framework, so the readiness board above tells the truth. <b>The covenant applies here as everywhere in Lens:</b> never published, never ranked, never shared. <span class="muted" style="font-size:.72rem">' + S48_READER_V + '</span></p>';
+    if (DESK_EMBEDDED) html += '<div class="lib-add"><button class="btn" id="s48-desk">Bring files to the reading desk</button><span class="muted" style="font-size:.8rem">Word, PDF, PowerPoint, Excel: read closely, every figure cited to its page, filed where it belongs.</span></div><details class="lib-plain"><summary class="muted" style="font-size:.8rem;cursor:pointer">Store a file without reading it</summary>';
     html += '<div class="lib-add"><input type="file" id="s48-file" multiple><select id="s48-label">';
     S48.tags.forEach(function (l) { html += '<option>' + l + '</option>'; });
     html += '</select><button class="btn" id="s48-btn">Add evidence</button></div>';
+    if (DESK_EMBEDDED) html += '</details>';
     html += '<table class="lib-table"><thead><tr><th>Document</th><th>Tag</th><th>Size</th><th>Read</th><th>Added</th><th></th></tr></thead><tbody>';
     if (items.length) {
       items.forEach(function (it, i) {
         var nm = s48Urls[it.name] ? '<a href="' + s48Urls[it.name] + '" target="_blank" rel="noopener">' + escapeHtml(it.name) + '</a>' : escapeHtml(it.name);
         var readCell;
-        if (it.read && it.read.inPlay) readCell = '<span style="color:#8a6d1c">looks in-play: an unfinished cohort. This vault is self-evaluation; live pupils belong in Constellation. It stays here only if you mean it as evidence.</span>';
+        if (it.read && it.read.reading) readCell = deskReadCell(it);
+        else if (it.read && it.read.inPlay) readCell = '<span style="color:#8a6d1c">looks in-play: an unfinished cohort. This vault is self-evaluation; live pupils belong in Constellation. It stays here only if you mean it as evidence.</span>';
         else if (it.read && it.read.series) readCell = '<b style="color:#2F7A39">analysed</b>' + (it.read.ai ? ' <span class="muted" title="The AI read the layout; every figure transcribed from the file, none calculated">&middot; AI-read</span>' : '');
         else if (it.read && it.read.chars) readCell = 'read';
         else if (it.read && it.read.note) readCell = '<span class="muted">stored only &middot; ' + escapeHtml(it.read.note) + '</span>';
@@ -2064,6 +2107,8 @@ function renderS48() {
     html += '<p class="muted" style="margin-top:16px">Then take it to <a href="#" onclick="gotoView(&quot;ask&quot;);return false">Ask</a>: the Critical friend now knows this framework as well as it knows Ofsted&rsquo;s.</p></div>';
     el.innerHTML = "";
     el.appendChild(h(html));
+    var deskBtn = el.querySelector("#s48-desk");
+    if (deskBtn) deskBtn.addEventListener("click", function () { deskOpen("s48", S48.tags); });
     el.querySelector("#s48-btn").addEventListener("click", function () {
       var inp = el.querySelector("#s48-file"), label = el.querySelector("#s48-label").value;
       var files = Array.prototype.slice.call(inp.files);
@@ -2104,6 +2149,17 @@ const LIB_KEY = "lens-lib-" + (SCHOOL_MODE === "ascc" ? "ascc" : SCHOOL_NAME.toL
 const libUrls = {};
 function libLoad() { try { return JSON.parse(localStorage.getItem(LIB_KEY)) || []; } catch { return []; } }
 function libSave(items) { try { localStorage.setItem(LIB_KEY, JSON.stringify(items)); } catch {} }
+/* the Library's readings, for Ask to cite */
+function libDigest() {
+  var parts = [], budget = 5200;
+  libLoad().forEach(function (it) {
+    if (!it.read || !it.read.reading) return;
+    var line = "[" + it.label + "] " + it.name + ": " + deskLine(it.read.reading, it.read.unit);
+    if (budget - line.length > 0) { parts.push(line); budget -= line.length; }
+  });
+  return parts.length ? "SCHOOL DOCUMENTS ON FILE (Library, read by the reading desk; cite them by name and page):\n" + parts.join("\n") : "";
+}
+window.lensEvidence = function () { return [libDigest(), s48Digest()].filter(Boolean).join("\n\n"); };
 function renderLibrary() {
   const el = document.getElementById("view-library");
   const LABELS = ["Self-evaluation (SEF)", "Results & assessment", "IDSR / DfE reports", "Attendance & behaviour", "SEND & inclusion", "Curriculum & policies", "Student & parent voice", "Governance", "Other evidence"];
@@ -2114,19 +2170,24 @@ function renderLibrary() {
       <div class="card" style="max-width:920px">
         <h2>Library – the evidence vault</h2>
         <p class="muted">Everything the school uploads lives here, labelled and ready to power the dashboards and Ask. <b>The covenant:</b> your Library belongs to your school. It is never published, never ranked, never shared, and never seen by the Institute without permission.</p>
+        ${DESK_EMBEDDED ? `<div class="lib-add"><button class="btn" id="lib-desk">Bring files to the reading desk</button><span class="muted" style="font-size:.8rem">Any document or spreadsheet: read closely, every figure cited to its page, filed where it belongs, and citable in Ask.</span></div><details class="lib-plain"><summary class="muted" style="font-size:.8rem;cursor:pointer">Store a file without reading it</summary>` : ""}
         <div class="lib-add">
           <input type="file" id="lib-file" multiple>
           <select id="lib-label">${LABELS.map(l => `<option>${l}</option>`).join("")}</select>
           <button class="btn" id="lib-btn">Add to Library</button>
-        </div>
-        <table class="lib-table"><thead><tr><th>Document</th><th>Label</th><th>Size</th><th>Added</th><th></th></tr></thead>
+        </div>${DESK_EMBEDDED ? "</details>" : ""}
+        <table class="lib-table"><thead><tr><th>Document</th><th>Label</th><th>Read</th><th>Size</th><th>Added</th><th></th></tr></thead>
         <tbody>${items.length ? items.map((it, i) => `<tr>
           <td>${libUrls[it.name] ? `<a href="${libUrls[it.name]}" target="_blank" rel="noopener">${escapeHtml(it.name)}</a>` : escapeHtml(it.name)}</td>
-          <td>${escapeHtml(it.label)}</td><td>${(it.size / 1024).toFixed(0)} KB</td>
+          <td>${escapeHtml(it.label)}</td>
+          <td>${it.read && it.read.reading ? deskReadCell(it) : it.read && it.read.note ? `<span class="muted">${escapeHtml(it.read.note)}</span>` : `<span class="muted">stored only</span>`}</td>
+          <td>${(it.size / 1024).toFixed(0)} KB</td>
           <td>${it.date}</td><td><button class="lib-x" data-i="${i}">×</button></td></tr>`).join("")
-          : `<tr><td colspan="5" class="muted">Nothing here yet. The Library fills as you add your school’s evidence.</td></tr>`}</tbody></table>
+          : `<tr><td colspan="6" class="muted">Nothing here yet. The Library fills as you add your school’s evidence.</td></tr>`}</tbody></table>
         <p class="muted" style="font-size:.78rem;margin-top:10px">In this demonstration, the catalogue is kept on this device. In the deployed Fellowship, files are stored in your school’s private vault, one folder per school.</p>
       </div>`));
+    const deskBtn = el.querySelector("#lib-desk");
+    if (deskBtn) deskBtn.addEventListener("click", () => deskOpen("library", LABELS));
     el.querySelector("#lib-btn").addEventListener("click", () => {
       const inp = el.querySelector("#lib-file"), label = el.querySelector("#lib-label").value;
       const items = libLoad();

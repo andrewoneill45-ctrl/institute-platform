@@ -161,3 +161,72 @@
   .cmdk-foot{display:none}
 }
 @media (prefers-reduced-motion:reduce){.cmdk-veil,.cmdk,.shell-menu{animation:none}.shell-avatar,.shell-rooms a{transition:none}}
+
+/* ── the reading desk: one way of reading a file, in Constellation and Lens ── */
+.desk-stages{list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px;margin:10px 0 2px;padding:0;font-size:11.5px;color:#6F6580}
+.desk-stage{display:flex;align-items:center;gap:6px}
+.desk-dot{width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(106,12,160,.28);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex:none}
+.desk-stage.done{color:#4B0875}.desk-stage.done .desk-dot{background:#6A0CA0;border-color:#6A0CA0}
+.desk-stage.now{color:#221233;font-weight:600}.desk-stage.now .desk-dot{border-color:#C6A035;background:#C6A035}
+.desk-stage.busy{color:#221233;font-weight:600}.desk-stage.busy .desk-dot{border-color:#6A0CA0;border-top-color:transparent;animation:deskSpin .8s linear infinite}
+.desk-stage.failed{color:#B4475A}.desk-stage.failed .desk-dot{background:#B4475A;border-color:#B4475A}
+@keyframes deskSpin{to{transform:rotate(360deg)}}
+.desk-panel{margin:10px 0 4px;padding:12px 14px;border-radius:12px;background:#F7F2FB;font-size:12.5px;color:#221233;max-width:720px}
+.desk-panel.busy{display:flex;gap:10px;align-items:center;color:#4B0875}
+.desk-panel.warn{background:#FBF1F3;color:#7d2a3a}
+.desk-spin{width:14px;height:14px;border-radius:50%;border:2px solid #6A0CA0;border-top-color:transparent;animation:deskSpin .8s linear infinite;flex:none}
+.desk-sum{font-family:Fraunces,serif;font-size:15px;line-height:1.4;margin:0 0 6px;color:#221233}
+.desk-note{margin:5px 0;color:#4B0875}.desk-note.gold{color:#8a6d1c}.desk-note.warn{color:#7d2a3a}
+.desk-priv{margin-top:8px;font-size:11px;color:#6F6580}
+.desk-link{border:none;background:none;color:#6A0CA0;text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+.desk-q{margin:9px 0 2px;padding:10px 12px;background:#fff;border-radius:10px;border-left:3px solid #C6A035}
+.desk-q-t{font-weight:600;margin-bottom:7px}
+.desk-q-o{display:flex;flex-wrap:wrap;gap:6px}
+.desk-q-o button{border:1px solid rgba(106,12,160,.3);background:#fff;color:#4B0875;border-radius:999px;padding:5px 12px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}
+.desk-q-o button:hover{background:#6A0CA0;color:#fff;border-color:#6A0CA0}
+.desk-doc{font-size:13px;color:#221233}
+.desk-doc-h b{display:block;font-family:Fraunces,serif;font-size:19px;font-weight:600;line-height:1.25}
+.desk-doc-h small{color:#6F6580;font-size:12px}
+.desk-doc .desk-sum{margin:10px 0}
+.desk-sec{margin:12px 0 0}
+.desk-sec h5{margin:0 0 5px;font:700 10.5px Inter,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6A0CA0}
+.desk-sec h5 small{font-weight:500;letter-spacing:0;text-transform:none;color:#6F6580;margin-left:6px}
+.desk-sec.gap h5{color:#B4475A}
+.desk-sec ul{margin:0;padding-left:18px}.desk-sec li{margin:3px 0;line-height:1.45}
+.desk-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.desk-cite{display:inline-block;font-size:10.5px;color:#6A0CA0;background:#F1E8F8;border-radius:5px;padding:0 5px;margin-left:3px;white-space:nowrap}
+.desk-figs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.desk-fig{background:#fff;border-radius:10px;padding:8px 10px;box-shadow:0 1px 2px rgba(34,18,51,.06)}
+.desk-fig b{display:block;font-family:Fraunces,serif;font-size:19px;color:#4B0875}
+.desk-fig span{display:block;font-size:11.5px;color:#6F6580;line-height:1.3}
+.desk-series{margin:3px 0;font-size:12.5px}
+@media (max-width:640px){.desk-two{grid-template-columns:1fr}}
+
+/* the Lens reading desk, a sheet over the room */
+.rdesk-veil{position:fixed;inset:0;z-index:900;background:rgba(34,18,51,.34);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);display:flex;justify-content:center;align-items:flex-start;padding:6vh 16px 16px;overflow:auto;animation:cmdkFade .14s ease-out}
+.rdesk{width:min(860px,100%);background:#FBFAF7;border-radius:22px;box-shadow:0 24px 80px rgba(34,18,51,.28);padding:24px 26px 22px;animation:cmdkIn .18s ease-out}
+.rdesk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.rdesk-h h2{font-family:Fraunces,serif;font-weight:600;font-size:24px;margin:0;color:#221233}
+.rdesk-h p{margin:4px 0 0;color:#6F6580;font-size:13px;max-width:560px}
+.rdesk-x{border:none;background:#fff;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:18px;color:#6F6580;box-shadow:0 1px 3px rgba(34,18,51,.12);flex:none}
+.rdesk-drop{margin:16px 0 4px;border:1.5px dashed rgba(106,12,160,.35);border-radius:16px;padding:22px;text-align:center;background:#fff;cursor:pointer;transition:background .15s,border-color .15s}
+.rdesk-drop.over{background:#F4EEFA;border-color:#6A0CA0}
+.rdesk-drop b{display:block;font-family:Fraunces,serif;font-size:17px;color:#4B0875;margin-bottom:4px}
+.rdesk-drop small{color:#6F6580;font-size:12px}
+.rdesk-note{width:100%;box-sizing:border-box;margin-top:8px;border:1px solid rgba(106,12,160,.2);border-radius:10px;padding:8px 11px;font:13px Inter,system-ui,sans-serif;background:#fff}
+.rdesk-card{margin-top:14px;background:#fff;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(34,18,51,.04),0 10px 30px rgba(34,18,51,.07);border-left:3px solid #6A0CA0}
+.rdesk-card.done{border-left-color:#2F7A39}
+.rdesk-card.stop{border-left-color:#C6A035}
+.rdesk-card.bad{border-left-color:#B4475A}
+.rdesk-file{display:flex;justify-content:space-between;gap:10px;font-weight:600;font-size:13.5px;word-break:break-word}
+.rdesk-file small{font-weight:400;color:#6F6580;white-space:nowrap}
+.rdesk-row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:12px 0 0;font-size:12.5px}
+.rdesk-row select{border:1px solid rgba(106,12,160,.25);border-radius:8px;padding:5px 8px;font:12px Inter,system-ui,sans-serif;background:#fff;color:#221233;max-width:280px}
+.rdesk-chip{display:inline-block;background:#F4EEFA;color:#4B0875;border-radius:999px;padding:3px 10px;font-size:11.5px;margin:2px 4px 2px 0}
+.rdesk-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.rdesk-go{border:none;cursor:pointer;background:linear-gradient(135deg,#6A0CA0,#4B0875);color:#fff;border-radius:999px;padding:9px 18px;font:600 12.5px Inter,system-ui,sans-serif}
+.rdesk-go:disabled{opacity:.5;cursor:default}
+.rdesk-alt{border:none;cursor:pointer;background:#fff;color:#6F6580;border-radius:999px;padding:9px 16px;font:600 12px Inter,system-ui,sans-serif;box-shadow:0 1px 3px rgba(34,18,51,.12)}
+.rdesk-foot{margin-top:16px;font-size:11.5px;color:#6F6580}
+@media (max-width:640px){.rdesk-veil{padding:0}.rdesk{border-radius:0;min-height:100%;padding:18px 16px}}
+.desk-fig .desk-cite{display:inline-block;margin:3px 0 0}

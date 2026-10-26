@@ -3,10 +3,13 @@
    Insights is the signal board. All of it on this device only. */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth.jsx";
-import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, removeUpload, keepText, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName, namesPreview } from "./model.js";
+import { loadState, saveState, blankState, computeAll, findSignals, rowsToCsv, parseCSV, removeUpload, keepText, BANDS, inspect, reinspect, commitSlip, KIND_LABELS, KIND_CHOICES, FIELD_LABELS, yearStats, normName, namesPreview } from "./model.js";
 import { vaultMembership, vaultLoad, vaultSave, planSync } from "./vault.js";
 import { SKY_W, SKY_H, CX, CY, R_ON, R_WATCH, R_RIM, layoutShoal, layoutMandala, layoutGradeMandala, gradesOf, coilPoint, easeInOut, pullOf, reasonFor } from "./sky.js";
 import { ensureMotionCss } from "../../lib/motion.jsx";
+import { extract } from "../../lib/reading/extract.js";
+import { askDesk, tablePayload, rulesOf, mergeTableReading } from "../../lib/reading/desk.js";
+import { DeskStages, TableDeskPanel } from "../../lib/reading/DeskUI.jsx";
 
 const INK = "#221233", PURPLE = "#6A0CA0", DEEP = "#4B0875", GOLD = "#C6A035", MUTED = "#6F6580", LILAC = "#F4EEFA";
 
@@ -139,29 +142,59 @@ function Constellation() {
   const [upYear, setUpYear] = useState(null);
   const [upNote, setUpNote] = useState("");
   const [slips, setSlips] = useState([]);
+  /* every file goes to the reading desk: opened on this device (Excel, CSV,
+     Word or PDF tables), checked for privacy, its structure interrogated,
+     and then set before the member for their word */
+  const stateRef = useRef(state);
+  stateRef.current = state;
   async function onFiles(list) {
     const add = [];
     const errSlip = (fname, msg) => ({ id: "s" + Math.random().toString(36).slice(2, 9), fileName: fname, text: "", opts: {}, headers: [], autoMap: {}, autoKind: "unreadable", kind: "unreadable", fields: {}, fixes: {}, stats: { matched: 0, of: 0, held: 0, blank: 0, years: [] }, assumptions: [msg], remembered: null, replaces: false, fingerprint: null });
     for (const f of list) {
-      if (/\.(xlsx|xls)$/i.test(f.name)) {
-        await loadXLSX();
-        try {
-          const wb = window.XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: "array" });
-          for (const sn of wb.SheetNames) {
-            const aoa = window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
-            let hRow = 0;
-            for (let i = 0; i < Math.min(5, aoa.length); i++) if (aoa[i].some((c) => /^upn$/i.test(String(c).trim()))) { hRow = i; break; }
-            if (aoa.length > hRow + 1) add.push(inspect(state, f.name + (wb.SheetNames.length > 1 ? " \u00b7 " + sn : ""), rowsToCsv(aoa.slice(hRow)), { year: upYear, note: upNote }));
-          }
-        } catch (e) {
-          add.push(errSlip(f.name, "could not open workbook: " + (e?.message || e)));
+      const rd = await extract(f);
+      const tables = rd.kind === "table" || rd.kind === "document" ? rd.tables || [] : [];
+      if (tables.length) {
+        for (const t of tables) {
+          const nm = f.name + (tables.length > 1 || rd.kind === "document" ? " \u00b7 " + t.name : "");
+          add.push({ ...inspect(state, nm, rowsToCsv(t.rows), { year: upYear, note: upNote }), desk: { stage: "open" } });
         }
-      } else add.push(inspect(state, f.name, await f.text(), { year: upYear, note: upNote }));
+      } else if (rd.kind === "document") add.push(errSlip(f.name, "a document with no table of pupils in it. Documents (a SEF, a report, a policy) belong in Lens\u2019s Library, where the reading desk reads and files them as evidence."));
+      else if (rd.kind === "scan") add.push(errSlip(f.name, `${rd.note || "a scan"}: its pages are pictures, so there is nothing to read yet. Export the table from the MIS as Excel or CSV instead.`));
+      else add.push(errSlip(f.name, rd.note || "could not be read"));
     }
     setSlips((cur) => [...cur, ...add]);
     setUpNote("");
     setUpYear(null);
+    add.filter((sl) => sl.kind !== "unreadable").forEach((sl) => interrogate(sl));
   }
+  const patchDesk = (id, desk) => setSlips((cur) => cur.map((s) => (s.id === id ? { ...s, desk } : s)));
+  async function interrogate(slip) {
+    const cols = slip.headers.length;
+    const table = { name: slip.fileName, rows: parseCSV(slip.text) };
+    const prep = tablePayload(table, slip.fileName, rulesOf(slip), { note: slip.opts?.note || "", yearGroups: years });
+    if (prep.blocked) { patchDesk(slip.id, { stage: "privacy", blocked: true, leaks: prep.leaks, cols }); return; }
+    patchDesk(slip.id, { stage: "read", busy: true, cols });
+    const res = await askDesk(prep.payload);
+    if (!res || res.error || !res.reading) { patchDesk(slip.id, { stage: "read", failed: true, error: (res && res.error) || "no answer", cols }); return; }
+    setSlips((cur) => cur.map((s) => {
+      if (s.id !== slip.id) return s;
+      const m = mergeTableReading(s, res.reading);
+      /* the member's earlier word (a remembered shape) outranks the desk */
+      const mine = s.fixes || {};
+      if (s.remembered) m.questions = m.questions.filter((q) => !(q.about === "kind" && mine.kind) && !(mine.fields && q.about in mine.fields));
+      const fixes = { ...mine, ...(m.fixes.kind && !mine.kind ? { kind: m.fixes.kind } : {}), fields: { ...(m.fixes.fields || {}), ...(mine.fields || {}) } };
+      const changed = Object.keys(m.fixes).length > 0;
+      const next = changed ? reinspect(stateRef.current, s, fixes) : s;
+      return { ...next, desk: { stage: "word", cols, ...m, answered: {} } };
+    }));
+  }
+  const answerSlip = (slip, q, value) => setSlips((cur) => cur.map((s) => {
+    if (s.id !== slip.id) return s;
+    const fx = s.fixes || {};
+    const fixes = q.about === "kind" ? { ...fx, kind: value } : q.about === "year" ? { ...fx, year: value } : { ...fx, fields: { ...(fx.fields || {}), [q.about]: value } };
+    const next = reinspect(state, s, fixes);
+    return { ...next, desk: { ...s.desk, answered: { ...((s.desk && s.desk.answered) || {}), [q.id]: true } } };
+  }));
   const fixSlip = (slip, fixes) => setSlips((cur) => cur.map((s) => (s.id === slip.id ? reinspect(state, s, fixes) : s)));
   const slipOpts = (slip) => ({ year: slip.fixes?.year ?? slip.opts?.year ?? null, note: slip.opts?.note || null });
   const commitOne = async (slip) => {
@@ -303,7 +336,7 @@ function Constellation() {
                   );
                 })()}
               </div>
-              {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} spineEmpty={!state.roll.length} rollWaiting={rollWaiting} onFix={(fx) => fixSlip(sl, fx)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
+              {slips.map((sl) => <Slip key={sl.id} slip={sl} years={years} spineEmpty={!state.roll.length} rollWaiting={rollWaiting} onFix={(fx) => fixSlip(sl, fx)} onAnswer={(q, v) => answerSlip(sl, q, v)} onRetry={() => interrogate(sl)} onCommit={() => commitOne(sl)} onDiscard={() => discardOne(sl)} />)}
             </div>
           )}
           <div className="asi-rise" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 20, "--asi-d": "280ms" }}>
@@ -322,7 +355,7 @@ function Constellation() {
               <input value={upNote} onChange={(e) => setUpNote(e.target.value)} placeholder="Describe these files, so the analysis knows what it is reading: e.g. Y10 end of year grades, all subjects, Summer 2026" style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(106,12,160,.22)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontFamily: "inherit", margin: "8px 0 2px", background: "#fff" }} />
               <label style={{ display: "block", border: `1.5px dashed rgba(106,12,160,.35)`, borderRadius: 14, padding: "26px 18px", textAlign: "center", cursor: "pointer", margin: "8px 0 6px", background: LILAC, color: DEEP, fontWeight: 600, fontSize: 13.5 }}>
                 Drop files or click to choose
-                <input type="file" multiple accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
+                <input type="file" multiple accept=".csv,.tsv,.xlsx,.xls,.xlsm,.docx,.pdf" style={{ display: "none" }} onChange={(e) => onFiles([...e.target.files])} />
               </label>
               <p style={{ fontSize: 11.5, color: MUTED }}><button onClick={() => { const msg = vaultOn ? "Clear everything Constellation holds for your school: roll, evidence, ledger - for every member, on every device. This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)" : "Clear everything Constellation holds on this device: roll, evidence, ledger? This cannot be undone. (What the reader has learned about your file shapes is kept - header names only, never pupil data.)"; if (window.confirm(msg)) { const d = state.dialects || {}; indexedDB.deleteDatabase("asi-constellation-" + sid); const fresh = { ...blankState(), dialects: d, touched: Date.now() }; setState(fresh); setSlips([]); } }} style={{ border: "none", cursor: "pointer", background: "transparent", color: "#B3261E", fontSize: 11.5, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}>{vaultOn ? "Start the school again" : "Start again on this device"}</button> · {vaultOn ? "Files are read and scored on your device; the results, and the files themselves, live in your school's vault, visible only to its members." : "Read and scored entirely in your browser; nothing is transmitted."} {state.ledger.length ? `${vaultOn ? "In the school's vault" : "Saved on this device"}: ${state.ledger.length} file${state.ledger.length > 1 ? "s" : ""} in the ledger.` : ""}</p>
               {state.review.length > 0 && (
@@ -1099,7 +1132,7 @@ function Metrics({ pupils: all, label }) {
 
 /* ── the reading slip card: the file read back before it lands ── */
 const sel = { border: "1px solid rgba(106,12,160,.25)", borderRadius: 8, padding: "5px 8px", fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#221233", maxWidth: 260 };
-function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard }) {
+function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard, onAnswer, onRetry }) {
   const unread = slip.kind === "unreadable";
   const gated = !unread && slip.kind !== "roll" && spineEmpty; /* nothing to attach to: refuse politely */
   const dead = !unread && !gated && slip.kind !== "roll" && slip.stats.of > 0 && slip.stats.matched === 0;
@@ -1120,6 +1153,8 @@ function Slip({ slip, years, spineEmpty, rollWaiting, onFix, onCommit, onDiscard
         )}
       </div>
       {slip.opts?.note && <div style={{ fontSize: 11.5, color: DEEP, fontStyle: "italic", margin: "4px 0 0" }}>&ldquo;{slip.opts.note}&rdquo;</div>}
+      {!unread && slip.desk && <DeskStages stage={slip.desk.stage} busy={slip.desk.busy} failed={slip.desk.failed || slip.desk.blocked} />}
+      {!unread && slip.desk && <TableDeskPanel desk={slip.desk} onAnswer={onAnswer} onRetry={onRetry} />}
       {slip.remembered && <div style={{ fontSize: 12, color: "#8a6d1c", margin: "6px 0 0" }}>This shape is remembered from <b>{slip.remembered.file}</b>; the correction is already applied below.</div>}
       {slip.replaces && <div style={{ fontSize: 12, color: MUTED, margin: "6px 0 0" }}>Replaces the earlier reading of this file. Nothing changes until you confirm.</div>}
       {!unread && (
