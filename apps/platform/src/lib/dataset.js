@@ -97,6 +97,15 @@ export function getEarly() {
 
 /* the cohort-flow layer: eleven January censuses of year-group rolls plus the
    exclusions series, per school. Heavy, so fetched only when a flow is asked for. */
+/* post-16: the 16 to 18 performance tables (2021/22 to 2024/25), headline
+   measures, L3 value added and A level subjects for every school sixth form
+   and college. Fetched only when a sixth form is in question. */
+let post16Promise = null;
+export function getPost16() {
+  if (!post16Promise) post16Promise = fetch("/data/post16.json" + V()).then((r) => r.json()).catch(() => { post16Promise = null; return null; });
+  return post16Promise;
+}
+
 let flowsPromise = null;
 export function getFlows() {
   if (!flowsPromise) flowsPromise = fetch("/data/flows.json" + V()).then((r) => r.json()).catch(() => ({}));

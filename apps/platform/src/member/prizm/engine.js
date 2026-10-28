@@ -4,6 +4,7 @@
    traceable to its DfE vintage. Nothing in this file calls a network. */
 
 export const VINTAGE = "DfE performance data 2025/26 provisional · arrows against 2024/25 · P8 is 2023/24, the last published";
+export const VINTAGE_P16 = "DfE 16 to 19 performance, 2024/25 final (April 2026) · attainment 2021/22 to 2024/25 · L3 value added 2023/24 and 2024/25 only";
 export const VINTAGE_KS2 = "DfE KS2 data 2024/25, the latest published · arrows against 2023/24 · 2025/26 school-level KS2 publishes December 2026";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -696,6 +697,8 @@ export const BLOCK_TYPES = [
   { type: "early", name: "The early years", desc: "reception and phonics, authority by authority (school-level is not published)" },
   { type: "attendance", name: "Attendance", desc: "overall and persistent absence against England" },
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
+  { type: "post16", name: "Sixth form", desc: "A level and vocational results since 2021/22, L3 value added with its confidence, school by school" },
+  { type: "subjects", name: "A level subjects", desc: "value added and top grades subject by subject, against England" },
   { type: "flow", name: "Cohort flow", desc: "year-group rolls since 2015/16: each cohort tracked stage by stage, shrinkage named school by school, exclusions running beside" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
   { type: "finance", name: "The money", desc: "spend per pupil, reserves and deficits against England" },
@@ -916,6 +919,8 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec, extras
     const intake = years.map((tp, yi) => ({ yi, v: totals[yi][entry] })).filter((p) => p.v > 0);
     return { mode: "flow", years, totals, entry, last, cohorts: cohorts.slice(-9), shrinks: shrinks.slice(0, 12), shrinkN: shrinks.length, excl, intake, n: members.length, of: schools.length, chainedN };
   }
+  if (type === "post16") return post16Block(schools, extras);
+  if (type === "subjects") return subjectsBlock(schools, extras);
   if (type === "early") {
     /* authority-level by necessity: the DfE publishes no school-level EYFSP
        or phonics. The scope's authorities stand in for its schools. */
@@ -996,6 +1001,115 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec, extras
 }
 
 /* a short name for a scope, for chart labels and contrast sentences */
+/* ── post-16: the 16 to 18 performance tables ──
+   p.s[urn].y[year][cohort] = [students, aps, apsGrade, va, vaLo, vaHi, band, retained, ...]
+   A level rows add best-three APS, grade and AAB %; DA = [disadvAps, otherAps, disadvN, otherN].
+   Value added was not published for 2021/22 or 2022/23 (teacher-assessed GCSE baselines). */
+export const P16_YEARS = ["202122", "202223", "202324", "202425"];
+export const P16_LABEL = (tp) => tp.slice(0, 4) + "/" + tp.slice(4);
+const P16_BANDS = { "-2": "Well below average", "-1": "Below average", 0: "Average", 1: "Above average", 2: "Well above average" };
+export const p16Band = (b) => (b == null ? null : P16_BANDS[b]);
+/* the area's sixth form and FE colleges are named beside a place report, not
+   counted in it: a place scope holds its schools, and colleges sit outside it */
+function p16Colleges(p, schools, extras) {
+  const sc = extras && extras.scope;
+  if (!sc || !["la", "town", "pcon"].includes(sc.type)) return [];
+  const las = new Set(schools.map((s) => s.la).filter(Boolean));
+  const known = new Set(schools.map((s) => String(s.urn)));
+  return Object.entries(p.s).filter(([u, r]) => las.has(r.la) && !known.has(u) && /college|16-19|sixth form centre/i.test(r.t || "") && r.y["202425"] && r.y["202425"].A)
+    .map(([u, r]) => ({ urn: u, name: r.n, type: r.t || "College", a: r.y["202425"].A, ac: r.y["202425"].AC || null }));
+}
+function post16Block(schools, extras) {
+  const p = extras && extras.post16;
+  if (!p || !p.s) return null;
+  const L = "202425";
+  const members = schools.map((s) => ({ s, r: p.s[String(s.urn)] })).filter((m) => m.r && Object.keys(m.r.y || {}).length);
+  const colleges = p16Colleges(p, schools, extras);
+  if (!members.length && !colleges.length) return { mode: "post16", n: 0, of: schools.length, empty: true };
+  /* student-weighted means: a sixth form of 300 counts for more than one of 30 */
+  const wmean = (rows) => { let w = 0, t = 0; rows.forEach(([v, n]) => { if (v != null && n) { t += v * n; w += n; } }); return w ? Math.round((t / w) * 100) / 100 : null; };
+  const series = (coh, idx) => P16_YEARS.map((tp) => ({
+    tp, v: wmean(members.map(({ r }) => { const c = r.y[tp] && r.y[tp][coh]; return c ? [c[idx], c[0]] : [null, 0]; })),
+    n: members.reduce((a, { r }) => a + ((r.y[tp] && r.y[tp][coh] && r.y[tp][coh][0]) || 0), 0),
+    nat: p.nat[tp] && p.nat[tp][coh] ? p.nat[tp][coh][idx] : null,
+  }));
+  const aps = series("A", 1), va = series("A", 3).filter((x) => p.vaYears.includes(x.tp));
+  const acVa = series("AC", 3).filter((x) => p.vaYears.includes(x.tp)), agVa = series("AG", 3).filter((x) => p.vaYears.includes(x.tp)), agAps = series("AG", 1);
+  const rows = members.map(({ s, r }) => {
+    const y = r.y[L] || {}, a = y.A, ac = y.AC, ag = y.AG, tl = y.TL, da = y.DA;
+    const prevA = r.y["202324"] && r.y["202324"].A;
+    return {
+      urn: s.urn, name: s.name, la: s.la,
+      aN: a ? a[0] : null, aps: a ? a[1] : null, grade: a ? a[2] : null, va: a ? a[3] : null, lo: a ? a[4] : null, hi: a ? a[5] : null, band: a ? a[6] : null,
+      ret: a ? a[7] : null, b3: a ? a[8] : null, b3g: a ? a[9] : null, aab: a ? a[10] : null,
+      vaPrev: prevA ? prevA[3] : null, apsPrev: prevA ? prevA[1] : null,
+      apsSeries: P16_YEARS.map((tp) => (r.y[tp] && r.y[tp].A ? r.y[tp].A[1] : null)),
+      acVa: ac ? ac[3] : null, acN: ac ? ac[0] : null,
+      agN: ag ? ag[0] : null, agAps: ag ? ag[1] : null, agGrade: ag ? ag[2] : null, agVa: ag ? ag[3] : null,
+      tlN: tl ? tl[0] : null, tlVa: tl ? tl[3] : null,
+      daD: da ? da[0] : null, daO: da ? da[1] : null, daDn: da ? da[2] : null,
+      sig: a && a[4] != null && a[4] > 0 ? 1 : a && a[5] != null && a[5] < 0 ? -1 : 0,
+    };
+  });
+  const withA = rows.filter((r) => r.aN);
+  const bands = { "-2": 0, "-1": 0, 0: 0, 1: 0, 2: 0 };
+  withA.forEach((r) => { if (r.band != null) bands[r.band]++; });
+  const daD = wmean(members.map(({ r }) => { const d = r.y[L] && r.y[L].DA; return d ? [d[0], d[2]] : [null, 0]; }));
+  const daO = wmean(members.map(({ r }) => { const d = r.y[L] && r.y[L].DA; return d ? [d[1], d[3]] : [null, 0]; }));
+  const nat = p.nat[L] || {};
+  return {
+    mode: "post16", n: members.length, of: schools.length, withA: withA.length,
+    students: withA.reduce((a, r) => a + r.aN, 0),
+    aps, va, acVa, agVa, agAps,
+    apsNow: aps[aps.length - 1].v, apsNat: nat.A ? nat.A[1] : null, gradeNat: nat.A ? nat.A[2] : null,
+    vaNow: va.length ? va[va.length - 1].v : null, vaNat: nat.A ? nat.A[3] : null,
+    aab: wmean(withA.map((r) => [r.aab, r.aN])), aabNat: nat.A ? nat.A[10] : null,
+    b3: wmean(withA.map((r) => [r.b3, r.aN])), b3Nat: nat.A ? nat.A[8] : null, b3gNat: nat.A ? nat.A[9] : null,
+    ret: wmean(withA.map((r) => [r.ret, r.aN])), retNat: nat.A ? nat.A[7] : null,
+    daD, daO, daNatD: nat.DA ? nat.DA[0] : null, daNatO: nat.DA ? nat.DA[1] : null,
+    bands, sigUp: withA.filter((r) => r.sig === 1).length, sigDown: withA.filter((r) => r.sig === -1).length,
+    rows: rows.sort((a, b) => (b.va ?? -9) - (a.va ?? -9)),
+    colleges,
+    vintage: p.vintage,
+  };
+}
+function subjectsBlock(schools, extras) {
+  const p = extras && extras.post16;
+  if (!p || !p.s) return null;
+  const L = "202425", P = "202324";
+  const members = schools.map((s) => ({ s, r: p.s[String(s.urn)] })).filter((m) => m.r && (m.r.va || m.r.gr));
+  if (!members.length) return { mode: "subjects", n: 0, empty: true };
+  const single = members.length === 1;
+  const natG = {};
+  (p.natSub[L] || []).forEach(([si, n, a, b]) => { natG[si] = { n, a, b }; });
+  const subs = {};
+  const S = (si) => (subs[si] = subs[si] || { si, name: p.subjects[si], vaW: 0, vaN: 0, vaPW: 0, vaPN: 0, schools: 0, up: 0, down: 0, gN: 0, gA: 0, gB: 0, gEntries: 0, lo: null, hi: null, rows: [] });
+  members.forEach(({ s, r }) => {
+    (r.va && r.va[L] || []).forEach(([si, va, lo, hi, n]) => {
+      const x = S(si);
+      x.vaW += va * (n || 0); x.vaN += n || 0; x.schools++;
+      if (lo != null && lo > 0) x.up++;
+      if (hi != null && hi < 0) x.down++;
+      if (single) { x.lo = lo; x.hi = hi; }
+      x.rows.push({ urn: s.urn, name: s.name, va, lo, hi, n });
+    });
+    (r.va && r.va[P] || []).forEach(([si, va, , , n]) => { const x = S(si); x.vaPW += va * (n || 0); x.vaPN += n || 0; });
+    (r.gr && r.gr[L] || []).forEach(([si, n, a, b]) => { const x = S(si); x.gEntries += n; if (a != null) { x.gN += n; x.gA += (a * n) / 100; x.gB += (b * n) / 100; } });
+  });
+  const rows = Object.values(subs).map((x) => ({
+    name: x.name, entries: x.vaN || x.gEntries, schools: x.schools,
+    va: x.vaN ? Math.round((x.vaW / x.vaN) * 100) / 100 : null,
+    vaPrev: x.vaPN ? Math.round((x.vaPW / x.vaPN) * 100) / 100 : null,
+    lo: x.lo, hi: x.hi, up: x.up, down: x.down,
+    aStarA: x.gN ? Math.round((1000 * x.gA) / x.gN) / 10 : null, aStarB: x.gN ? Math.round((1000 * x.gB) / x.gN) / 10 : null,
+    natA: natG[x.si] ? natG[x.si].a : null, natB: natG[x.si] ? natG[x.si].b : null,
+    sig: x.lo != null && x.lo > 0 ? 1 : x.hi != null && x.hi < 0 ? -1 : 0,
+    bySchool: x.rows.sort((a, b) => b.va - a.va),
+  })).filter((x) => x.va != null && x.entries >= (single ? 1 : 10)).sort((a, b) => b.va - a.va);
+  if (!rows.length) return { mode: "subjects", n: members.length, empty: true };
+  return { mode: "subjects", n: members.length, single, name: single ? members[0].s.name : null, year: L, rows, vintage: p.vintage };
+}
+
 export function scopeShort(scope) {
   if (!scope) return "";
   const place = scope.type === "england" ? "England" : scope.name || (scope.type === "catholicLa" ? "Catholic authorities" : "selection");
@@ -1057,7 +1171,9 @@ export function computeSchoolDash(all, urn, extras) {
       similar = { n: peers.length, rank, med, bins, fsm: r1(fsm), topPct: Math.max(1, Math.round((rank / peers.length) * 100)), v: r1(num(s[mKey])) };
     }
   }
-  return { s, pri, bench: B, dist, standing, similar, early };
+  const p16 = extras && extras.post16 && extras.post16.s && extras.post16.s[String(s.urn)] ? post16Block([s], extras) : null;
+  const subj = p16 ? subjectsBlock([s], extras) : null;
+  return { s, pri, bench: B, dist, standing, similar, early, p16: p16 && !p16.empty ? p16 : null, subj: subj && !subj.empty ? subj : null };
 }
 
 export function computeReport(all, spec, extras) {
@@ -1075,8 +1191,8 @@ export function computeReport(all, spec, extras) {
   }
   const blocks = (spec.blocks || []).map((b) => ({
     type: b.type,
-    data: computeBlock(b.type, schools, all, B, phase, b, extras),
-    vs: vsSchools && b.type !== "league" && b.type !== "early" ? computeBlock(b.type, vsSchools, all, B, phase, b, extras) : null,
+    data: computeBlock(b.type, schools, all, B, phase, b, { ...(extras || {}), scope: spec.scope }),
+    vs: vsSchools && b.type !== "league" && b.type !== "early" ? computeBlock(b.type, vsSchools, all, B, phase, b, { ...(extras || {}), scope: vsScope }) : null,
   })).filter((b) => b.data);
   return {
     schools, vsSchools, bench: B, blocks, phase: phase || "secondary",
@@ -1109,7 +1225,9 @@ export function verifyCommentary(text, findings) {
     .replace(/\b20\d{2}\/\d{2}\b/g, " ")
     .replace(/\b(attainment|progress)\s*8\b/gi, " ")
     .replace(/\b[AP]8\b/g, " ")
-    .replace(/\bkey stage [124]\b/gi, " ").replace(/\bKS[124]\b/gi, " ")
+    .replace(/\bkey stage [1245]\b/gi, " ").replace(/\bKS[1245]\b/gi, " ")
+    .replace(/\b(level|L) ?3\b/gi, " ").replace(/\b16 ?(to|-) ?1[89]\b/gi, " ").replace(/\bpost-?16\b/gi, " ")
+    .replace(/\bbest (three|3)\b/gi, " ").replace(/\bA\*?-[A-E]\b/g, " ")
     .replace(/\bgrade [45]\+?\b/gi, " ").replace(/\b[45]\+ (?:in )?(?:english|E&M)\b/gi, " ")
     .replace(/\bper 100\b/gi, " ")
     .replace(/\byear \d{1,2}\b/gi, " ")

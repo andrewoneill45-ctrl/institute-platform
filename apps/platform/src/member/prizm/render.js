@@ -4,7 +4,7 @@
    column and dumbbell charts with reference lines and tooltips, computed
    narrative headlines, and collapsible tables for the full data. */
 
-import { VINTAGE, VINTAGE_KS2, scopeLabel, r1, RC_GRADES, RC_AREAS } from "./engine.js";
+import { VINTAGE, VINTAGE_KS2, VINTAGE_P16, P16_LABEL, p16Band, scopeLabel, r1, RC_GRADES, RC_AREAS } from "./engine.js";
 
 /* the renewed framework's five-point ramp: deep purple to red, gold for attention */
 const RC_COLS = ["#3D0661", "#6A0CA0", "#B18FD0", "#C6A035", "#B4475A"];
@@ -491,6 +491,132 @@ function flowHtml(d) {
     (exTrend ? `<p class="pz-note" style="margin:18px 0 6px">Suspensions per 100 pupils across the scope, year by year${peTotal ? `; ${peTotal} permanent exclusions over the period` : ""}.</p>` + exTrend : ""));
 }
 
+/* ── post-16 ─────────────────────────────────────────────────────────── */
+const f2 = (v) => (v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(2));
+const BANDC = { "-2": "#B4475A", "-1": "#D98C9A", 0: "#B18FD0", 1: "#8F5BB8", 2: "#3D0661" };
+
+/* two lines through the published years: the scope, and England dashed */
+function dualTrendSvg(points, { min, max, unit = "", dp = 1, a = "Scope", b = "England" }) {
+  const pts = points.filter((p) => p.v != null || p.nat != null);
+  if (pts.length < 2) return "";
+  const W = 660, H = 210, pl = 46, pr = 86, pt = 22, pb = 34;
+  const x = (i) => pl + (i / (points.length - 1)) * (W - pl - pr);
+  const y = (v) => pt + (H - pt - pb) * (1 - (v - min) / (max - min));
+  const F = (v) => (dp === 0 ? String(Math.round(v)) : v.toFixed(dp));
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:660px;height:auto" role="img">`;
+  niceTicks(min, max, 4).forEach((t) => { s += `<line class="gridl" x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}"/><text class="tick" x="${pl - 6}" y="${y(t) + 3.5}" text-anchor="end">${t}${unit}</text>`; });
+  const line = (k, col, dash) => {
+    const seg = points.map((p, i) => (p[k] == null ? null : `${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`)).filter(Boolean);
+    if (seg.length < 2) return "";
+    return `<polyline points="${seg.join(" ")}" fill="none" stroke="${col}" stroke-width="${dash ? 1.6 : 2.6}"${dash ? ' stroke-dasharray="5 4"' : ""}/>`;
+  };
+  s += line("nat", "var(--nat)", true) + line("v", "var(--purple)", false);
+  points.forEach((p, i) => {
+    if (p.nat != null) s += `<circle cx="${x(i)}" cy="${y(p.nat)}" r="3" fill="var(--nat)"/>`;
+    if (p.v != null) s += `<circle cx="${x(i)}" cy="${y(p.v)}" r="4.6" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.6"/><text class="val" x="${x(i)}" y="${y(p.v) - 9}" text-anchor="middle" style="font-size:11px;fill:var(--ink)">${F(p.v)}${unit}</text>`;
+    s += `<text class="tick" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(p.t)}</text>`;
+  });
+  const last = [...points].reverse().find((p) => p.v != null), lastN = [...points].reverse().find((p) => p.nat != null);
+  if (last) s += `<text class="reftxt" x="${W - pr + 8}" y="${y(last.v) + 4}" style="fill:var(--purple);font-weight:600">${esc(a)}</text>`;
+  if (lastN) s += `<text class="reftxt" x="${W - pr + 8}" y="${y(lastN.nat) + (last && Math.abs(y(last.v) - y(lastN.nat)) < 12 ? 16 : 4)}" style="fill:var(--nat)">${esc(b)}</text>`;
+  return s + "</svg>";
+}
+
+/* the forest: each row a dot with its 95% confidence interval; a whisker
+   clear of zero is the only honest "above" or "below" */
+function forestSvg(rows, { label = "School", note = "" } = {}) {
+  if (!rows.length) return "";
+  const lo = Math.min(-0.6, ...rows.map((r) => (r.lo != null ? r.lo : r.v) - 0.05));
+  const hi = Math.max(0.6, ...rows.map((r) => (r.hi != null ? r.hi : r.v) + 0.05));
+  const W = 760, rh = 22, pl = 230, pr = 64, pt = 26, H = pt + rows.length * rh + 26;
+  const x = (v) => pl + ((v - lo) / (hi - lo)) * (W - pl - pr);
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:760px;height:auto" role="img">`;
+  niceTicks(lo, hi, 6).forEach((t) => { s += `<line class="gridl" x1="${x(t)}" x2="${x(t)}" y1="${pt - 6}" y2="${H - 22}"/><text class="tick" x="${x(t)}" y="${H - 8}" text-anchor="middle">${t > 0 ? "+" : ""}${t}</text>`; });
+  s += `<line x1="${x(0)}" x2="${x(0)}" y1="${pt - 10}" y2="${H - 22}" stroke="var(--ink)" stroke-width="1.2"/><text class="reftxt" x="${x(0)}" y="${pt - 13}" text-anchor="middle">England's expected progress</text>`;
+  rows.forEach((r, i) => {
+    const cy = pt + i * rh + rh / 2;
+    const col = r.sig === 1 ? "var(--purple)" : r.sig === -1 ? "var(--red)" : "var(--muted)";
+    const tip = [r.label, `Value added ${f2(r.v)}${r.lo != null ? ` (95% interval ${f2(r.lo)} to ${f2(r.hi)})` : ""}`, ...(r.tip || [])];
+    s += `<g${hit(tip, r.urn)}><rect x="0" y="${cy - rh / 2}" width="${W}" height="${rh}" fill="transparent"/>`;
+    s += `<text class="lab" x="${pl - 10}" y="${cy + 4}" text-anchor="end" style="font-size:11.5px;fill:var(--ink)">${esc(short(r.label, 34))}</text>`;
+    if (r.lo != null && r.hi != null) s += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="2" opacity="0.55"/>`;
+    s += `<circle cx="${x(r.v)}" cy="${cy}" r="5" fill="${col}"/><text class="val" x="${W - pr + 8}" y="${cy + 4}" style="font-size:11px;fill:${col};font-weight:600">${f2(r.v)}</text></g>`;
+  });
+  return s + "</svg>";
+}
+
+function post16Html(d, ctx) {
+  if (!d || d.mode !== "post16") return "";
+  const L = ctx && ctx.labels ? ctx.labels.a : null;
+  if (d.empty) return section("Sixth form", `None of the ${d.of} schools in scope publishes 16 to 18 results.`, "The 16 to 19 performance tables cover school sixth forms, sixth form colleges and FE colleges; a scope of 11 to 16 schools has none.", "");
+  const single = d.n === 1 && d.rows.length === 1;
+  const one = single ? d.rows[0] : null;
+  const gap = d.daD != null && d.daO != null ? r1(d.daO - d.daD) : null, natGap = d.daNatD != null && d.daNatO != null ? r1(d.daNatO - d.daNatD) : null;
+  const bandWord = (b) => (p16Band(b) || "").toLowerCase();
+  const headline = single
+    ? `${esc(one.name)}: ${one.aN} A level students averaging ${f1(one.aps)} points per entry (${esc(one.grade || "–")}) in 2024/25, against England's ${f1(d.apsNat)}; value added ${f2(one.va)}, ${bandWord(one.band) || "not banded"}.`
+    : `${d.withA} of ${d.of} schools in scope ran A level cohorts in 2024/25: ${d.students.toLocaleString("en-GB")} students averaging ${f1(d.apsNow)} points per entry against England's ${f1(d.apsNat)}, with value added of ${f2(d.vaNow)} (England ${f2(d.vaNat)}). ${d.sigUp} ${d.sigUp === 1 ? "sixth form sits" : "sixth forms sit"} clearly above expected progress, ${d.sigDown} clearly below.`;
+  const tiles = [
+    { n: f1(single ? one.aps : d.apsNow), p: `A level points per entry in 2024/25${single ? `, grade ${esc(one.grade || "–")}` : ", student-weighted"}, against England's ${f1(d.apsNat)} (${esc(d.gradeNat || "")}).`, c: `${P16_LABEL("202324")}: ${f1(single ? one.apsPrev : d.aps[2].v)} · ${P16_LABEL("202122")}: ${f1(single ? one.apsSeries[0] : d.aps[0].v)}` },
+    { n: f2(single ? one.va : d.vaNow), p: `A level value added: grades against those of students nationally with the same GCSE results. England's state sector ${f2(d.vaNat)}.`, c: single ? (one.lo != null ? `95% interval ${f2(one.lo)} to ${f2(one.hi)} · ${P16_LABEL("202324")}: ${f2(one.vaPrev)}` : "") : `${P16_LABEL("202324")}: ${f2(d.va[0] && d.va[0].v)}` },
+    { n: (single ? one.aab : d.aab) != null ? f1(single ? one.aab : d.aab) + "<small>%</small>" : "–", p: `achieved AAB or better, two in facilitating subjects, against England's ${f1(d.aabNat)}%.`, c: `best three A levels ${f1(single ? one.b3 : d.b3)} (${esc(single ? one.b3g || "–" : "")}${single ? "" : "England " + f1(d.b3Nat)})` },
+    { n: (single ? one.ret : d.ret) != null ? f1(single ? one.ret : d.ret) + "<small>%</small>" : "–", p: `of A level students retained to the end of their main programme, against England's ${f1(d.retNat)}%.`, c: gap != null ? `disadvantaged ${f1(single ? one.daD : d.daD)} vs others ${f1(single ? one.daO : d.daO)} points per entry` : "" },
+  ];
+  const tileHtml = `<div class="pz-tiles">${tiles.map((t) => `<div class="pz-tile"><div class="n">${t.n}</div><p>${t.p}</p>${t.c ? `<div class="cmp">${t.c}</div>` : ""}</div>`).join("")}</div>`;
+
+  /* four years of attainment, two of value added */
+  const pts = d.aps.map((x) => ({ t: P16_LABEL(x.tp), v: single ? one.apsSeries[d.aps.indexOf(x)] : x.v, nat: x.nat }));
+  const vals = pts.flatMap((p) => [p.v, p.nat]).filter((v) => v != null);
+  const trend = dualTrendSvg(pts, { min: Math.floor((Math.min(...vals) - 3) / 5) * 5, max: Math.ceil((Math.max(...vals) + 3) / 5) * 5, a: single ? "This school" : L && L.length <= 14 ? L : "Scope" });
+
+  const forest = single ? "" : forestSvg(d.rows.filter((r) => r.va != null).map((r) => ({
+    label: r.name, urn: r.urn, v: r.va, lo: r.lo, hi: r.hi, sig: r.sig,
+    tip: [`${r.aN} A level students · ${f1(r.aps)} points per entry (${r.grade || "–"})`, `${p16Band(r.band) || ""}${r.vaPrev != null ? ` · 2023/24 ${f2(r.vaPrev)}` : ""}`],
+  })));
+  const bandRow = single ? "" : legend([[BANDC[2], `Well above ${d.bands[2]}`], [BANDC[1], `Above ${d.bands[1]}`], [BANDC[0], `Average ${d.bands[0]}`], [BANDC[-1], `Below ${d.bands[-1]}`], [BANDC[-2], `Well below ${d.bands[-2]}`]]);
+
+  const routes = [];
+  const agN = single ? one.agN : d.rows.reduce((a, r) => a + (r.agN || 0), 0);
+  if (agN) routes.push(`applied general (vocational) students ${agN.toLocaleString("en-GB")}, value added ${f2(single ? one.agVa : d.agVa.length ? d.agVa[d.agVa.length - 1].v : null)}`);
+  const gapLine = gap != null ? ` Disadvantaged A level students average ${f1(single ? one.daD : d.daD)} points per entry against ${f1(single ? one.daO : d.daO)} for others${natGap != null ? `, a gap of ${f1(single ? r1(one.daO - one.daD) : gap)} against England's ${f1(natGap)}` : ""}.` : "";
+
+  const tbl = single ? "" : `<details class="pz-fold"><summary>Every sixth form, measure by measure<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>A level students</th><th>Points per entry</th><th>Value added</th><th>Band</th><th>2023/24 VA</th><th>AAB</th><th>Retained</th><th>Disadv. / others</th><th>Applied general VA</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${r.aN ?? "–"}</td><td class="num">${f1(r.aps)} ${esc(r.grade || "")}</td><td class="num" style="font-weight:600;color:${r.sig === 1 ? "var(--purple)" : r.sig === -1 ? "var(--red)" : "inherit"}">${f2(r.va)}</td><td class="num">${esc(p16Band(r.band) || "–")}</td><td class="num">${f2(r.vaPrev)}</td><td class="num">${r.aab != null ? f1(r.aab) + "%" : "–"}</td><td class="num">${r.ret != null ? f1(r.ret) + "%" : "–"}</td><td class="num">${f1(r.daD)} / ${f1(r.daO)}</td><td class="num">${f2(r.agVa)}</td></tr>`).join("")}</tbody></table></details>`;
+  const coll = d.colleges && d.colleges.length ? `<details class="pz-fold"><summary>Colleges in the same area, outside this scope<span>${d.colleges.length}</span></summary><table class="pz-table"><thead><tr><th>College</th><th>Type</th><th>A level students</th><th>Points per entry</th><th>Value added</th><th>Academic VA</th></tr></thead><tbody>${d.colleges.map((c) => `<tr><td class="nm">${esc(c.name)}</td><td>${esc(c.type)}</td><td class="num">${c.a[0] ?? "–"}</td><td class="num">${f1(c.a[1])} ${esc(c.a[2] || "")}</td><td class="num">${f2(c.a[3])}</td><td class="num">${f2(c.ac ? c.ac[3] : null)}</td></tr>`).join("")}</tbody></table></details>` : "";
+
+  const NOTE = `DfE 16 to 19 performance tables, final data. Points per entry: A* = 60, A = 50, B = 40, C = 30, D = 20, E = 10. Value added compares each student's grades with those of students nationally with similar GCSE results; 0 is expected progress, +0.5 is half a grade per entry above it. It was not published for 2021/22 or 2022/23, because those students' GCSEs were teacher-assessed, so the value added line has two points. A sixth form is clearly above or below only when its 95% interval clears zero.`;
+  return section("Sixth form", headline, NOTE,
+    tileHtml +
+    (trend ? `<p class="pz-note" style="margin:16px 0 6px">A level points per entry, every published year${single ? "" : ", student-weighted across the scope"}; England's state sector dashed.</p>` + trend : "") +
+    (forest ? `<p class="pz-note" style="margin:18px 0 6px">A level value added, 2024/25: each dot a sixth form, each line its 95% confidence interval. Purple clears zero above, red below.</p>` + forest + bandRow : "") +
+    (routes.length || gapLine ? `<p class="pz-note" style="margin:14px 0 0">${routes.length ? "Beyond A level: " + esc(routes.join("; ")) + "." : ""}${gapLine}</p>` : "") +
+    tbl + coll);
+}
+
+function subjectsHtml(d) {
+  if (!d || d.mode !== "subjects") return "";
+  if (d.empty) return section("A level subjects", "No A level subject results are published for this scope.", "", "");
+  /* the headline names subjects with enough entries to mean something */
+  const solid = d.rows.filter((r) => r.entries >= (d.single ? 10 : 30));
+  const pool = solid.length >= 2 ? solid : d.rows;
+  const top = pool[0], low = pool[pool.length - 1];
+  const list = (rs) => rs.map((r) => `${esc(r.name)} (${f2(r.va)})`).join(rs.length > 2 ? ", " : " and ");
+  const ups = d.rows.filter((r) => r.sig === 1), downs = d.rows.filter((r) => r.sig === -1);
+  const headline = d.single
+    ? (ups.length || downs.length
+      ? `${esc(d.name)}, 2024/25: ${ups.length ? `clearly above expected progress in ${list(ups.slice(0, 3))}` : "no subject clearly above expected progress"}; ${downs.length ? `clearly below in ${list(downs.slice(0, 3))}` : "none clearly below"}.`
+      : `${esc(d.name)}, 2024/25: no subject's interval clears zero. The strongest point estimate is ${esc(top.name)} (${f2(top.va)}), the weakest ${esc(low.name)} (${f2(low.va)}).`)
+    : `Across ${d.n} sixth forms, ${esc(top.name)} added most in 2024/25 (${f2(top.va)} over ${top.entries.toLocaleString("en-GB")} entries) and ${esc(low.name)} least (${f2(low.va)}).`;
+  const forest = forestSvg(d.rows.map((r) => ({
+    label: r.name, v: r.va, lo: r.lo, hi: r.hi, sig: d.single ? r.sig : r.va >= 0.15 ? 1 : r.va <= -0.15 ? -1 : 0,
+    tip: [`${r.entries} entries${d.single ? "" : ` across ${r.schools} school${r.schools === 1 ? "" : "s"}`}`, `A*-A ${r.aStarA != null ? f1(r.aStarA) + "%" : "–"} (England ${r.natA != null ? f1(r.natA) + "%" : "–"}) · A*-B ${r.aStarB != null ? f1(r.aStarB) + "%" : "–"} (England ${r.natB != null ? f1(r.natB) + "%" : "–"})`, r.vaPrev != null ? `2023/24 value added ${f2(r.vaPrev)}` : "", ...(!d.single && (r.up || r.down) ? [`${r.up} school${r.up === 1 ? "" : "s"} clearly above, ${r.down} clearly below`] : [])].filter(Boolean),
+  })));
+  const tbl = `<details class="pz-fold"${d.single ? " open" : ""}><summary>Subject by subject<span>${d.rows.length} subjects</span></summary><table class="pz-table"><thead><tr><th>Subject</th><th>Entries</th><th>Value added</th>${d.single ? "<th>95% interval</th>" : "<th>Schools</th>"}<th>2023/24</th><th>A*-A</th><th>England A*-A</th><th>A*-B</th><th>England A*-B</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${r.entries}</td><td class="num" style="font-weight:600;color:${r.sig === 1 ? "var(--purple)" : r.sig === -1 ? "var(--red)" : "inherit"}">${f2(r.va)}</td><td class="num">${d.single ? (r.lo != null ? `${f2(r.lo)} to ${f2(r.hi)}` : "–") : `${r.schools}${r.up || r.down ? ` (${r.up}↑ ${r.down}↓)` : ""}`}</td><td class="num">${f2(r.vaPrev)}</td><td class="num">${r.aStarA != null ? f1(r.aStarA) + "%" : "–"}</td><td class="num">${r.natA != null ? f1(r.natA) + "%" : "–"}</td><td class="num">${r.aStarB != null ? f1(r.aStarB) + "%" : "–"}</td><td class="num">${r.natB != null ? f1(r.natB) + "%" : "–"}</td></tr>`).join("")}</tbody></table></details>`;
+  const NOTE = d.single
+    ? "Subject value added, 2024/25: each subject's grades against those of students nationally with similar GCSE results; the line is its 95% confidence interval, so a small class's line is long. Purple clears zero above, red below. Grade shares from the same year's entries; small counts the DfE suppresses are left out."
+    : "Subject value added, 2024/25, pooled across the scope's sixth forms and weighted by entries; subjects with fewer than 10 entries are left out. Purple marks +0.15 or better (an eighth of a grade per entry), red −0.15 or worse; the tooltips count the schools whose own interval clears zero. Grade shares from the same year.";
+  return section("A level subjects", headline, NOTE, forest + tbl);
+}
+
 function behaviourHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.suspMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}: ${f1(ctx.vs.suspMean)} per 100, ${ctx.vs.pexZero} with none.` : "";
@@ -972,6 +1098,7 @@ export function schoolDashHtml(d) {
   ${similarHtml(d.similar, pri, s.name)}
   ${trendSection}
   ${recordSection}
+  ${d.p16 ? `<div class="pz-vintage" style="margin-top:28px">${esc(VINTAGE_P16)}</div>` + post16Html(d.p16, {}) + subjectsHtml(d.subj) : ""}
   ${d.dist ? distributionHtml(d.dist, {}) : ""}`;
 }
 
@@ -983,7 +1110,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, post16: post16Html, subjects: subjectsHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};
@@ -1002,7 +1129,7 @@ export function renderBlock(b, computed, seg) {
 
 /* ── house style ───────────────────────────────────────────────────────── */
 export const PZ_CSS = `
-  .pz-report{--purple:#6A0CA0;--purple-deep:#4B0875;--gold:#C6A035;--gold-soft:#E4CE8B;--paper:#FBFAF7;--card:#fff;--lilac:#F4EEFA;--dark:#241238;--ink:#221233;--muted:#6F6580;--hair:rgba(106,12,160,.14);--grid:rgba(34,18,51,.2);--nat:#8A8296;--slo:#DCD6E2;--up:#6A0CA0;--down:#B4475A;
+  .pz-report{--purple:#6A0CA0;--purple-deep:#4B0875;--gold:#C6A035;--gold-soft:#E4CE8B;--paper:#FBFAF7;--card:#fff;--lilac:#F4EEFA;--dark:#241238;--ink:#221233;--muted:#6F6580;--hair:rgba(106,12,160,.14);--grid:rgba(34,18,51,.2);--nat:#8A8296;--slo:#DCD6E2;--up:#6A0CA0;--down:#B4475A;--red:#B4475A;
     background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif;border:1px solid var(--hair);padding:54px 60px;box-shadow:0 18px 50px rgba(34,18,51,.07)}
   .pz-report h1,.pz-report h2{font-family:Fraunces,Georgia,serif;font-weight:500;letter-spacing:-.012em;color:var(--ink);text-wrap:balance;margin:0}
   .pz-wordmark{font-family:Fraunces,Georgia,serif;font-weight:500;letter-spacing:-.012em;line-height:1;color:var(--ink);display:inline-block;font-size:44px}

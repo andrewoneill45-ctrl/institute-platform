@@ -26,7 +26,7 @@
       "lastVersion": null,
       "lastPulled": null,
       "output": "apps/platform/public/data/pulse.json",
-      "notes": "National, regional and LA-level only \u2014 NOT school-level \u2014 so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
+      "notes": "National, regional and LA-level only — NOT school-level — so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
     },
     {
       "key": "gias",
@@ -64,7 +64,7 @@
       "lastVersion": "2024-25 financial year (CFR Full Data Workbook + AAR download)",
       "lastPulled": "2026-10-22",
       "output": "apps/platform/public/data/schools.json (fin_* fields)",
-      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to \u00a31,000s at source."
+      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to £1,000s at source."
     },
     {
       "key": "send",
@@ -137,6 +137,19 @@
       "lastPulled": "2026-10-23",
       "output": "apps/platform/public/data/flows.json",
       "notes": "trust_name per school per year from the same file gives trust membership windows; suppressed cells (x, z) stored as -1 and left out of rates."
+    },
+    {
+      "key": "post16",
+      "name": "16 to 18 performance tables: A level and vocational results, L3 value added, A level subjects, per school and college",
+      "publisher": "Department for Education",
+      "route": "ees-data-set-files",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/16-to-19-performance",
+      "apiDataSetId": null,
+      "cadence": "Provisional in the autumn, final in the spring (2024/25 final published 23 April 2026; 2025/26 provisional expected late 2026)",
+      "lastVersion": "2024/25 final (published 23 April 2026, updated 24 July 2026); subject tables 2023/24 and 2024/25",
+      "lastPulled": "2026-10-28",
+      "output": "apps/platform/public/data/post16.json",
+      "notes": "Institution-level files fetched with content.explore-education-statistics.service.gov.uk/api/data-set-files/{id}/download and built by data/pipeline/post16-build.py. Headline attainment 2021/22 to 2024/25; L3 value added (headline and subject) exists for 2023/24 and 2024/25 only, as the DfE did not publish it for cohorts with teacher-assessed GCSE baselines. Best three A levels and AAB are published for 2024/25 only in this release. Subject names are unified across years (e.g. Computer Studies/Computing = Computer Science)."
     }
   ]
 }
