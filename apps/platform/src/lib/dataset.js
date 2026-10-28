@@ -100,6 +100,15 @@ export function getEarly() {
 /* post-16: the 16 to 18 performance tables (2021/22 to 2024/25), headline
    measures, L3 value added and A level subjects for every school sixth form
    and college. Fetched only when a sixth form is in question. */
+/* demand and places: applications and offers 2014/15 to 2026/27, capacity
+   returns and planning-area forecasts. Fetched when asked for, or when a
+   school page opens. */
+let placesPromise = null;
+export function getPlaces() {
+  if (!placesPromise) placesPromise = fetch("/data/places.json" + V()).then((r) => r.json()).catch(() => { placesPromise = null; return null; });
+  return placesPromise;
+}
+
 let post16Promise = null;
 export function getPost16() {
   if (!post16Promise) post16Promise = fetch("/data/post16.json" + V()).then((r) => r.json()).catch(() => { post16Promise = null; return null; });

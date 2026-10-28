@@ -4,7 +4,7 @@
    column and dumbbell charts with reference lines and tooltips, computed
    narrative headlines, and collapsible tables for the full data. */
 
-import { VINTAGE, VINTAGE_KS2, VINTAGE_P16, P16_LABEL, p16Band, scopeLabel, r1, RC_GRADES, RC_AREAS } from "./engine.js";
+import { VINTAGE, VINTAGE_KS2, VINTAGE_P16, VINTAGE_PLACES, PL_LABEL, P16_LABEL, p16Band, scopeLabel, r1, RC_GRADES, RC_AREAS } from "./engine.js";
 
 /* the renewed framework's five-point ramp: deep purple to red, gold for attention */
 const RC_COLS = ["#3D0661", "#6A0CA0", "#B18FD0", "#C6A035", "#B4475A"];
@@ -60,7 +60,7 @@ function columnsSvg({ rows, refs = [], min, max, unit = "", dp = 1 }) {
   });
   /* spread reference labels */
   const rs = refs.slice().sort((a, b) => y(b.v) - y(a.v)); rs.forEach((rf, i) => { if (i > 0) { const gap = (y(rs[i - 1].v) + (rs[i - 1].dy || 0)) - (y(rf.v) + (rf.dy || 0)); if (gap < 13) rf.dy = (rf.dy || 0) - (13 - gap); } });
-  refs.forEach((rf) => { const yy = y(rf.v); s += `<line x1="${pl}" x2="${W - pr + 6}" y1="${yy}" y2="${yy}" stroke="${rf.color}" stroke-width="1.6" stroke-dasharray="5 4"/><text class="reftxt" x="${W - pr + 10}" y="${yy + (rf.dy || 0) + 4}" style="fill:${rf.color}">${rf.label} ${rf.v.toFixed(1)}${unit}</text>`; });
+  refs.forEach((rf) => { const yy = y(rf.v); s += `<line x1="${pl}" x2="${W - pr + 6}" y1="${yy}" y2="${yy}" stroke="${rf.color}" stroke-width="1.6" stroke-dasharray="5 4"/><text class="reftxt" x="${W - pr + 10}" y="${yy + (rf.dy || 0) + 4}" style="fill:${rf.color}">${rf.label} ${rf.v.toFixed(dp)}${unit}</text>`; });
   return s + "</svg>";
 }
 
@@ -617,6 +617,97 @@ function subjectsHtml(d) {
   return section("A level subjects", headline, NOTE, forest + tbl);
 }
 
+/* ── demand and places ───────────────────────────────────────────────── */
+const f2r = (v) => (v == null ? "–" : v.toFixed(2));
+const pct = (v) => (v == null ? "–" : (v > 0 ? "+" : "") + v + "%");
+const n0 = (v) => (v == null ? "–" : Math.round(v).toLocaleString("en-GB"));
+/* a sparkline of first preferences, for tables */
+function sparkSvg(vals) {
+  const pts = vals.map((v, i) => [i, v]).filter((p) => p[1] != null);
+  if (pts.length < 2) return "";
+  const mx = Math.max(...pts.map((p) => p[1]), 1), n = vals.length - 1 || 1;
+  const d = pts.map((p) => `${(4 + (p[0] * 92) / n).toFixed(1)},${(22 - (p[1] / mx) * 18).toFixed(1)}`).join(" ");
+  const up = pts[pts.length - 1][1] >= pts[0][1];
+  return `<svg viewBox="0 0 100 26" width="100" height="26" style="vertical-align:middle"><polyline points="${d}" fill="none" stroke="${up ? "var(--purple)" : "var(--red)"}" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+}
+
+function demandHtml(d, ctx) {
+  if (!d || d.mode !== "demand") return "";
+  if (d.empty) return section("Demand", "No applications and offers are published for the schools in scope.", "", "");
+  const YL = PL_LABEL, single = d.n === 1, one = single ? d.rows[0] : null;
+  const intake = d.PRI ? "Reception" : "Year 7";
+  const L = ctx && ctx.labels ? ctx.labels.a : null;
+  const headline = single
+    ? `${n0(one.first)} families put ${esc(one.name)} first for ${n0(one.places)} ${intake} places offered for ${YL(d.L).slice(0, 4).replace(/^(\d{4})$/, (y) => "September " + y)}: ${f2r(one.ratio)} per place${one.ch5 != null ? `, ${one.ch5 >= 0 ? "up" : "down"} ${Math.abs(one.ch5)}% on ${YL(d.B5)}` : ""}.`
+    : `${f2r(d.ratioNow)} first preferences for every ${intake} place offered for September ${d.L.slice(0, 4)}, against an England school median of ${f2r(d.nat.medRatio)}. ${d.under1} of ${d.n} schools drew fewer first preferences than places; ${d.gainingN} gained a quarter or more over five years and ${d.losingN} lost as much.`;
+  const tiles = single ? [
+    { n: f2r(one.ratio), p: `first preferences per place offered for ${YL(d.L)}; England's school median is ${f2r(d.nat.medRatio)}.`, c: `${n0(one.any)} named it at all, ${f2r(one.places ? one.any / one.places : null)} per place` },
+    { n: one.got1 != null ? one.got1 + "<small>%</small>" : "–", p: "of the families who put it first were offered a place: the measure of how hard it is to get in.", c: `${n0(one.offers1)} first-preference offers` },
+    { n: pct(one.ch5), p: `change in first preferences since ${YL(d.B5)}, when ${n0(one.first5)} families put it first.`, c: "" },
+    { n: one.any ? Math.round((100 * one.otherLa) / one.any) + "<small>%</small>" : "–", p: "of its applications came from families in another local authority: how far its pull reaches.", c: `${n0(one.otherLa)} applications from beyond ${esc(one.la || "the authority")}` },
+  ] : [
+    { n: f2r(d.ratioNow), p: `first preferences per place across the scope for ${YL(d.L)}, against an England school median of ${f2r(d.nat.medRatio)}.`, c: `${YL(d.B5)}: ${f2r(d.ratio5)}` },
+    { n: String(d.under1), p: `of ${d.n} schools drew fewer first preferences than the places they offered.`, c: `${d.over2} drew two or more per place` },
+    { n: String(d.gainingN), p: `schools where first preferences rose by a quarter or more since ${YL(d.B5)}.`, c: d.gaining[0] ? `largest: ${esc(short(d.gaining[0].name, 24))} ${pct(d.gaining[0].ch5)}` : "" },
+    { n: String(d.losingN), p: `schools where first preferences fell by a quarter or more over the same five years.`, c: d.losing[0] ? `largest: ${esc(short(d.losing[0].name, 24))} ${pct(d.losing[0].ch5)}` : "" },
+  ];
+  const tileHtml = `<div class="pz-tiles">${tiles.map((t) => `<div class="pz-tile"><div class="n">${t.n}</div><p>${t.p}</p>${t.c ? `<div class="cmp">${t.c}</div>` : ""}</div>`).join("")}</div>`;
+  let trend;
+  if (single) {
+    const h = d.tot;
+    const vals = h.flatMap((t) => [t.first, t.places]).filter((v) => v);
+    trend = dualTrendSvg(h.map((t) => ({ t: YL(t.y).slice(2), v: t.first || null, nat: t.places || null })), { min: 0, max: Math.ceil((Math.max(...vals) * 1.12) / 50) * 50, dp: 0, a: "First prefs", b: "Places" });
+  } else {
+    const pts = d.tot.map((t, i) => ({ t: YL(t.y).slice(2), v: t.ratio, nat: d.nat.years[i] ? d.nat.years[i].ratio : null }));
+    const vals = pts.flatMap((p) => [p.v, p.nat]).filter((v) => v != null);
+    trend = dualTrendSvg(pts, { min: Math.max(0, Math.floor((Math.min(...vals) - 0.06) * 20) / 20), max: Math.ceil((Math.max(...vals) + 0.06) * 20) / 20, dp: 2, a: L && L.length <= 14 ? L : "Scope" });
+  }
+  const { rows: shown, capped, segNote } = single ? { rows: [] } : capRows(d.rows.filter((r) => r.ratio != null).map((r) => ({
+    label: r.name, v: r.ratio, urn: r.urn,
+    tipLines: [r.name, `${r.first} first preferences for ${r.places} places: ${f2r(r.ratio)} per place`, `${r.got1 != null ? r.got1 + "% of first preferences offered" : ""}${r.ch5 != null ? ` · ${pct(r.ch5)} since ${YL(d.B5)}` : ""}`],
+  })));
+  const cols = shown.length ? columnsSvg({ rows: shown, min: 0, max: Math.max(2, Math.ceil(Math.max(...d.rows.map((r) => r.ratio || 0)) + 0.3)), dp: 2, refs: [{ v: 1, label: "One per place", color: "var(--gold)" }, { v: d.nat.medRatio, label: "England", color: "var(--nat)", dy: 12 }] }) : "";
+  const moverTbl = (title, list, n) => (list.length ? `<details class="pz-fold"><summary>${title}<span>${n} school${n === 1 ? "" : "s"}</span></summary><table class="pz-table"><thead><tr><th>School</th><th>${YL(d.B5)}</th><th>${YL(d.L)}</th><th>Change</th><th>Per place now</th><th>Since ${YL(d.years[0])}</th></tr></thead><tbody>${list.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${n0(r.first5)}</td><td class="num">${n0(r.first)}</td><td class="num" style="font-weight:600;color:${r.ch5 >= 0 ? "var(--purple)" : "var(--red)"}">${pct(r.ch5)}</td><td class="num">${f2r(r.ratio)}</td><td>${sparkSvg(r.series)}</td></tr>`).join("")}</tbody></table></details>` : "");
+  const tbl = single ? "" : `<details class="pz-fold"><summary>Every school, first preferences and places<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Places offered</th><th>First prefs</th><th>Per place</th><th>Any preference</th><th>First prefs offered</th><th>From another LA</th><th>Five-year change</th><th>Since ${YL(d.years[0])}</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${n0(r.places)}</td><td class="num">${n0(r.first)}</td><td class="num" style="font-weight:600">${f2r(r.ratio)}</td><td class="num">${n0(r.any)}</td><td class="num">${r.got1 != null ? r.got1 + "%" : "–"}</td><td class="num">${r.any ? Math.round((100 * r.otherLa) / r.any) + "%" : "–"}</td><td class="num">${pct(r.ch5)}</td><td>${sparkSvg(r.series)}</td></tr>`).join("")}</tbody></table></details>`;
+  const NOTE = `DfE applications and offers, school level, for entry in September ${d.years[0].slice(0, 4)} to September ${d.L.slice(0, 4)}. A first preference is a family ranking the school first on the common application; places offered is the number of offers made on national offer day, close to but not always the published admission number. Above 1.0 a school is oversubscribed by first preferences alone. The five-year change compares ${YL(d.L)} with ${YL(d.B5)} and is shown where at least 20 families put the school first.${d.chainedN ? ` ${d.chainedN} school${d.chainedN === 1 ? "" : "s"} changed URN on academisation; histories stitched into one line.` : ""}`;
+  return section("Demand", headline, NOTE,
+    tileHtml +
+    (trend ? `<p class="pz-note" style="margin:16px 0 6px">${single ? `First preferences against ${intake} places offered, every intake since ${YL(d.years[0])}.` : `First preferences per place across the scope, every intake since ${YL(d.years[0])}; England's all-school ratio dashed.`}</p>` + trend : "") +
+    (cols ? `<p class="pz-note" style="margin:18px 0 6px">${segNote || ""}${capped ? `The two ends of ${d.rows.length} schools. ` : ""}First preferences per place for ${YL(d.L)}, school by school; the gold line is one per place.</p>` + cols : "") +
+    (single ? "" : moverTbl("Gaining families: first preferences up a quarter or more", d.gaining, d.gainingN) + moverTbl("Losing families: first preferences down a quarter or more", d.losing, d.losingN)) + tbl);
+}
+
+function capacityHtml(d, ctx) {
+  if (!d || d.mode !== "capacity") return "";
+  if (d.empty) return section("Places", "No capacity returns are published for the schools in scope.", "", "");
+  const YL = PL_LABEL, single = d.n === 1, one = single ? d.rows[0] : null;
+  const pa = d.pas[0] || null;
+  const paLine = pa ? ` The DfE forecasts ${d.PRI ? "primary" : "secondary"} pupils in ${esc(pa.name === "All Secondary" || pa.name === "All Primary" ? pa.la : pa.name)} ${pa.f1 < pa.f0 ? "falling" : "rising"} from ${n0(pa.f0)} to ${n0(pa.f1)} by ${YL(pa.y1)}, against ${n0(pa.cap)} places: ${pa.sparePct >= 0 ? `${f1(pa.sparePct)}% spare` : `${f1(-pa.sparePct)}% short`}.` : "";
+  const headline = single
+    ? `${esc(one.name)} has ${n0(one.roll)} pupils for ${n0(one.cap)} places (${f1(one.fill)}% full) in the ${YL(d.L)} return.${paLine}`
+    : `The ${d.n} schools in scope are ${f1(d.fillNow)}% full in the ${YL(d.L)} return (England ${f1(d.nat.fill)}%), with ${n0(d.spareNow)} spare places in all; ${d.under85} of them are under 85% full.${paLine}`;
+  const tiles = [
+    { n: f1(single ? one.fill : d.fillNow) + "<small>%</small>", p: `of places filled, ${YL(d.L)}; England's ${d.PRI ? "primaries" : "secondaries"} ${f1(d.nat.fill)}%.`, c: single ? (one.over ? `${one.over} pupils over capacity` : `${n0(one.spare)} spare places`) : `${d.overN} school${d.overN === 1 ? "" : "s"} over capacity` },
+    pa ? { n: (pa.sparePct >= 0 ? "" : "&minus;") + f1(Math.abs(pa.sparePct)) + "<small>%</small>", p: `places forecast spare by ${YL(pa.y1)} in ${esc(pa.name)}, the planning area${d.pas.length > 1 ? " with most room of " + d.pas.length : ""}.`, c: `${n0(pa.f0)} pupils in ${YL(pa.y0)} to ${n0(pa.f1)}` } : null,
+    single ? null : { n: String(d.pressed.length), p: "schools where the pressures meet: under 85% full, fewer first preferences than places, and first preferences falling.", c: d.pressed[0] ? esc(short(d.pressed[0].name, 30)) + (d.pressed.length > 1 ? " and others" : "") : "none in scope" },
+    d.sf ? { n: f1((100 * d.sf.roll) / d.sf.places) + "<small>%</small>", p: `of sixth form places filled${single ? "" : ` across ${d.sf.n} sixth forms`}.`, c: `${n0(d.sf.roll)} students for ${n0(d.sf.places)} places` } : null,
+    d.sp ? { n: n0(d.sp.unit + d.sp.rp), p: `specialist SEND places in ${single ? "the school's" : d.sp.n + " mainstream schools'"} units and resourced provision.`, c: `${n0(d.sp.unit)} in SEN units · ${n0(d.sp.rp)} resourced` } : null,
+  ].filter(Boolean).slice(0, 4);
+  const tileHtml = `<div class="pz-tiles">${tiles.map((t) => `<div class="pz-tile"><div class="n">${t.n}</div><p>${t.p}</p>${t.c ? `<div class="cmp">${t.c}</div>` : ""}</div>`).join("")}</div>`;
+  const tv = d.trend.flatMap((t) => [t.cap, t.roll]).filter((v) => v);
+  const trend = dualTrendSvg(d.trend.map((t) => ({ t: YL(t.y).slice(2), v: t.roll || null, nat: t.cap || null })), { min: Math.floor((Math.min(...tv) * 0.85) / 100) * 100, max: Math.ceil((Math.max(...tv) * 1.06) / 100) * 100, dp: 0, a: "On roll", b: "Places" });
+  const fore = d.pas.slice(0, 3).map((a) => {
+    const vv = a.series.flatMap((x) => [x.f, x.cap]).filter((v) => v != null);
+    return `<p class="pz-note" style="margin:16px 0 6px">${esc(a.name)}${a.name.startsWith("All ") ? ` (${esc(a.la)})` : ""}: the DfE's forecast pupils against estimated places to ${YL(a.y1)}.</p>` + dualTrendSvg(a.series.map((x) => ({ t: YL(x.y).slice(2), v: x.f, nat: x.cap })), { min: Math.floor((Math.min(...vv) * 0.9) / 100) * 100, max: Math.ceil((Math.max(...vv) * 1.05) / 100) * 100, dp: 0, a: "Pupils", b: "Places" });
+  }).join("");
+  const pressed = !single && d.pressed.length ? `<details class="pz-fold" open><summary>Where the pressures meet<span>${d.pressed.length} school${d.pressed.length === 1 ? "" : "s"}</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Full</th><th>Spare places</th><th>First prefs per place</th><th>Five-year change</th></tr></thead><tbody>${d.pressed.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${f1(r.fill)}%</td><td class="num">${n0(r.spare)}</td><td class="num">${f2r(r.ratio)}</td><td class="num" style="color:var(--red);font-weight:600">${pct(r.ch5)}</td></tr>`).join("")}</tbody></table></details>` : "";
+  const tbl = single ? "" : `<details class="pz-fold"><summary>Every school, places and pupils<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Places</th><th>On roll</th><th>Full</th><th>Spare</th><th>First prefs per place</th><th>Sixth form</th><th>SEND places</th></tr></thead><tbody>${d.rows.map((r) => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${n0(r.cap)}</td><td class="num">${n0(r.roll)}</td><td class="num" style="font-weight:600">${f1(r.fill)}%</td><td class="num">${r.over ? `<span style="color:var(--red)">+${r.over} over</span>` : n0(r.spare)}</td><td class="num">${f2r(r.ratio)}</td><td class="num">${r.sf ? `${n0(r.sf[1])} / ${n0(r.sf[0])}` : "–"}</td><td class="num">${r.sp ? r.sp[0] + r.sp[1] : "–"}</td></tr>`).join("")}</tbody></table></details>`;
+  const NOTE = `DfE school capacity return, May ${d.L.slice(0, 4).replace(/\d{4}/, (y) => +y + 1)}: net capacity against pupils on roll. Forecasts are the authorities' own, published by the DfE for each planning area, against the places the area expects to have; spare places above 10% are what the DfE treats as surplus worth planning for. "Where the pressures meet" lists schools that are under 85% full, drew fewer first preferences than places at the latest offer day, and saw first preferences fall over five years: a description of the pressure, not a judgement of the school.`;
+  return section("Places", headline, NOTE, tileHtml +
+    (trend ? `<p class="pz-note" style="margin:16px 0 6px">Pupils on roll against places, every capacity return since ${YL(d.trend[0].y)}${single ? "" : ", across the scope"}.</p>` + trend : "") +
+    fore + pressed + tbl);
+}
+
 function behaviourHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.suspMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}: ${f1(ctx.vs.suspMean)} per 100, ${ctx.vs.pexZero} with none.` : "";
@@ -1098,6 +1189,7 @@ export function schoolDashHtml(d) {
   ${similarHtml(d.similar, pri, s.name)}
   ${trendSection}
   ${recordSection}
+  ${d.dem || d.cap ? `<div class="pz-vintage" style="margin-top:28px">${esc(VINTAGE_PLACES)}</div>` + demandHtml(d.dem, {}) + capacityHtml(d.cap, {}) : ""}
   ${d.p16 ? `<div class="pz-vintage" style="margin-top:28px">${esc(VINTAGE_P16)}</div>` + post16Html(d.p16, {}) + subjectsHtml(d.subj) : ""}
   ${d.dist ? distributionHtml(d.dist, {}) : ""}`;
 }
@@ -1110,7 +1202,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, post16: post16Html, subjects: subjectsHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, demand: demandHtml, capacity: capacityHtml, post16: post16Html, subjects: subjectsHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};

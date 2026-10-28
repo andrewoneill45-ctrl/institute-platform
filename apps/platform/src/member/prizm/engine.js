@@ -5,6 +5,7 @@
 
 export const VINTAGE = "DfE performance data 2025/26 provisional · arrows against 2024/25 · P8 is 2023/24, the last published";
 export const VINTAGE_P16 = "DfE 16 to 19 performance, 2024/25 final (April 2026) · attainment 2021/22 to 2024/25 · L3 value added 2023/24 and 2024/25 only";
+export const VINTAGE_PLACES = "DfE applications and offers 2026/27 (2014/15 to 2026/27) · school capacity 2024/25, planning-area forecasts to 2031/32";
 export const VINTAGE_KS2 = "DfE KS2 data 2024/25, the latest published · arrows against 2023/24 · 2025/26 school-level KS2 publishes December 2026";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -699,6 +700,8 @@ export const BLOCK_TYPES = [
   { type: "behaviour", name: "Suspensions and exclusions", desc: "suspension rates and permanent exclusions" },
   { type: "post16", name: "Sixth form", desc: "A level and vocational results since 2021/22, L3 value added with its confidence, school by school" },
   { type: "subjects", name: "A level subjects", desc: "value added and top grades subject by subject, against England" },
+  { type: "demand", name: "Demand", desc: "who parents choose: first preferences per place since 2014/15, gainers and losers named" },
+  { type: "capacity", name: "Places", desc: "places against pupils, the area's forecast to 2031/32, and where falling demand meets spare places" },
   { type: "flow", name: "Cohort flow", desc: "year-group rolls since 2015/16: each cohort tracked stage by stage, shrinkage named school by school, exclusions running beside" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
   { type: "finance", name: "The money", desc: "spend per pupil, reserves and deficits against England" },
@@ -920,6 +923,8 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec, extras
     return { mode: "flow", years, totals, entry, last, cohorts: cohorts.slice(-9), shrinks: shrinks.slice(0, 12), shrinkN: shrinks.length, excl, intake, n: members.length, of: schools.length, chainedN };
   }
   if (type === "post16") return post16Block(schools, extras);
+  if (type === "demand") return demandBlock(schools, all, PRI, extras);
+  if (type === "capacity") return capacityBlock(schools, all, PRI, extras);
   if (type === "subjects") return subjectsBlock(schools, extras);
   if (type === "early") {
     /* authority-level by necessity: the DfE publishes no school-level EYFSP
@@ -1073,6 +1078,137 @@ function post16Block(schools, extras) {
     vintage: p.vintage,
   };
 }
+/* ── demand and places ──
+   places.s[urn] = { aS|aP: {year: [placesOffered, anyPref, firstPref, firstPrefOffers, fromAnotherLa]},
+                     c: {year: [places, onRoll]}, sf: [places, onRoll], sp: [unit, rp], pa: planningArea } */
+export const PL_LABEL = (tp) => tp.slice(0, 4) + "/" + tp.slice(4);
+const PL_REV = new WeakMap();
+function plHistory(p, urn) {
+  let rev = PL_REV.get(p);
+  if (!rev) { rev = {}; for (const [o, n] of Object.entries(p.chains || {})) (rev[n] = rev[n] || []).push(o); PL_REV.set(p, rev); }
+  const out = { aS: {}, aP: {}, c: {}, chained: false, me: p.s[String(urn)] || null };
+  const stack = [String(urn)];
+  const seen = new Set();
+  while (stack.length) {
+    const u = stack.pop();
+    if (seen.has(u)) continue;
+    seen.add(u);
+    const r = p.s[u];
+    if (r) for (const k of ["aS", "aP", "c"]) Object.entries(r[k] || {}).forEach(([y, v]) => { if (!out[k][y]) out[k][y] = v; });
+    (rev[u] || []).forEach((o) => { out.chained = true; stack.push(o); });
+  }
+  return out;
+}
+/* England's line, computed once per phase from every school in the file */
+const PL_NAT = new WeakMap();
+function plNational(p, all, PRI) {
+  let m = PL_NAT.get(p);
+  if (!m) { m = {}; PL_NAT.set(p, m); }
+  const key = PRI ? "P" : "S";
+  if (m[key]) return m[key];
+  const k = "a" + key;
+  const byYear = {};
+  const ratios = [];
+  const L = p.appYears[p.appYears.length - 1];
+  for (const r of Object.values(p.s)) {
+    for (const [y, v] of Object.entries(r[k] || {})) {
+      const t = (byYear[y] = byYear[y] || [0, 0, 0]);
+      if (v[0]) { t[0] += v[0]; t[1] += v[2] || 0; t[2] += v[1] || 0; }
+    }
+    const v = r[k] && r[k][L];
+    if (v && v[0] >= 10 && v[2] != null) ratios.push(v[2] / v[0]);
+  }
+  ratios.sort((a, b) => a - b);
+  const estate = new Set((PRI ? primaries(all) : secondaries(all)).map((s) => String(s.urn)));
+  let cap = 0, roll = 0;
+  const C = p.capYears[p.capYears.length - 1];
+  for (const u of estate) { const c = p.s[u] && p.s[u].c && p.s[u].c[C]; if (c && c[0] && c[1] != null) { cap += c[0]; roll += c[1]; } }
+  m[key] = {
+    years: p.appYears.map((y) => ({ y, ratio: byYear[y] && byYear[y][0] ? Math.round((byYear[y][1] / byYear[y][0]) * 100) / 100 : null })),
+    medRatio: ratios.length ? Math.round(ratios[ratios.length >> 1] * 100) / 100 : null,
+    fill: cap ? Math.round((1000 * roll) / cap) / 10 : null,
+  };
+  return m[key];
+}
+function demandBlock(schools, all, PRI, extras) {
+  const p = extras && extras.places;
+  if (!p || !p.s) return null;
+  const k = PRI ? "aP" : "aS";
+  const Y = p.appYears, L = Y[Y.length - 1], B5 = Y[Math.max(0, Y.length - 6)];
+  const nat = plNational(p, all, PRI);
+  const members = schools.map((s) => ({ s, h: plHistory(p, s.urn) })).filter((m) => Object.keys(m.h[k]).length);
+  if (!members.length) return { mode: "demand", n: 0, of: schools.length, empty: true, PRI };
+  const tot = Y.map((y) => { let pl = 0, f = 0, a = 0; members.forEach(({ h }) => { const v = h[k][y]; if (v && v[0]) { pl += v[0]; f += v[2] || 0; a += v[1] || 0; } }); return { y, places: pl, first: f, any: a, ratio: pl ? Math.round((f / pl) * 100) / 100 : null }; });
+  const rows = members.map(({ s, h }) => {
+    const v = h[k][L], b = h[k][B5];
+    const series = Y.map((y) => (h[k][y] ? h[k][y][2] : null));
+    return {
+      urn: s.urn, name: s.name, la: s.la,
+      places: v ? v[0] : null, any: v ? v[1] : null, first: v ? v[2] : null, offers1: v ? v[3] : null, otherLa: v ? v[4] : null,
+      ratio: v && v[0] ? Math.round((v[2] / v[0]) * 100) / 100 : null,
+      got1: v && v[2] ? Math.round((100 * v[3]) / v[2]) : null,
+      first5: b ? b[2] : null,
+      ch5: v && b && b[2] >= 20 ? Math.round((100 * (v[2] - b[2])) / b[2]) : null,
+      series, chained: h.chained,
+    };
+  }).filter((r) => r.places != null);
+  const losing = rows.filter((r) => r.ch5 != null && r.ch5 <= -25).sort((a, b) => a.ch5 - b.ch5);
+  const gaining = rows.filter((r) => r.ch5 != null && r.ch5 >= 25).sort((a, b) => b.ch5 - a.ch5);
+  return {
+    mode: "demand", PRI, n: rows.length, of: schools.length, years: Y, L, B5, tot, nat,
+    ratioNow: tot[tot.length - 1].ratio, ratio5: (tot.find((t) => t.y === B5) || {}).ratio,
+    under1: rows.filter((r) => r.ratio != null && r.ratio < 1).length,
+    over2: rows.filter((r) => r.ratio != null && r.ratio >= 2).length,
+    rows: rows.sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1)),
+    losing: losing.slice(0, 15), losingN: losing.length, gaining: gaining.slice(0, 15), gainingN: gaining.length,
+    chainedN: rows.filter((r) => r.chained).length,
+  };
+}
+function capacityBlock(schools, all, PRI, extras) {
+  const p = extras && extras.places;
+  if (!p || !p.s) return null;
+  const C = p.capYears, L = C[C.length - 1];
+  const k = PRI ? "aP" : "aS";
+  const A = p.appYears, AL = A[A.length - 1], A5 = A[Math.max(0, A.length - 6)];
+  const nat = plNational(p, all, PRI);
+  const members = schools.map((s) => ({ s, h: plHistory(p, s.urn) })).filter((m) => Object.keys(m.h.c).length);
+  if (!members.length) return { mode: "capacity", n: 0, of: schools.length, empty: true, PRI };
+  const trend = C.map((y) => { let cap = 0, roll = 0; members.forEach(({ h }) => { const v = h.c[y]; if (v && v[0] && v[1] != null) { cap += v[0]; roll += v[1]; } }); return { y, cap, roll, fill: cap ? Math.round((1000 * roll) / cap) / 10 : null }; });
+  const rows = members.map(({ s, h }) => {
+    const v = h.c[L] || null, me = h.me || {};
+    const d = h[k][AL], d5 = h[k][A5];
+    const fill = v && v[0] ? Math.round((1000 * v[1]) / v[0]) / 10 : null;
+    return {
+      urn: s.urn, name: s.name, la: s.la, cap: v ? v[0] : null, roll: v ? v[1] : null, fill,
+      spare: v && v[0] && v[1] != null ? Math.max(0, v[0] - v[1]) : null, over: v && v[0] && v[1] != null ? Math.max(0, v[1] - v[0]) : null,
+      sf: me.sf || null, sp: me.sp || null, pa: me.pa || null,
+      ratio: d && d[0] ? Math.round((d[2] / d[0]) * 100) / 100 : null,
+      ch5: d && d5 && d5[2] >= 20 ? Math.round((100 * (d[2] - d5[2])) / d5[2]) : null,
+    };
+  }).filter((r) => r.cap != null);
+  /* where the pressures meet: room to spare, fewer than one first preference
+     per place, and first preferences falling over five years */
+  const pressed = rows.filter((r) => r.fill != null && r.fill <= 85 && r.ratio != null && r.ratio < 1 && r.ch5 != null && r.ch5 < 0).sort((a, b) => a.fill - b.fill);
+  /* the planning areas the scope sits in, with the DfE's forecast to 2031/32 */
+  const ph = PRI ? "P" : "S";
+  const pas = [...new Set(rows.map((r) => r.pa).filter(Boolean))].map((code) => ({ code, ...(p.pa[code] || {}) })).filter((a) => a.f && a.ph === ph).map((a) => {
+    const ys = Object.keys(a.f).sort();
+    const first = a.f[ys[0]], last = a.f[ys[ys.length - 1]];
+    return { code: a.code, name: a.n, la: a.la, y0: ys[0], y1: ys[ys.length - 1], f0: first[0], f1: last[0], cap: last[1], spare1: last[1] != null && last[0] != null ? Math.round(last[1] - last[0]) : null,
+      sparePct: last[1] ? Math.round((1000 * (last[1] - last[0])) / last[1]) / 10 : null, series: ys.map((y) => ({ y, f: a.f[y][0], cap: a.f[y][1] })) };
+  }).sort((a, b) => (b.sparePct ?? -99) - (a.sparePct ?? -99));
+  const capNow = trend[trend.length - 1];
+  const sfRows = rows.filter((r) => r.sf && r.sf[0]);
+  const spRows = rows.filter((r) => r.sp);
+  return {
+    mode: "capacity", PRI, n: rows.length, of: schools.length, L, trend, nat,
+    fillNow: capNow.fill, spareNow: rows.reduce((a, r) => a + (r.spare || 0), 0), overN: rows.filter((r) => r.over > 0).length,
+    under85: rows.filter((r) => r.fill != null && r.fill < 85).length,
+    rows: rows.sort((a, b) => (a.fill ?? 999) - (b.fill ?? 999)), pressed, pas,
+    sf: sfRows.length ? { n: sfRows.length, places: sfRows.reduce((a, r) => a + r.sf[0], 0), roll: sfRows.reduce((a, r) => a + (r.sf[1] || 0), 0) } : null,
+    sp: spRows.length ? { n: spRows.length, unit: spRows.reduce((a, r) => a + r.sp[0], 0), rp: spRows.reduce((a, r) => a + r.sp[1], 0) } : null,
+  };
+}
 function subjectsBlock(schools, extras) {
   const p = extras && extras.post16;
   if (!p || !p.s) return null;
@@ -1173,7 +1309,9 @@ export function computeSchoolDash(all, urn, extras) {
   }
   const p16 = extras && extras.post16 && extras.post16.s && extras.post16.s[String(s.urn)] ? post16Block([s], extras) : null;
   const subj = p16 ? subjectsBlock([s], extras) : null;
-  return { s, pri, bench: B, dist, standing, similar, early, p16: p16 && !p16.empty ? p16 : null, subj: subj && !subj.empty ? subj : null };
+  const dem = extras && extras.places && extras.places.s ? demandBlock([s], all, pri, extras) : null;
+  const cap = extras && extras.places && extras.places.s ? capacityBlock([s], all, pri, extras) : null;
+  return { s, pri, bench: B, dist, standing, similar, early, p16: p16 && !p16.empty ? p16 : null, subj: subj && !subj.empty ? subj : null, dem: dem && !dem.empty ? dem : null, cap: cap && !cap.empty ? cap : null };
 }
 
 export function computeReport(all, spec, extras) {

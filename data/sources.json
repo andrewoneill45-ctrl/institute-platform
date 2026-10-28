@@ -150,6 +150,32 @@
       "lastPulled": "2026-10-28",
       "output": "apps/platform/public/data/post16.json",
       "notes": "Institution-level files fetched with content.explore-education-statistics.service.gov.uk/api/data-set-files/{id}/download and built by data/pipeline/post16-build.py. Headline attainment 2021/22 to 2024/25; L3 value added (headline and subject) exists for 2023/24 and 2024/25 only, as the DfE did not publish it for cohorts with teacher-assessed GCSE baselines. Best three A levels and AAB are published for 2024/25 only in this release. Subject names are unified across years (e.g. Computer Studies/Computing = Computer Science)."
+    },
+    {
+      "key": "admissions",
+      "name": "Applications and offers, school level: places offered, first and any preferences, first-preference offers, applicants from other authorities",
+      "publisher": "Department for Education",
+      "route": "ees-release-supporting-files",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/primary-and-secondary-school-applications-and-offers",
+      "apiDataSetId": null,
+      "cadence": "Annual, June (offers for the following September)",
+      "lastVersion": "2026/27 intake (school-level file dated 29 June 2026), series from 2014/15",
+      "lastPulled": "2026-10-28",
+      "output": "apps/platform/public/data/places.json",
+      "notes": "School-level time series sits in the release's supporting files (api/releases/{releaseVersionId}/files). Rows with no URN are skipped; academisation chains from flows.json stitch histories. Built by data/pipeline/places-build.py."
+    },
+    {
+      "key": "capacity",
+      "name": "School capacity: places against pupils on roll, sixth form and specialist SEND capacity, planning-area forecasts to 2031/32",
+      "publisher": "Department for Education",
+      "route": "ees-data-set-files",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/school-capacity",
+      "apiDataSetId": null,
+      "cadence": "Annual, spring (the May capacity return of the previous year)",
+      "lastVersion": "2024/25 (school level from 2009/10; 2014/15 onwards used)",
+      "lastPulled": "2026-10-28",
+      "output": "apps/platform/public/data/places.json",
+      "notes": "Files: Capacity - school; Sixth form capacity - school; Specialist provision capacity in mainstream schools - school; Estimates of future school place demand (planning areas). Built by data/pipeline/places-build.py with the admissions feed."
     }
   ]
 }

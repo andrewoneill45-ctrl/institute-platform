@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDataset, getDatasetCore, getEarly, getFlows, getPost16 } from "../../lib/dataset.js";
+import { getDataset, getDatasetCore, getEarly, getFlows, getPost16, getPlaces } from "../../lib/dataset.js";
 import { ensureMotionCss, Loading, Thinking } from "../../lib/motion.jsx";
 import ContextPanel, { fetchContext, contextHtml } from "./ContextPanel.jsx";
 import { useAuth } from "../../lib/auth.jsx";
@@ -32,6 +32,8 @@ const KS2_DESCS = {
   early: "reception and phonics for the scope's authorities (no school-level exists)",
   finance: "spend per pupil, reserves and deficits in primaries",
   destinations: "secondary only — KS4 leavers' destinations",
+  demand: "who parents choose: first preferences per Reception place since 2014/15",
+  capacity: "Reception to Year 6 places against pupils, and the area's forecast to 2031/32",
   post16: "secondary only — sixth form results and L3 value added",
   subjects: "secondary only — A level value added by subject",
   scatter: "FSM against RWM, the scope against England's primaries",
@@ -48,6 +50,7 @@ const EXAMPLES = [
   { t: "The primary picture in the north west", sub: "KS2 2024/25, the latest published", sc: { type: "region", name: "North West", phase: "primary" } },
   { t: "Secondary schools in deficit — does money buy outcomes?", sub: "the 2024-25 accounts, spend set against attainment", sc: { type: "england", deficit: true }, blocks: ["headlines", "finance", "cohort"] },
   { t: "Where do the children with the highest needs learn?", sub: "EHC plans across England, the January 2026 census", sc: { type: "england", minEhcp: 10 }, blocks: ["headlines", "inclusion", "scatter"] },
+  { t: "Who are families choosing in Lambeth, and who has room?", sub: "first preferences since 2014/15, places, and the forecast to 2031/32", sc: { type: "la", name: "Lambeth" }, blocks: ["demand", "capacity", "flow"] },
   { t: "Sixth forms in Kensington and Chelsea: value added, subject by subject", sub: "16 to 18 results since 2021/22, L3 value added with its confidence", sc: { type: "la", name: "Kensington and Chelsea" }, blocks: ["post16", "subjects"] },
   { t: "How United Learning's year groups have changed", sub: "eleven censuses, every cohort walked through", sc: { type: "trust", name: "United Learning Trust" }, blocks: ["headlines", "flow", "behaviour"] },
 ];
@@ -146,6 +149,7 @@ export default function Prizm() {
   const [early, setEarly] = useState(null);
   const [flows, setFlows] = useState(null);
   const [post16, setPost16] = useState(null);
+  const [places, setPlaces] = useState(null);
   useEffect(() => {
     getDatasetCore().then(({ raw, ofsted }) => setAll(attachOfsted(raw, ofsted)));
     getDataset().then(() => setFull(true));
@@ -156,6 +160,8 @@ export default function Prizm() {
   /* the post-16 tables: when a sixth form block is asked for, or a school page
      opens on a school that has a sixth form */
   const wantP16 = blocks.includes("post16") || blocks.includes("subjects");
+  const wantPL = blocks.includes("demand") || blocks.includes("capacity");
+  useEffect(() => { if (!places && (wantPL || dashUrn)) getPlaces().then((d) => d && setPlaces(d)); }, [wantPL, places, dashUrn]);
   useEffect(() => { if (!post16 && wantP16) getPost16().then((d) => d && setPost16(d)); }, [wantP16, post16]);
   useEffect(() => attachTipCard(document, (u) => { setDashUrn(u); scrollPageTop(); }), []);
   useEffect(() => { listReports(urn).then(setSaved).catch(() => {}); }, [urn]);
@@ -236,16 +242,17 @@ export default function Prizm() {
     };
   }, [title, scope, blocks, all]);
   /* reports and dashes compute only once every figure is present */
-  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early, flows, post16 }) : null), [all, full, spec, scope, early, flows, post16]);
+  const computed = useMemo(() => (all && full && scope ? computeReport(all, spec, { early, flows, post16, places }) : null), [all, full, spec, scope, early, flows, post16, places]);
   /* the eleven-census layer travels only when asked for: say so while it does */
   const waitingFlows = !!(computed && blocks.includes("flow") && !flows);
-  const waitingP16 = !!(computed && wantP16 && !post16);
-  const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn, { early, post16 }) : null), [all, full, dashUrn, early, post16]);
+  const waitingP16 = !!(computed && ((wantP16 && !post16) || (wantPL && !places)));
+  const dash = useMemo(() => (all && full && dashUrn ? computeSchoolDash(all, dashUrn, { early, post16, places }) : null), [all, full, dashUrn, early, post16, places]);
   /* one school is not a cohort: a single-school scope pivots to the full picture */
-  const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early, post16 }) : null), [all, computed, early, post16]);
+  const singleDash = useMemo(() => (all && computed && computed.schools.length === 1 ? computeSchoolDash(all, computed.schools[0].urn, { early, post16, places }) : null), [all, computed, early, post16, places]);
   /* a school page for a school with a sixth form fetches the post-16 tables */
   const pageP16 = [dash, singleDash].some((d) => d && d.s && /has a sixth form|16 plus|all-through/i.test(`${d.s.sixth_form || ""} ${d.s.phase || ""}`));
   useEffect(() => { if (!post16 && pageP16) getPost16().then((d) => d && setPost16(d)); }, [pageP16, post16]);
+  useEffect(() => { if (!places && singleDash) getPlaces().then((d) => d && setPlaces(d)); }, [singleDash, places]);
   const tokens = useMemo(() => scopeTokens(scope), [scope]);
   const ctxKey = singleDash ? "s:" + singleDash.s.urn : scope ? JSON.stringify(scope) : null;
   const ctxLabel = singleDash ? `${singleDash.s.name}, ${singleDash.s.la}` : scope ? scopeShort(scope) : "";
@@ -314,6 +321,8 @@ export default function Prizm() {
     if (sc.minSpend != null || sc.maxSpend != null || sc.deficit || (sc.order && sc.order.by === "spend") || /\b(spend|budget|deficit|reserves?|finance|money)\b/i.test(text || "")) want.push("finance");
     if (sc.minEhcp != null || sc.maxEhcp != null || sc.senUnit || sc.senRp || (sc.order && sc.order.by === "ehcp") || /\b(send|sen\b|ehcp?|inclusion|inclusive)\b/i.test(text || "")) want.push("inclusion");
     if (/\b(early years|eyfsp|gld|good level of development|phonics|reception)\b/i.test(text || "")) want.push("early");
+    if (/\b(demand|popular\w*|oversubscri\w*|first preferences?|preferences|applications?|admissions?|offer day|parents? (choose|choice|chose)|parental choice|families (choose|choosing|chose))\b/i.test(text || "")) want.push("demand");
+    if (/\b(capacity|spare places?|surplus places?|empty places?|school places|who has room|falling rolls?|amalgamat\w*|closures?|school closing|forecasts?|pupil projections?|place planning)\b/i.test(text || "")) want.push("capacity");
     if (/\b(sixth ?forms?|post-?16|16 ?(to|-) ?1[89]|a[- ]?levels?|l3|level 3|value added|vocational|btecs?|applied general|ks5|key stage 5)\b/i.test(text || "")) want.push("post16");
     if (/\b(subjects?|by subject|subject value added|further maths|physics|chemistry|biology|psychology|sociology)\b/i.test(text || "") && /\b(sixth|post-?16|a[- ]?levels?|l3|level 3|value added|16 ?(to|-) ?18)\b/i.test(text || "")) want.push("subjects");
     if (/\b(cohort ?flows?|cohorts?|rolls? over time|roll history|falling rolls?|year ?groups? (changed|changing|over time|shrink\w*|grow\w*)|pupil numbers? over time|off.?roll\w*)\b/i.test(text || "")) want.push("flow");
@@ -401,6 +410,8 @@ export default function Prizm() {
         nationalStandingPercentBeaten: standing,
         similarIntake: sim ? { schools: sim.n, rank: sim.rank, topPercent: sim.topPct, cohortMedian: sim.med, fsmPct: sim.fsm } : undefined,
         sixthForm: singleDash.p16 ? (({ aN, aps, grade, va, lo, hi, vaPrev, aab, ret, daD, daO, agVa }) => ({ aLevelStudents: aN, pointsPerEntry: aps, grade, valueAdded: va, vaLower: lo, vaUpper: hi, valueAdded2024: vaPrev, aabPct: aab, retainedPct: ret, disadvantagedPpe: daD, otherPpe: daO, appliedGeneralVa: agVa, englandPpe: singleDash.p16.apsNat, englandVa: singleDash.p16.vaNat }))(singleDash.p16.rows[0]) : undefined,
+        demand: singleDash.dem ? (({ places, first, any, ratio, got1, ch5, first5 }) => ({ placesOffered: places, firstPreferences: first, anyPreference: any, firstPrefsPerPlace: ratio, pctFirstPrefsOffered: got1, fiveYearChangePct: ch5, firstPreferencesFiveYearsAgo: first5, englandMedianPerPlace: singleDash.dem.nat.medRatio }))(singleDash.dem.rows[0]) : undefined,
+        places: singleDash.cap ? (({ cap, roll, fill, spare, over }) => ({ capacity: cap, onRoll: roll, pctFull: fill, sparePlaces: spare, overCapacity: over, englandPctFull: singleDash.cap.nat.fill, areaForecast: singleDash.cap.pas[0] ? { area: singleDash.cap.pas[0].name, pupilsNow: singleDash.cap.pas[0].f0, pupilsLast: singleDash.cap.pas[0].f1, places: singleDash.cap.pas[0].cap, sparePct: singleDash.cap.pas[0].sparePct } : undefined }))(singleDash.cap.rows[0]) : undefined,
         aLevelSubjects: singleDash.subj ? [...singleDash.subj.rows.slice(0, 3), ...singleDash.subj.rows.slice(-3)].map((r) => ({ subject: r.name, valueAdded: r.va, entries: r.entries, aStarA: r.aStarA, englandAStarA: r.natA })) : undefined,
         england: (({ pri: _p, ...e }) => e)(computed.bench),
       };
@@ -528,7 +539,7 @@ export default function Prizm() {
          leftover words that are not block names mean the ask needs composing */
       const chip = chips.length ? chips[Math.min(sel, chips.length - 1)] : null;
       if (chip) {
-        const BLOCKWORDS = new Set(["attendance", "absence", "behaviour", "suspensions", "exclusions", "finance", "money", "budget", "send", "inclusion", "ehcp", "ofsted", "results", "outcomes", "performance", "attainment", "destinations", "workforce", "staffing", "turnover", "gap", "disadvantage", "flow", "rolls", "sixth", "form", "post", "post16", "levels", "level", "subject", "subjects", "added", "value", "vocational", "deficit", "report", "picture", "schools", "school", "secondaries", "primaries", "trust", "academies"]);
+        const BLOCKWORDS = new Set(["attendance", "absence", "behaviour", "suspensions", "exclusions", "finance", "money", "budget", "send", "inclusion", "ehcp", "ofsted", "results", "outcomes", "performance", "attainment", "destinations", "workforce", "staffing", "turnover", "gap", "disadvantage", "flow", "rolls", "demand", "popular", "preferences", "applications", "admissions", "capacity", "places", "spare", "surplus", "forecast", "closures", "sixth", "form", "post", "post16", "levels", "level", "subject", "subjects", "added", "value", "vocational", "deficit", "report", "picture", "schools", "school", "secondaries", "primaries", "trust", "academies"]);
         const label = (chip.label + " " + (chip.tag || "")).toLowerCase();
         const words = (t.toLowerCase().match(/[a-z]{3,}/g) || []).filter((w) => !["the", "and", "for", "with"].includes(w));
         const leftover = words.filter((w) => !label.includes(w) && !BLOCKWORDS.has(w));
@@ -638,7 +649,7 @@ export default function Prizm() {
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 8, background: "rgba(106,12,160,.06)", border: "1px solid rgba(106,12,160,.16)", borderRadius: 10, padding: "8px 12px" }}>
               {thinking ? <Thinking label={stage || "Thinking…"} style={{ flex: 1 }} />
                 : waitingFlows ? <Thinking label="The eleven censuses are arriving for the cohort flow…" style={{ flex: 1 }} />
-                : waitingP16 ? <Thinking label="The 16 to 18 tables are arriving: four years, every sixth form…" style={{ flex: 1 }} />
+                : waitingP16 ? <Thinking label={wantPL && !places ? "Thirteen years of applications and every capacity return are arriving…" : "The 16 to 18 tables are arriving: four years, every sixth form…"} style={{ flex: 1 }} />
                 : <div style={{ flex: 1, minWidth: 0 }}>
                     {echo && (
                       <div style={{ fontSize: 12, color: INK, marginBottom: note ? 3 : 0 }}>
