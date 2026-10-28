@@ -15,7 +15,7 @@ export default function MemberLayout() {
 
   const loc = useLocation();
   const p = loc.pathname;
-  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens") || p.includes("/constellation") || p.includes("/prizm");
+  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens") || p.includes("/constellation") || p.includes("/prizm") || p.includes("/horizon");
   const [palette, setPalette] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef(null);
@@ -53,7 +53,7 @@ export default function MemberLayout() {
           <Link to="/" className="shell-brand" aria-label="The All Saints Institute, home"><Wordmark size={22} /></Link>
           <nav className="shell-rooms" aria-label="Rooms">
             {roomsFor(user).map((r) => (
-              <NavLink key={r.key} to={r.key === "home" ? "." : r.key} end={r.key === "home"} className={({ isActive }) => (isActive ? "on" : "") + (r.key === "horizon" ? " shell-horizon" : "")}>
+              <NavLink key={r.key} to={r.key === "home" ? "." : r.key} end={r.key === "home"} className={({ isActive }) => (isActive ? "on" : "")}>
                 {r.label}
               </NavLink>
             ))}

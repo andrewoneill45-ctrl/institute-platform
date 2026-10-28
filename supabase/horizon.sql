@@ -44,3 +44,16 @@ end $$;
 
 grant execute on function public.admin_list_accounts() to authenticated;
 grant execute on function public.admin_update_profile(uuid, text, text, integer, text, text, text, boolean, boolean, boolean) to authenticated;
+
+-- Kept scenarios: each member's own, specification only.
+create table if not exists public.horizon_scenarios (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null check (char_length(title) between 1 and 200),
+  spec       jsonb not null,
+  created_by uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.horizon_scenarios enable row level security;
+drop policy if exists "own scenarios" on public.horizon_scenarios;
+create policy "own scenarios" on public.horizon_scenarios
+  for all using (created_by = auth.uid()) with check (created_by = auth.uid());

@@ -631,6 +631,7 @@ export default function Prizm() {
                 <button onClick={askForeword} disabled={fwBusy} style={{ ...barBtn(false), color: "#4B0875", borderColor: "rgba(106,12,160,.3)", opacity: fwBusy ? 0.6 : 1 }}>{fwBusy ? "Writing…" : foreword ? "Rewrite foreword" : "Foreword"}</button>
                 <button onClick={keep} disabled={keeping} style={barBtn(false)}>{keeping ? "Keeping…" : "Keep in the vault"}</button>
                 <button onClick={download} style={barBtn(true)}>Download</button>
+                {(user?.isAdmin || user?.horizonAccess) && <button onClick={() => navigate(`/members/horizon?scope=${encodeURIComponent(JSON.stringify(scope))}`)} title="Where this scope is heading, and what the levers would do" style={{ ...barBtn(false), color: "#8a6d1c", borderColor: "rgba(198,160,53,.55)" }}>Take it to Horizon →</button>}
               </div>
             )}
           </div>

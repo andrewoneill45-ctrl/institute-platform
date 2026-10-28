@@ -145,3 +145,21 @@ export function horizonDoc(title, params, body, css) {
 <div class="pz-kick"><span>Horizon · the All Saints Institute · modelling</span></div><h1>${esc(title)}</h1><p class="pz-sub">${esc(params)}</p>
 ${body}<div class="pz-foot"><span>Modelled in Horizon at institute.school from the DfE's published data. Every figure is "if this held", not a prediction.</span></div></div></main></body></html>`;
 }
+
+/* ── two scenarios, side by side: the figures that matter, then the difference ── */
+export function compareHtml(a, b, la = "A", lb = "B") {
+  const F = (s, v) => (v == null ? "–" : s.money ? (v < 0 ? "−£" : "£") + Math.abs(Math.round(v)).toLocaleString("en-GB") : (s.sign && v > 0 ? "+" : "") + (s.dp === 0 ? Math.round(v).toLocaleString("en-GB") : v.toFixed(s.dp)) + (s.unit && s.unit !== "£" ? s.unit : ""));
+  const keys = [...new Set([...(a.summary || []).map((s) => s.k), ...(b.summary || []).map((s) => s.k)])];
+  const rows = keys.map((k) => {
+    const sa = (a.summary || []).find((s) => s.k === k), sb = (b.summary || []).find((s) => s.k === k), s = sa || sb;
+    const va = sa ? sa.v : null, vb = sb ? sb.v : null;
+    const d = va != null && vb != null ? vb - va : null;
+    const better = d == null || d === 0 ? null : (s.lower ? d < 0 : d > 0);
+    return `<div class="pz-tile pz-vs"><div class="vk">${esc(s.label)}</div><div class="pair"><div><div class="n" style="font-size:26px;white-space:nowrap">${F(s, va)}</div><div class="who">${esc(la)}</div></div><div class="sep"></div><div><div class="n" style="font-size:26px;white-space:nowrap">${F(s, vb)}</div><div class="who">${esc(lb)}</div></div></div><div class="cmp" style="${better == null ? "" : better ? "color:#E4CE8B" : "color:#f0b4bf"}">${d == null ? "no change" : `${esc(lb)} is ${s.money ? F(s, Math.abs(d)) : (s.dp === 0 ? Math.abs(Math.round(d)).toLocaleString("en-GB") : Math.abs(d).toFixed(s.dp)) + (s.unit && s.unit !== "£" ? s.unit : "")} ${d > 0 ? "higher" : "lower"}${better == null ? "" : better ? ", the better side" : ", the worse side"}`}</div></div>`;
+  });
+  const same = a.lever === b.lever;
+  const end = (t) => (/[.?!]$/.test(t) ? t : t + ".");
+  return section("Side by side", `${esc(la)}: ${esc(end(a.title))} ${esc(lb)}: ${esc(end(b.title))}`,
+    same ? `The same lever under two settings: each figure as ${esc(la)} then ${esc(lb)}, and which way ${esc(lb)} moves it. Below, both scenarios in full.` : "Two different levers: the figures sit side by side where they share a measure. Below, both scenarios in full.",
+    `<div class="pz-tiles">${rows.join("")}</div>`);
+}
