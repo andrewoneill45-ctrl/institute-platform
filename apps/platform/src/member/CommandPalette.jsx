@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDatasetCore } from "../lib/dataset.js";
 import { searchEntities } from "./prizm/engine.js";
-import { RoomIcon, ROOMS } from "./RoomIcons.jsx";
+import { RoomIcon, roomsFor } from "./RoomIcons.jsx";
 
 const RECENT_KEY = "asi-palette-recent";
 const readRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]").slice(0, 5); } catch { return []; } };
@@ -55,7 +55,7 @@ export default function CommandPalette({ open, onClose, user }) {
   const groups = useMemo(() => {
     const text = q.trim();
     const g = [];
-    const rooms = [...ROOMS,
+    const rooms = [...roomsFor(user),
       { key: "profile", to: "/members/profile", label: "Your profile", verb: "Account and school details", kw: "profile account settings me" },
       ...(user && user.isAdmin ? [{ key: "accounts", to: "/members/admin", label: "Accounts", verb: "Members and access", kw: "admin accounts users members access" }] : []),
     ];

@@ -702,6 +702,7 @@ export const BLOCK_TYPES = [
   { type: "subjects", name: "A level subjects", desc: "value added and top grades subject by subject, against England" },
   { type: "demand", name: "Demand", desc: "who parents choose: first preferences per place since 2014/15, gainers and losers named" },
   { type: "capacity", name: "Places", desc: "places against pupils, the area's forecast to 2031/32, and where falling demand meets spare places" },
+  { type: "twins", name: "Beating the odds", desc: "each school against its twenty statistical twins: what schools with the same intake achieve, and who does better" },
   { type: "flow", name: "Cohort flow", desc: "year-group rolls since 2015/16: each cohort tracked stage by stage, shrinkage named school by school, exclusions running beside" },
   { type: "workforce", name: "The workforce", desc: "teacher turnover, ratios and unfilled posts against England" },
   { type: "finance", name: "The money", desc: "spend per pupil, reserves and deficits against England" },
@@ -923,6 +924,7 @@ export function computeBlock(type, schools, all, bench, phase, blockSpec, extras
     return { mode: "flow", years, totals, entry, last, cohorts: cohorts.slice(-9), shrinks: shrinks.slice(0, 12), shrinkN: shrinks.length, excl, intake, n: members.length, of: schools.length, chainedN };
   }
   if (type === "post16") return post16Block(schools, extras);
+  if (type === "twins") return twinsBlock(schools, all, PRI, extras);
   if (type === "demand") return demandBlock(schools, all, PRI, extras);
   if (type === "capacity") return capacityBlock(schools, all, PRI, extras);
   if (type === "subjects") return subjectsBlock(schools, extras);
@@ -1209,6 +1211,108 @@ function capacityBlock(schools, all, PRI, extras) {
     sp: spRows.length ? { n: spRows.length, unit: spRows.reduce((a, r) => a + r.sp[0], 0), rp: spRows.reduce((a, r) => a + r.sp[1], 0) } : null,
   };
 }
+/* ── twins: statistical neighbours on the intake, not one FSM band ──
+   Seven dimensions, each standardised across England's estate and weighted
+   by how strongly it shapes results: prior attainment of the intake (KS2,
+   the 2024 GCSE cohort's, the last with KS2 tests), disadvantage, English as
+   an additional language, SEN support, EHC plans, the deprivation of the
+   area and size. Grammar schools are twinned only with grammar schools. */
+const TW_CACHE = new WeakMap();
+const TW_DIMS = {
+  S: [
+    { k: "ks2", label: "Prior attainment (KS2)", w: 2.0, get: (s, I) => (I && I[0] != null ? I[0] : null) },
+    { k: "dis", label: "Disadvantaged (KS4 cohort)", w: 1.5, get: (s, I) => (I && I[1] != null ? I[1] : num(s.ks4_fsm_pct) ?? num(s.edu_fsm_pct)), unit: "%" },
+    { k: "eal", label: "EAL", w: 0.8, get: (s, I) => (I && I[2] != null ? I[2] : num(s.ks4_eal_pct) ?? num(s.eal_pct)), unit: "%" },
+    { k: "senk", label: "SEN support", w: 0.8, get: (s) => num(s.sen_support_pct), unit: "%" },
+    { k: "ehcp", label: "EHC plans", w: 0.8, get: (s) => num(s.sen_ehcp_pct), unit: "%" },
+    { k: "idaci", label: "Area deprivation (IDACI quintile)", w: 0.6, get: (s) => num(s.idaci) },
+    { k: "size", label: "Pupils", w: 0.4, get: (s) => (num(s.pupils) ? Math.log(num(s.pupils)) : null), show: (s) => num(s.pupils) },
+  ],
+  P: [
+    { k: "dis", label: "Free school meals", w: 2.0, get: (s) => num(s.edu_fsm_pct) ?? num(s.fsm_pct), unit: "%" },
+    { k: "eal", label: "EAL", w: 1.0, get: (s) => num(s.eal_pct), unit: "%" },
+    { k: "senk", label: "SEN support", w: 1.0, get: (s) => num(s.sen_support_pct), unit: "%" },
+    { k: "ehcp", label: "EHC plans", w: 0.8, get: (s) => num(s.sen_ehcp_pct), unit: "%" },
+    { k: "idaci", label: "Area deprivation (IDACI quintile)", w: 0.8, get: (s) => num(s.idaci) },
+    { k: "size", label: "Pupils", w: 0.4, get: (s) => (num(s.pupils) ? Math.log(num(s.pupils)) : null), show: (s) => num(s.pupils) },
+  ],
+};
+const TW_OUT = {
+  S: [{ k: "attainment8", label: "Attainment 8", dp: 1 }, { k: "basics_95", label: "Grade 5+ English and maths", dp: 0, unit: "%" }, { k: "a8_disadv", label: "Disadvantaged, Attainment 8", dp: 1 }, { k: "abs_overall_pct", label: "Overall absence", dp: 1, unit: "%", lower: true }, { k: "dest_sustained", label: "Sustained destinations", dp: 0, unit: "%" }],
+  P: [{ k: "ks2_rwm_exp", label: "RWM expected standard", dp: 0, unit: "%" }, { k: "ks2_rwm_high", label: "Higher standard", dp: 0, unit: "%" }, { k: "ks2_rwm_disadv", label: "Disadvantaged, RWM", dp: 0, unit: "%" }, { k: "abs_overall_pct", label: "Overall absence", dp: 1, unit: "%", lower: true }],
+};
+export function twinSpace(all, PRI, extras) {
+  let byPhase = TW_CACHE.get(all);
+  if (!byPhase) { byPhase = {}; TW_CACHE.set(all, byPhase); }
+  const ph = PRI ? "P" : "S";
+  const intake = extras && extras.intake && extras.intake.s;
+  const key = ph + (intake ? "i" : "");
+  if (byPhase[key]) return byPhase[key];
+  const dims = TW_DIMS[ph], main = TW_OUT[ph][0].k;
+  const est = (PRI ? primaries(all) : secondaries(all)).filter((x) => num(x[main]) != null);
+  const raw = est.map((x) => { const I = intake ? intake[String(x.urn)] : null; return dims.map((d) => d.get(x, I)); });
+  const stats = dims.map((_, j) => { const xs = raw.map((r) => r[j]).filter((v) => v != null); const m = xs.reduce((a, b) => a + b, 0) / (xs.length || 1); const sd = Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length || 1)) || 1; return { m, sd, n: xs.length }; });
+  const pts = est.map((x, i) => ({ s: x, z: raw[i].map((v, j) => (v == null ? null : (v - stats[j].m) / stats[j].sd)), raw: raw[i], grammar: TYPES.grammar.test(x) }));
+  return (byPhase[key] = { ph, dims, pts, byUrn: new Map(pts.map((p) => [String(p.s.urn), p])) });
+}
+export function nearest(space, p, k) {
+  const W = space.dims.map((d) => d.w);
+  const out = [];
+  for (const q of space.pts) {
+    if (q === p || q.grammar !== p.grammar) continue;
+    let d = 0, w = 0;
+    for (let j = 0; j < W.length; j++) { if (p.z[j] == null || q.z[j] == null) continue; d += W[j] * (p.z[j] - q.z[j]) ** 2; w += W[j]; }
+    if (w < W.reduce((a, b) => a + b, 0) * 0.55) continue; /* too little in common to call a twin */
+    out.push({ q, d: Math.sqrt(d / w) });
+  }
+  out.sort((a, b) => a.d - b.d);
+  return out.slice(0, k);
+}
+export const expectFrom = (tw, key) => { let t = 0, w = 0; tw.forEach(({ q, d }) => { const v = num(q.s[key]); if (v == null) return; const ww = 1 / (0.15 + d); t += v * ww; w += ww; }); return w ? t / w : null; };
+export function computeTwins(all, urn, PRI, extras, k = 20) {
+  const space = twinSpace(all, PRI, extras);
+  const p = space.byUrn.get(String(urn));
+  if (!p) return null;
+  const tw = nearest(space, p, k);
+  if (tw.length < 10) return null;
+  const outs = TW_OUT[space.ph].map((o) => { const e = expectFrom(tw, o.k), v = num(p.s[o.k]); return { ...o, v, e: e == null ? null : Math.round(e * 10) / 10, gap: v != null && e != null ? Math.round((v - e) * 10) / 10 : null }; });
+  const main = TW_OUT[space.ph][0].k;
+  /* each twin against ITS OWN twenty: who genuinely beats the odds */
+  const twins = tw.map(({ q, d }) => {
+    const own = nearest(space, q, k);
+    const e = expectFrom(own, main), v = num(q.s[main]);
+    const prev = PRI ? num(q.s.ks2_rwm_prev) : num(q.s.a8_prev);
+    return { urn: q.s.urn, name: q.s.name, la: q.s.la, match: Math.max(1, Math.round(100 * Math.exp(-d))), v, e: e == null ? null : Math.round(e * 10) / 10, beat: v != null && e != null ? Math.round((v - e) * 10) / 10 : null,
+      ch: v != null && prev != null ? Math.round((v - prev) * 10) / 10 : null, a19: PRI ? null : num(q.s.a8_2019), dis: PRI ? num(q.s.ks2_rwm_disadv) : num(q.s.a8_disadv), feats: q.raw.map((x, j) => (space.dims[j].show ? space.dims[j].show(q.s) : x)) };
+  });
+  const rank = 1 + twins.filter((t) => t.v != null && p.s[main] != null && t.v > num(p.s[main])).length;
+  const learn = twins.filter((t) => t.beat != null && t.beat > 0).sort((a, b) => b.beat - a.beat).slice(0, 6);
+  return { ph: space.ph, name: p.s.name, urn: p.s.urn, dims: space.dims.map((d) => ({ k: d.k, label: d.label, unit: d.unit || "" })), me: p.raw.map((x, j) => (space.dims[j].show ? space.dims[j].show(p.s) : x)),
+    outs, twins, rank, of: twins.length + 1, learn, hasKs2: space.ph === "S" && p.raw[0] != null };
+}
+/* a scope's schools, each against its own twins */
+function twinsBlock(schools, all, PRI, extras) {
+  const space = twinSpace(all, PRI, extras);
+  const main = TW_OUT[space.ph][0];
+  const rows = [];
+  for (const s of schools) {
+    const p = space.byUrn.get(String(s.urn));
+    if (!p) continue;
+    const tw = nearest(space, p, 20);
+    if (tw.length < 10) continue;
+    const e = expectFrom(tw, main.k), v = num(s[main.k]);
+    if (e == null || v == null) continue;
+    const ed = expectFrom(tw, TW_OUT[space.ph][2].k), vd = num(s[TW_OUT[space.ph][2].k]);
+    rows.push({ urn: s.urn, name: s.name, la: s.la, v, e: Math.round(e * 10) / 10, beat: Math.round((v - e) * 10) / 10, vd, ed: ed == null ? null : Math.round(ed * 10) / 10, beatD: vd != null && ed != null ? Math.round((vd - ed) * 10) / 10 : null });
+  }
+  if (!rows.length) return { mode: "twins", empty: true, n: 0, of: schools.length };
+  rows.sort((a, b) => b.beat - a.beat);
+  const mean = (xs) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+  return { mode: "twins", ph: space.ph, measure: main.label, unit: main.unit || "", n: rows.length, of: schools.length, rows,
+    meanBeat: mean(rows.map((r) => r.beat)), meanBeatD: mean(rows.map((r) => r.beatD).filter((v) => v != null)),
+    above: rows.filter((r) => r.beat >= (space.ph === "S" ? 2 : 5)).length, below: rows.filter((r) => r.beat <= (space.ph === "S" ? -2 : -5)).length,
+    intakeNote: extras && extras.intake ? "with KS2 prior attainment" : "without KS2 prior attainment (still loading)" };
+}
 function subjectsBlock(schools, extras) {
   const p = extras && extras.post16;
   if (!p || !p.s) return null;
@@ -1310,8 +1414,9 @@ export function computeSchoolDash(all, urn, extras) {
   const p16 = extras && extras.post16 && extras.post16.s && extras.post16.s[String(s.urn)] ? post16Block([s], extras) : null;
   const subj = p16 ? subjectsBlock([s], extras) : null;
   const dem = extras && extras.places && extras.places.s ? demandBlock([s], all, pri, extras) : null;
+  const twins = computeTwins(all, s.urn, pri, extras);
   const cap = extras && extras.places && extras.places.s ? capacityBlock([s], all, pri, extras) : null;
-  return { s, pri, bench: B, dist, standing, similar, early, p16: p16 && !p16.empty ? p16 : null, subj: subj && !subj.empty ? subj : null, dem: dem && !dem.empty ? dem : null, cap: cap && !cap.empty ? cap : null };
+  return { s, pri, bench: B, dist, standing, similar, early, p16: p16 && !p16.empty ? p16 : null, subj: subj && !subj.empty ? subj : null, dem: dem && !dem.empty ? dem : null, cap: cap && !cap.empty ? cap : null, twins };
 }
 
 export function computeReport(all, spec, extras) {

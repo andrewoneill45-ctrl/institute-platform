@@ -230,3 +230,7 @@
 .rdesk-foot{margin-top:16px;font-size:11.5px;color:#6F6580}
 @media (max-width:640px){.rdesk-veil{padding:0}.rdesk{border-radius:0;min-height:100%;padding:18px 16px}}
 .desk-fig .desk-cite{display:inline-block;margin:3px 0 0}
+
+/* Horizon, by invitation: its room name carries a gold rule in the shell */
+.shell-rooms a.shell-horizon{color:#8a6d1c}
+.shell-rooms a.shell-horizon.on{color:#fff;background:linear-gradient(135deg,#C6A035,#a8862a)}

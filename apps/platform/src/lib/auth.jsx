@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
     if (!su) return null;
     let school = su.user_metadata?.school_name || "";
     let urn = su.user_metadata?.urn ? Number(su.user_metadata.urn) : null;
-    let fullName = null, roleTitle = null, accountType = "school", orgName = null, isAdmin = false, systemAccess = false;
+    let fullName = null, roleTitle = null, accountType = "school", orgName = null, isAdmin = false, systemAccess = false, horizonAccess = false;
     try {
       /* select * so a profile read never breaks on a column that predates a migration */
       const { data: prof } = await supabase.from("profiles")
@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
         accountType = prof.account_type || "school"; orgName = prof.org_name || null;
         isAdmin = prof.is_admin === true;
         systemAccess = prof.system_access === true;
+        horizonAccess = prof.horizon_access === true;
       } else {
         /* every signed-in person gets a profile row, school or not */
         await supabase.from("profiles").insert({ id: su.id, school_name: school || null, urn });
@@ -46,7 +47,7 @@ export function AuthProvider({ children }) {
     return {
       id: su.id, email: su.email, urn, lens,
       school: school || (system ? "" : "Your school"),
-      fullName, roleTitle, accountType, orgName, isAdmin, systemAccess,
+      fullName, roleTitle, accountType, orgName, isAdmin, systemAccess, horizonAccess,
       scopeName: accountType === "school" ? (school || "Your school") : accountType === "system" ? "England, whole system" : (orgName || "Your organisation"),
     };
   }

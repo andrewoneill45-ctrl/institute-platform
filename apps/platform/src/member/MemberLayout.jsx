@@ -4,7 +4,7 @@ import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { Wordmark } from "@asi/design-system";
 import { useAuth } from "../lib/auth.jsx";
 import CommandPalette from "./CommandPalette.jsx";
-import { RoomIcon, ROOMS } from "./RoomIcons.jsx";
+import { RoomIcon, ROOMS, roomsFor } from "./RoomIcons.jsx";
 
 /* The members' shell: one bar for every room. Wordmark, the six rooms, the
    command palette (⌘K anywhere), and the member's own menu. On a phone the
@@ -52,8 +52,8 @@ export default function MemberLayout() {
         <div className="shell-in">
           <Link to="/" className="shell-brand" aria-label="The All Saints Institute, home"><Wordmark size={22} /></Link>
           <nav className="shell-rooms" aria-label="Rooms">
-            {ROOMS.map((r) => (
-              <NavLink key={r.key} to={r.key === "home" ? "." : r.key} end={r.key === "home"} className={({ isActive }) => (isActive ? "on" : "")}>
+            {roomsFor(user).map((r) => (
+              <NavLink key={r.key} to={r.key === "home" ? "." : r.key} end={r.key === "home"} className={({ isActive }) => (isActive ? "on" : "") + (r.key === "horizon" ? " shell-horizon" : "")}>
                 {r.label}
               </NavLink>
             ))}
@@ -73,6 +73,7 @@ export default function MemberLayout() {
                   <small>{[user?.roleTitle, user?.school || user?.scopeName].filter(Boolean).join(" · ")}</small>
                 </div>
                 <Link role="menuitem" to="/members/profile"><RoomIcon room="profile" size={16} />Your profile</Link>
+                {(user?.isAdmin || user?.horizonAccess) && <Link role="menuitem" to="/members/horizon"><RoomIcon room="horizon" size={16} />Horizon</Link>}
                 {user?.isAdmin && <Link role="menuitem" to="/members/admin"><RoomIcon room="accounts" size={16} />Accounts</Link>}
                 <button role="menuitem" onClick={() => { setMenu(false); setPalette(true); }}><RoomIcon room="search" size={16} />Search and jump<kbd>{isMac ? "⌘" : "Ctrl"} K</kbd></button>
                 <hr />

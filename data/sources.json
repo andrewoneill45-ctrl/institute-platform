@@ -176,6 +176,32 @@
       "lastPulled": "2026-10-28",
       "output": "apps/platform/public/data/places.json",
       "notes": "Files: Capacity - school; Sixth form capacity - school; Specialist provision capacity in mainstream schools - school; Estimates of future school place demand (planning areas). Built by data/pipeline/places-build.py with the admissions feed."
+    },
+    {
+      "key": "intake",
+      "name": "Intake measures for the twins: KS2 prior attainment, disadvantage and EAL of the KS4 cohort",
+      "publisher": "Department for Education",
+      "route": "ees-data-set-files",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/key-stage-4-performance",
+      "apiDataSetId": null,
+      "cadence": "Annual with the KS4 releases",
+      "lastVersion": "KS4 institution level 2025/26 provisional (KS2 from the 2023/24 cohort, the last with KS2 tests)",
+      "lastPulled": "2026-10-28",
+      "output": "apps/platform/public/data/intake.json",
+      "notes": "Built by data/pipeline/horizon-build.py from 'Key stage 4 institution level - Institution information' and '- Performance'. KS2 tests were not sat in 2020 or 2021, so later cohorts have no KS2 figure."
+    },
+    {
+      "key": "send-growth",
+      "name": "EHC plans by authority 2019 to 2026, special school capacity, and authority forecasts of specialist provision to 2031/32",
+      "publisher": "Department for Education",
+      "route": "ees-data-set-files",
+      "catalogueUrl": "https://explore-education-statistics.service.gov.uk/find-statistics/education-health-and-care-plans",
+      "apiDataSetId": null,
+      "cadence": "Annual (EHC plans in June; capacity in the spring)",
+      "lastVersion": "EHC plans as at January 2026; school capacity 2024/25",
+      "lastPulled": "2026-10-28",
+      "output": "apps/platform/public/data/send.json",
+      "notes": "Horizon's SEND lever. Built by data/pipeline/horizon-build.py."
     }
   ]
 }

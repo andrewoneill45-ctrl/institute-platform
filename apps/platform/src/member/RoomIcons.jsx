@@ -17,6 +17,8 @@ export function RoomIcon({ room, size = 18 }) {
       return <svg {...p}><ellipse {...S} cx="12" cy="12" rx="9" ry="4.6" transform="rotate(-20 12 12)" /><circle cx="12" cy="12" r="2.2" fill="currentColor" /><circle cx="19.2" cy="8.6" r="1.4" fill="currentColor" /></svg>;
     case "constellation": /* stars joined */
       return <svg {...p}><path {...S} d="M5 16.5 10 9l5 4.5 4.5-7" opacity=".55" /><circle cx="5" cy="16.5" r="1.7" fill="currentColor" /><circle cx="10" cy="9" r="1.7" fill="currentColor" /><circle cx="15" cy="13.5" r="1.7" fill="currentColor" /><circle cx="19.5" cy="6.5" r="1.7" fill="currentColor" /></svg>;
+    case "horizon": /* the sun on the line of the horizon */
+      return <svg {...p}><path {...S} d="M3 17.5h18" /><path {...S} d="M7 17.5a5 5 0 0 1 10 0" /><path {...S} d="M12 6.5v2.2M5.6 9.6l1.5 1.5M18.4 9.6l-1.5 1.5M3.5 13.2h1.8M18.7 13.2h1.8" /><path {...S} d="M8 20.5h8" opacity=".5" /></svg>;
     case "search":
       return <svg {...p}><circle {...S} cx="10.5" cy="10.5" r="6" /><path {...S} d="m15 15 5 5" /></svg>;
     case "ask": /* a spark: the question handed to Prizm */
@@ -39,6 +41,10 @@ export function RoomIcon({ room, size = 18 }) {
       return <svg {...p}><circle {...S} cx="12" cy="12" r="7" /></svg>;
   }
 }
+
+/* Horizon is by invitation: added to the rooms only for those who hold it */
+export const HORIZON_ROOM = { key: "horizon", to: "/members/horizon", label: "Horizon", verb: "Forecasts and policy levers", kw: "forecast simulate policy funding accountability send rolls closures model horizon" };
+export const roomsFor = (user) => (user && (user.isAdmin || user.horizonAccess) ? [...ROOMS, HORIZON_ROOM] : ROOMS);
 
 export const ROOMS = [
   { key: "home", to: "/members", label: "Home", verb: "Your school at a glance", kw: "home dashboard start overview" },

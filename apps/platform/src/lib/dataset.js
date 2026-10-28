@@ -103,6 +103,14 @@ export function getEarly() {
 /* demand and places: applications and offers 2014/15 to 2026/27, capacity
    returns and planning-area forecasts. Fetched when asked for, or when a
    school page opens. */
+/* the twins' intake measures: KS2 prior attainment of the 2024 GCSE cohort,
+   disadvantage and EAL of the 2026 one. Small; fetched with the dataset. */
+let intakePromise = null;
+export function getIntake() {
+  if (!intakePromise) intakePromise = fetch("/data/intake.json" + V()).then((r) => r.json()).catch(() => { intakePromise = null; return null; });
+  return intakePromise;
+}
+
 let placesPromise = null;
 export function getPlaces() {
   if (!placesPromise) placesPromise = fetch("/data/places.json" + V()).then((r) => r.json()).catch(() => { placesPromise = null; return null; });

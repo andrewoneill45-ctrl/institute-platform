@@ -708,6 +708,73 @@ function capacityHtml(d, ctx) {
     fore + pressed + tbl);
 }
 
+/* ── twins ──────────────────────────────────────────────────────────── */
+const fx = (v, dp) => (v == null ? "–" : dp === 0 ? String(Math.round(v)) : v.toFixed(dp));
+const sg = (v, dp = 1) => (v == null ? "–" : (v > 0 ? "+" : "") + fx(v, dp));
+/* diverging bars about zero: above the odds purple, below red */
+function divergeSvg(rows, { unit = "", dp = 1, zero = "what their twins achieve" } = {}) {
+  if (!rows.length) return "";
+  const W = 760, rh = 21, pl = 236, pr = 70, pt = 8, H = pt + rows.length * rh + 24;
+  const m = Math.max(2, ...rows.map((r) => Math.abs(r.v))) * 1.1;
+  const x = (v) => pl + ((v + m) / (2 * m)) * (W - pl - pr);
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:760px;height:auto" role="img">`;
+  s += `<line x1="${x(0)}" x2="${x(0)}" y1="${pt}" y2="${H - 20}" stroke="var(--ink)" stroke-width="1.2"/>`;
+  rows.forEach((r, i) => {
+    const cy = pt + i * rh + rh / 2, col = r.v >= 0 ? "var(--purple)" : "var(--red)";
+    s += `<g${hit(r.tip || [r.label], r.urn)}><rect x="0" y="${cy - rh / 2}" width="${W}" height="${rh}" fill="transparent"/>`;
+    s += `<text class="lab" x="${pl - 10}" y="${cy + 4}" text-anchor="end" style="font-size:11.5px;fill:var(--ink)">${esc(short(r.label, 34))}</text>`;
+    s += `<rect x="${Math.min(x(0), x(r.v)).toFixed(1)}" y="${cy - 6}" width="${Math.abs(x(r.v) - x(0)).toFixed(1)}" height="12" rx="2" fill="${col}" opacity="0.88"/>`;
+    s += `<text class="val" x="${W - pr + 8}" y="${cy + 4}" style="font-size:11px;fill:${col};font-weight:600">${sg(r.v, dp)}${unit}</text></g>`;
+  });
+  s += `<text class="tick" x="${x(0)}" y="${H - 6}" text-anchor="middle">${esc(zero)}</text>`;
+  return s + "</svg>";
+}
+
+/* the school page: its twenty twins, expected against actual, and who to learn from */
+export function twinsSchoolHtml(t) {
+  if (!t) return "";
+  const main = t.outs[0], b95 = t.outs[1];
+  const better = (o) => (o.gap == null ? 0 : o.lower ? -o.gap : o.gap);
+  const headline = `Against twenty schools with the same intake, ${esc(t.name)}'s ${esc(main.label)} is ${main.gap == null ? "–" : Math.abs(main.gap).toFixed(main.dp === 0 ? 0 : 1) + (main.unit === "%" ? " points" : " points")} ${main.gap >= 0 ? "above" : "below"} what they achieve (${fx(main.e, main.dp)}${main.unit || ""})${b95 && b95.gap != null ? `, and ${esc(b95.label.charAt(0).toLowerCase() + b95.label.slice(1))} ${Math.abs(b95.gap).toFixed(0)} points ${b95.gap >= 0 ? "above" : "below"}` : ""}. It ranks ${t.rank} of ${t.of}.`;
+  /* expected against actual, measure by measure */
+  const W = 760, rh = 34, pl = 236, pr = 90;
+  const rowsSvg = t.outs.filter((o) => o.v != null && o.e != null).map((o, i) => {
+    const lo = Math.min(o.v, o.e), hi = Math.max(o.v, o.e);
+    const span = o.unit === "%" ? 100 : o.k === "attainment8" || o.k === "a8_disadv" ? 90 : Math.max(20, hi * 1.4);
+    const x = (v) => pl + (Math.max(0, Math.min(span, v)) / span) * (W - pl - pr);
+    const cy = 18 + i * rh, good = better(o) >= 0;
+    const col = good ? "var(--purple)" : "var(--red)";
+    return `<text class="lab" x="${pl - 10}" y="${cy + 4}" text-anchor="end" style="font-size:12px;fill:var(--ink)">${esc(o.label)}</text>
+      <line x1="${x(0)}" x2="${x(span)}" y1="${cy}" y2="${cy}" stroke="var(--hair)" stroke-width="6" stroke-linecap="round"/>
+      <line x1="${x(lo)}" x2="${x(hi)}" y1="${cy}" y2="${cy}" stroke="${col}" stroke-width="3" opacity="0.5"/>
+      <circle cx="${x(o.e)}" cy="${cy}" r="5.5" fill="var(--paper)" stroke="var(--nat)" stroke-width="2"><title>Twins achieve ${fx(o.e, o.dp)}${o.unit || ""}</title></circle>
+      <circle cx="${x(o.v)}" cy="${cy}" r="6.5" fill="${col}"><title>This school ${fx(o.v, o.dp)}${o.unit || ""}</title></circle>
+      <text class="val" x="${W - pr + 10}" y="${cy + 4}" style="font-size:11.5px;fill:${col};font-weight:700">${sg(o.gap, o.dp === 0 ? 0 : 1)}${o.unit === "%" ? " pts" : ""}</text>`;
+  });
+  const dumb = rowsSvg.length ? `<svg viewBox="0 0 ${W} ${18 + rowsSvg.length * rh}" style="width:100%;max-width:760px;height:auto" role="img">${rowsSvg.join("")}</svg>` + legend([["var(--nat)", "What its twins achieve"], ["var(--purple)", "This school, the better side"], ["var(--red)", "This school, the weaker side"]]) : "";
+  const learn = t.learn.length ? `<div class="pz-learn">${t.learn.map((x) => `<div class="pz-learn-c"${hit([x.name, `${main.label} ${fx(x.v, main.dp)} against ${fx(x.e, main.dp)} for its own twins`, x.ch != null ? `${sg(x.ch)} on last year` : ""].filter(Boolean), x.urn)}><b>${esc(x.name)}</b><small>${esc(x.la || "")} · ${x.match}% match</small><div class="beat">${sg(x.beat)}</div><small>above its own twins${x.ch != null ? ` · ${sg(x.ch)} on last year` : ""}</small></div>`).join("")}</div>` : "";
+  const dimHead = t.dims.map((d) => `<th>${esc(d.label.replace(/ \(.*\)$/, ""))}</th>`).join("");
+  const F = (v, d) => (v == null ? "–" : d.k === "size" ? Math.round(v).toLocaleString("en-GB") : d.k === "idaci" ? String(Math.round(v)) : d.k === "ks2" ? v.toFixed(1) : Math.round(v) + (d.unit || ""));
+  const tbl = `<details class="pz-fold"><summary>The twenty twins, side by side<span>closest first</span></summary><table class="pz-table"><thead><tr><th>School</th><th>Match</th>${dimHead}<th>${esc(main.label)}</th><th>Against its own twins</th><th>Change on last year</th></tr></thead><tbody>
+    <tr style="background:var(--lilac)"><td class="nm"><b>${esc(t.name)}</b></td><td class="num">–</td>${t.dims.map((d, j) => `<td class="num">${F(t.me[j], d)}</td>`).join("")}<td class="num"><b>${fx(main.v, main.dp)}</b></td><td class="num">${sg(main.gap)}</td><td class="num">–</td></tr>
+    ${t.twins.map((x) => `<tr${hit([x.name], x.urn)}><td class="nm">${esc(x.name)}<br><small style="color:var(--muted)">${esc(x.la || "")}</small></td><td class="num">${x.match}%</td>${t.dims.map((d, j) => `<td class="num">${F(x.feats[j], d)}</td>`).join("")}<td class="num">${fx(x.v, main.dp)}</td><td class="num" style="font-weight:600;color:${x.beat >= 0 ? "var(--purple)" : "var(--red)"}">${sg(x.beat)}</td><td class="num">${sg(x.ch)}</td></tr>`).join("")}</tbody></table></details>`;
+  const NOTE = `Twins are the twenty ${t.ph === "S" ? "secondaries" : "primaries"} in England closest to this one on ${t.dims.map((d) => d.label).join(", ").replace(/, ([^,]+)$/, " and $1")}, each standardised and weighted by how strongly it shapes results${t.ph === "S" ? "; prior attainment counts most" : "; disadvantage counts most"}. Grammar schools are twinned only with grammar schools. "What its twins achieve" weights the closest twins most.${t.ph === "S" ? ` KS2 prior attainment is the 2024 GCSE cohort's, the last with KS2 tests (none were sat in 2020 or 2021): a measure of the intake, not of this year's pupils.${t.hasKs2 ? "" : " This school has no KS2 figure published, so it is twinned on the other six."}` : ""} "Against its own twins" scores each twin the same way, so the schools to learn from are those that beat their own odds, not those with easier intakes.`;
+  return section("Twins", headline, NOTE, dumb +
+    (learn ? `<p class="pz-note" style="margin:18px 0 8px">Schools to learn from: twins that beat their own odds most. Click one to open its page.</p>` + learn : "") + tbl);
+}
+
+function twinsHtml(d) {
+  if (!d || d.mode !== "twins") return "";
+  if (d.empty) return section("Beating the odds", "None of the schools in scope can be twinned.", "", "");
+  const U = d.ph === "S" ? " points" : " points";
+  const headline = `Set against schools with the same intake, the ${d.n} schools in scope average ${sg(d.meanBeat)}${U} of ${esc(d.measure)}${d.meanBeatD != null ? ` (${sg(d.meanBeatD)} for disadvantaged pupils)` : ""}. ${d.above} clearly beat their odds; ${d.below} fall clearly short.`;
+  const { rows: shown, capped, segNote } = capRows(d.rows.map((r) => ({ label: r.name, v: r.beat, urn: r.urn, tip: [r.name, `${d.measure} ${fx(r.v, 1)}${d.unit} against ${fx(r.e, 1)}${d.unit} for its twins`, r.beatD != null ? `Disadvantaged pupils ${sg(r.beatD)} against their twins` : ""].filter(Boolean) })), 40);
+  const bars = divergeSvg(shown.filter((r) => !r.gap).map((r) => ({ ...r })), { dp: 1 });
+  const tbl = `<details class="pz-fold"><summary>Every school against its twins<span>${d.rows.length} schools</span></summary><table class="pz-table"><thead><tr><th>School</th><th>${esc(d.measure)}</th><th>Its twins</th><th>Beating the odds</th><th>Disadvantaged</th><th>Their twins</th><th>Gap</th></tr></thead><tbody>${d.rows.map((r) => `<tr${hit([r.name], r.urn)}><td class="nm">${esc(r.name)}</td><td class="num">${fx(r.v, 1)}</td><td class="num">${fx(r.e, 1)}</td><td class="num" style="font-weight:600;color:${r.beat >= 0 ? "var(--purple)" : "var(--red)"}">${sg(r.beat)}</td><td class="num">${fx(r.vd, 1)}</td><td class="num">${fx(r.ed, 1)}</td><td class="num">${sg(r.beatD)}</td></tr>`).join("")}</tbody></table></details>`;
+  const NOTE = `Each school is set against its own twenty statistical twins across England: the schools closest to it on intake (${d.ph === "S" ? "KS2 prior attainment of the 2024 GCSE cohort, the last with KS2 tests, " : ""}disadvantage, EAL, SEN support, EHC plans, area deprivation and size), with grammar schools twinned only with each other. "Beating the odds" is the school's result less what its twins achieve. A contextual reading, not a value-added measure: it says who does more with a similar hand, not why.`;
+  return section("Beating the odds", headline, NOTE, (capped || segNote ? `<p class="pz-note">${segNote || ""}${capped ? `The two ends of ${d.rows.length} schools.` : ""}</p>` : "") + bars + tbl);
+}
+
 function behaviourHtml(d, ctx) {
   if (!d.rows.length) return "";
   const vsLine = ctx && ctx.vs && ctx.vs.suspMean != null ? ` ${esc((ctx.labels || {}).b || "The comparison")}: ${f1(ctx.vs.suspMean)} per 100, ${ctx.vs.pexZero} with none.` : "";
@@ -1186,7 +1253,7 @@ export function schoolDashHtml(d) {
   <section class="pz-block">${tileHtml}</section>
   ${reportCardHtml(s)}
   ${standingHtml(d.standing, pri)}
-  ${similarHtml(d.similar, pri, s.name)}
+  ${d.twins ? twinsSchoolHtml(d.twins) : similarHtml(d.similar, pri, s.name)}
   ${trendSection}
   ${recordSection}
   ${d.dem || d.cap ? `<div class="pz-vintage" style="margin-top:28px">${esc(VINTAGE_PLACES)}</div>` + demandHtml(d.dem, {}) + capacityHtml(d.cap, {}) : ""}
@@ -1202,7 +1269,7 @@ export function forewordHtml(text) {
   return `<section class="pz-block pz-foreword">${kick("Foreword")}<div class="fw">${paras}</div><div class="fw-note">Written by Prizm's reader; every figure verified against the computed data before it was allowed onto the page.</div></section>`;
 }
 
-const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, demand: demandHtml, capacity: capacityHtml, post16: post16Html, subjects: subjectsHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
+const RENDERERS = { headlines: headlinesHtml, cohort: cohortHtml, movement: movementHtml, gap: gapHtml, attendance: attendanceHtml, behaviour: behaviourHtml, workforce: workforceHtml, inclusion: inclusionHtml, early: earlyHtml, flow: flowHtml, twins: twinsHtml, demand: demandHtml, capacity: capacityHtml, post16: post16Html, subjects: subjectsHtml, finance: financeHtml, destinations: destinationsHtml, scatter: scatterHtml, distribution: distributionHtml, ofsted: ofstedHtml, league: leagueHtml };
 
 export function renderBlocks(computed) {
   const labels = computed.labels || {};
@@ -1240,6 +1307,12 @@ export const PZ_CSS = `
   .pz-note{color:var(--muted);font-size:12.5px;margin:8px 0 14px;line-height:1.55;max-width:90ch}
   .pz-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin-top:16px}
   .pz-tile{background:var(--dark);color:#fff;padding:18px 20px 16px;border-radius:2px}
+  .pz-learn{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+  .pz-learn-c{background:var(--card);border:1px solid var(--hair);border-radius:4px;padding:13px 15px;cursor:pointer;transition:border-color .15s,transform .15s}
+  .pz-learn-c:hover{border-color:var(--purple);transform:translateY(-1px)}
+  .pz-learn-c b{display:block;font-family:Fraunces,serif;font-size:15px;line-height:1.25;color:var(--ink)}
+  .pz-learn-c small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  .pz-learn-c .beat{font-family:Fraunces,serif;font-size:26px;color:var(--purple);margin-top:6px}
   .pz-tile .n{font-family:Fraunces,Georgia,serif;font-size:40px;line-height:1;letter-spacing:-.01em}
   .pz-tile .n small{font-size:17px;color:var(--gold-soft)}
   .pz-tile p{font-size:12px;line-height:1.45;color:rgba(255,255,255,.72);margin:8px 0 0}
@@ -1361,3 +1434,6 @@ export function reportHtml(spec, computed, foreword, singleHtml) {
 <script>window.__PZ_OPEN__="https://institute.school/members/prizm";${PZ_TIP_JS}</script>
 </div></main></body></html>`;
 }
+
+/* the chart kit, lent to Horizon so both instruments draw in one hand */
+export const KIT = { section, legend, dualTrendSvg, divergeSvg, columnsSvg, forestSvg, hit, esc, f1, kick, capRows, trendSvg, niceTicks };
