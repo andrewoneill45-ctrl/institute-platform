@@ -215,6 +215,12 @@ function SchoolView({ V, user }) {
               </div>
             </div>
           )}
+          <div className="hm-kick" style={{ marginTop: 18, marginBottom: 6 }}>Who it teaches</div>
+          <div className="hm-intake">
+            {[["Free school meals", s.fsm_pct, "%"], ["EHC plans", s.sen_ehcp_pct, "%"], ["SEN support", s.sen_support_pct, "%"], ["English as an additional language", s.eal_pct, "%"]].filter((x) => x[1] != null).map(([l, v, u]) => (
+              <div key={l}><b>{f1(v)}{u}</b><small>{l}</small></div>
+            ))}
+          </div>
           <div className="hm-chips">
             {chips.map(([l, to]) => <Link key={l} to={to} className="hm-chip">{l}</Link>)}
           </div>
@@ -224,7 +230,7 @@ function SchoolView({ V, user }) {
         <section className="hm-card asi-rise" style={{ "--asi-d": "380ms" }}>
           <div className="hm-kick">Where it stands in England</div>
           <h3 className="hm-h3">Nine measures, one shape: each arm is the share of England's {pri ? "primaries" : "secondaries"} this school is ahead of.</h3>
-          <Rose data={rose} />
+          <div className="hm-rose-wrap"><Rose data={rose} /></div>
           <p className="hm-note" style={{ marginTop: 4 }}>The dashed ring is the middle of England. An arm outside it means the school is ahead of most {pri ? "primaries" : "secondaries"} on that measure; inside it, behind most. Attendance, absence, suspensions and retention are turned the right way up, so further out is always better.</p>
         </section>
       </div>
@@ -421,7 +427,10 @@ const HOME_CSS = `
 .hm-h3{font-family:Fraunces,serif;font-weight:500;font-size:17px;line-height:1.3;color:${INK};margin:0 0 8px;text-wrap:balance}
 .hm-note{font-size:12.5px;color:${MUTED};line-height:1.55;margin:6px 0 0}
 .hm-grid{display:grid;gap:18px;margin-top:18px}
-.hm-grid-top{grid-template-columns:1.2fr 1fr;margin-top:26px;align-items:start}
+.hm-grid-top{grid-template-columns:1.2fr 1fr;margin-top:26px;align-items:stretch}
+.hm-grid-top>.hm-card{display:flex;flex-direction:column}
+.hm-grid-top .hm-hero .hm-chips{margin-top:auto;padding-top:22px}
+.hm-grid-top .hm-rose-wrap{flex:1;display:flex;flex-direction:column;justify-content:center}
 .hm-grid-rows{grid-template-columns:1fr}
 .hm-grid-rows .hm-card{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:10px 34px;align-items:center}
 .hm-grid-rows .hm-svg{margin-top:0}
@@ -439,6 +448,9 @@ const HOME_CSS = `
 .hm-rc-p small{color:${MUTED};font-weight:500}
 .hm-rc-p i{width:9px;height:9px;border-radius:50%;display:inline-block;background:#8A8296}
 .hm-rc-p[data-g="1"] i{background:#6A0CA0}.hm-rc-p[data-g="2"] i{background:#2F7A39}.hm-rc-p[data-g="3"] i{background:#C6A035}.hm-rc-p[data-g="4"] i{background:#D08A2E}.hm-rc-p[data-g="5"] i{background:#B4475A}
+.hm-intake{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.hm-intake b{display:block;font-family:Fraunces,serif;font-weight:600;font-size:22px;color:${INK};letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.hm-intake small{display:block;font-size:11px;color:${MUTED};margin-top:4px;line-height:1.3}
 .hm-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
 .hm-chip{font-size:12px;font-weight:600;color:${INK};background:#FBFAF7;border:1px solid ${HAIR};border-radius:999px;padding:7px 14px;text-decoration:none}
 .hm-chip:hover{border-color:rgba(106,12,160,.4);color:${DEEP}}
@@ -472,5 +484,5 @@ const HOME_CSS = `
 .hm-tool p{font-size:13px;color:${MUTED};line-height:1.55;margin:0 0 14px}
 .hm-tool-cta{font-size:12.5px;font-weight:600;color:${DEEP}}
 @media (max-width:980px){.hm-grid-top,.hm-grid-2{grid-template-columns:1fr}.hm-grid-rows .hm-card{grid-template-columns:1fr}.hm-rooms{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:720px){.hm-in{padding:22px 16px 60px}.hm-rooms{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hm-room{padding:8px 10px}.hm-room small{display:none}.hm-tiles{grid-template-columns:1fr 1fr}.hm-tile-n{font-size:26px}.hm-card,.pz-report.hm-card{padding:18px 16px;border-radius:16px}.hm-hero-n b{font-size:32px}.hm-facts{grid-template-columns:1fr 1fr}}
+@media (max-width:720px){.hm-in{padding:22px 16px 60px}.hm-intake{grid-template-columns:1fr 1fr}.hm-rooms{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hm-room{padding:8px 10px}.hm-room small{display:none}.hm-tiles{grid-template-columns:1fr 1fr}.hm-tile-n{font-size:26px}.hm-card,.pz-report.hm-card{padding:18px 16px;border-radius:16px}.hm-hero-n b{font-size:32px}.hm-facts{grid-template-columns:1fr 1fr}}
 `;

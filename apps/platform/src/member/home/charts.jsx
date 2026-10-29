@@ -28,7 +28,7 @@ export function Rose({ data, size = 420 }) {
   const T = RM ? "none" : "all 1400ms cubic-bezier(.22,.9,.28,1)";
   return (
     <div style={{ marginTop: 4 }}>
-      <svg viewBox={`-26 0 ${size + 52} ${size + 10}`} style={{ width: "100%", maxWidth: 480, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Standing in England by measure">
+      <svg viewBox={`-26 0 ${size + 52} ${size + 10}`} style={{ width: "100%", maxWidth: 420, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Standing in England by measure">
         <defs>
           <radialGradient id="hmRose" cx="50%" cy="50%" r="60%">
             <stop offset="0%" stopColor={GOLD} stopOpacity=".5" />
