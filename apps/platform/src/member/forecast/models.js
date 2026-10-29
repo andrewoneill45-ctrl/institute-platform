@@ -96,9 +96,39 @@ export function peersOf(F, all, urn, year) {
     bench[k] = { med: median(xs), q1: median(xs.filter((x) => x <= median(xs))), q3: median(xs.filter((x) => x >= median(xs))), xs, pct: pctile(xs, mine.src ? (k === "inc" ? mine.incPP : k === "exp" ? mine.expPP : k === "res" ? mine.resPP : k === "staff" ? mine.staffPP : mine.linesPP[k]) : null) };
   }
   const deficitShare = set.length ? Math.round((100 * set.filter((p) => num(p.r[fi.res]) != null && p.r[fi.res] < 0).length) / set.length) : null;
-  const out = { n: set.length, year, london, phase, sector: mine.src === "A" ? "academies" : "maintained schools", bench, deficitShare, rule: `${phase || "schools"} in the same sector, ${london ? "in London" : "outside London"}, with a roll and free school meals near this school's` };
+  /* the workforce of the comparators: pupils per teacher, pay, the loaded cost of a teacher, support staff per hundred pupils */
+  const wf = {
+    ptr: median(set.map((p) => num(p.c.wf_ptr))),
+    pay: median(set.map((p) => num(p.c.wf_pay_mean))),
+    costPerTeacher: median(set.map((p) => { const t = num(p.r[fi.teachers]), v = num(p.r[fi.teach]); return t && v != null ? (1000 * v) / t : null; })),
+    supportPer100: median(set.map((p) => { const t = num(p.c.wf_teachers_fte), w = num(p.c.wf_workforce_fte), pu = num(p.c.pupils); return t != null && w != null && pu ? (100 * (w - t)) / pu : null; })),
+    leadership: median(set.map((p) => num(p.c.wf_leadership_pct))),
+    staffShare: median(set.map((p) => { const st = num(p.r[fi.staff]), ex = num(p.r[fi.exp]); return st != null && ex ? (100 * st) / ex : null; })),
+    ptrs: set.map((p) => num(p.c.wf_ptr)).filter((x) => x != null),
+  };
+  const out = { n: set.length, year, london, phase, sector: mine.src === "A" ? "academies" : "maintained schools", bench, wf, deficitShare, rule: `${phase || "schools"} in the same sector, ${london ? "in London" : "outside London"}, with a roll and free school meals near this school's` };
   PEERS.set(key, out);
   return out;
+}
+
+/* ── staff, the driver ──────────────────────────────────────────────── */
+/* the workforce census joined to the finance return: how many, at what
+   cost, against the schools most like this one */
+export function staffing(me, core, peers) {
+  if (!me || !core) return null;
+  const L = me.last;
+  const teachers = num(core.wf_teachers_fte) ?? L.teachers;
+  const workforce = num(core.wf_workforce_fte);
+  const support = teachers != null && workforce != null ? Math.max(0, workforce - teachers) : null;
+  const ptr = num(core.wf_ptr) ?? (teachers ? r1(L.pupils / teachers) : null);
+  const costPerTeacher = L.teachers && L.lines.teach != null ? Math.round((1000 * L.lines.teach) / L.teachers) : null;
+  const costPerSupport = support && L.lines.edsup != null ? Math.round((1000 * L.lines.edsup) / support) : null;
+  const staffShare = L.staff != null && L.exp ? r1((100 * L.staff) / L.exp) : null;
+  const W = peers && peers.wf;
+  const atPeersPtr = W && W.ptr && teachers != null ? r1(L.pupils / W.ptr) : null;
+  const scissors = me.rows.map((r) => ({ y: r.y, staffPP: r.staffPP, incPP: r.incPP, teachers: r.teachers, pupils: r.pupils, ptr: r.teachers ? r1(r.pupils / r.teachers) : null }));
+  return { teachers, workforce, support, ptr, costPerTeacher, costPerSupport, staffShare, pay: num(core.wf_pay_mean), leadership: num(core.wf_leadership_pct), turnover: num(core.wf_turnover_pct), vacancies: num(core.wf_vac_rate), sick: num(core.wf_sick_days),
+    supportPer100: support != null && L.pupils ? r1((100 * support) / L.pupils) : null, peers: W, atPeersPtr, teachersOverPeers: atPeersPtr != null && teachers != null ? r1(teachers - atPeersPtr) : null, scissors };
 }
 
 /* ── where the money could go further ───────────────────────────────── */
@@ -161,14 +191,17 @@ export function rollPath(me, places, A, extra) {
    with pay and prices, income follows the roll. "Follow": the variable part
    of each line moves with the roll, after the lead time a decision takes.
    The reserve is carried forward either way; the cliff is the year it is gone. */
-export function project(me, places, A) {
+export const PLAN0 = { dTeachers: 0, dSupport: 0, ptrTarget: null };
+export function project(me, places, A, plan = PLAN0, st = null) {
   const L = me.last, roll = rollPath(me, places, A);
+  const hasPlan = plan && (plan.dTeachers || plan.dSupport || plan.ptrTarget);
+  const T0 = (st && st.teachers) || L.teachers || null, S0 = st && st.support ? st.support : null;
   const lines = LINES.map((l) => ({ ...l, v: L.lines[l.k] != null ? L.lines[l.k] : 0 }));
   const known = lines.reduce((a, l) => a + l.v, 0);
   const other = Math.max(0, L.exp - known);                 /* everything the nine lines do not cover */
   const staffLike = (k) => ["teach", "supply", "edsup", "admin"].includes(k);
-  const yrs = [{ y: L.y, t: 0, pupils: L.pupils, inc: L.inc, hold: L.exp, follow: L.exp, balHold: L.bal, balFollow: L.bal, resHold: L.res, resFollow: L.res, teachersHold: L.teachers, teachersFollow: L.teachers }];
-  let resH = L.res, resF = L.res;
+  const yrs = [{ y: L.y, t: 0, pupils: L.pupils, inc: L.inc, hold: L.exp, follow: L.exp, plan: L.exp, balHold: L.bal, balFollow: L.bal, balPlan: L.bal, resHold: L.res, resFollow: L.res, resPlan: L.res, teachersHold: L.teachers, teachersFollow: L.teachers, teachersPlan: T0 }];
+  let resH = L.res, resF = L.res, resP = L.res;
   for (const p of roll.path) {
     const g = p.pupils / L.pupils;
     const payF = Math.pow(1 + A.pay / 100, p.t), inflF = Math.pow(1 + A.infl / 100, p.t), fundF = Math.pow(1 + A.fund / 100, p.t);
@@ -185,18 +218,60 @@ export function project(me, places, A) {
     }
     hold += other * inflF * (0.5 + 0.5 * Math.max(1, g)); follow += other * inflF * (0.5 + 0.5 * g);
     hold = Math.round(hold); follow = Math.round(follow);
-    resH += inc - hold; resF += inc - follow;
     const landed = p.t > (A.leadTime || 0) - 1;
-    yrs.push({ y: p.y, t: p.t, pupils: p.pupils, inc, hold, follow, balHold: inc - hold, balFollow: inc - follow, resHold: Math.round(resH), resFollow: Math.round(resF),
-      teachersHold: L.teachers, teachersFollow: L.teachers != null ? r1(L.teachers * (0.15 + 0.85 * (landed ? g : 1))) : null });
+    /* the plan: the leader's own staffing, landing after the lead time; everything else as held */
+    let planCost = hold, teachersPlan = T0;
+    if (hasPlan && T0) {
+      const tPlan = plan.ptrTarget ? Math.max(T0 * 0.5, p.pupils / plan.ptrTarget) : T0 + (plan.dTeachers || 0);
+      teachersPlan = landed ? r1(tPlan) : T0;
+      const tf = teachersPlan / T0;
+      const sf = S0 && plan.dSupport ? Math.max(0.3, (S0 + (landed ? plan.dSupport : 0)) / S0) : 1;
+      planCost = 0;
+      for (const l of lines) {
+        const f = staffLike(l.k) ? payF : inflF;
+        if (l.k === "teach") planCost += l.v * f * tf;
+        else if (l.k === "edsup") planCost += l.v * f * sf;
+        else planCost += l.v * f * (l.fixed + (1 - l.fixed) * Math.max(1, g));
+      }
+      planCost += other * inflF * (0.5 + 0.5 * Math.max(1, g));
+      planCost = Math.round(planCost);
+    }
+    resH += inc - hold; resF += inc - follow; resP += inc - planCost;
+    yrs.push({ y: p.y, t: p.t, pupils: p.pupils, inc, hold, follow, plan: planCost, balHold: inc - hold, balFollow: inc - follow, balPlan: inc - planCost, resHold: Math.round(resH), resFollow: Math.round(resF), resPlan: Math.round(resP),
+      teachersHold: L.teachers, teachersFollow: L.teachers != null ? r1(L.teachers * (0.15 + 0.85 * (landed ? g : 1))) : null, teachersPlan });
   }
+  const cliffPlan = yrs.find((r) => r.t > 0 && r.resPlan < 0);
   const cliffHold = yrs.find((r) => r.t > 0 && r.resHold < 0), cliffFollow = yrs.find((r) => r.t > 0 && r.resFollow < 0);
   const end = yrs[yrs.length - 1];
   const gapEnd = end.inc - end.hold;                                     /* the structural gap at the horizon if nothing moves */
   const postsEnd = A.teacherCost ? r1((-gapEnd * 1000) / A.teacherCost) : null;
   /* the decision calendar: the posts that have to go by each September for the follow line, and the year to decide them */
   const decisions = yrs.filter((r) => r.t > 0 && r.teachersFollow != null && L.teachers != null).map((r) => { const d = nextY(r.y, -(A.leadTime || 1)); return { y: r.y, teachers: r1(L.teachers - r.teachersFollow), decideBy: d <= L.y ? "now" : d, pupils: r.pupils, lost: L.pupils - r.pupils }; });
-  return { yrs, roll, cliffHold: cliffHold ? cliffHold.y : null, cliffFollow: cliffFollow ? cliffFollow.y : null, end, gapEnd, postsEnd, decisions, other, base: L };
+  return { yrs, roll, cliffHold: cliffHold ? cliffHold.y : null, cliffFollow: cliffFollow ? cliffFollow.y : null, cliffPlan: hasPlan ? (cliffPlan ? cliffPlan.y : null) : undefined, hasPlan: !!hasPlan, end, gapEnd, postsEnd, decisions, other, base: L };
+}
+
+/* ── relative impact: what one unit of each lever does to the balance at the horizon ── */
+/* Each lever is applied on its own to the held future; the swing is the
+   change in the horizon year's balance, £k a year. One scale for every
+   decision a leader could take. */
+export function tornado(me, places, A, st, peers) {
+  const base = project(me, places, A).end;
+  const L = me.last;
+  const clone = (patch) => ({ ...me, last: { ...L, ...patch, lines: { ...L.lines, ...(patch.lines || {}) } }, rows: me.rows.map((r, i) => (i === me.rows.length - 1 ? { ...r, ...patch, lines: { ...r.lines, ...(patch.lines || {}) } } : r)) });
+  const swing = (m2, A2 = A, plan2 = PLAN0) => project(m2, places, A2, plan2, st).end;
+  const items = [];
+  const T = st && st.teachers, S = st && st.support;
+  if (T && L.lines.teach) items.push({ k: "teacher", label: "One teacher fewer", unit: "FTE", v: swing(me, A, { dTeachers: -1 }).balPlan - base.balHold, how: `one teaching post at today's loaded cost of ${Math.round((1000 * L.lines.teach) / (L.teachers || T)).toLocaleString("en-GB")}` });
+  if (S && L.lines.edsup) items.push({ k: "support", label: "One support post fewer", unit: "FTE", v: swing(me, A, { dSupport: -1 }).balPlan - base.balHold, how: "one education support post at today's average cost" });
+  items.push({ k: "pay", label: "Pay awards one point lower", unit: "%", v: swing(me, { ...A, pay: A.pay - 1 }).balHold - base.balHold, how: `${A.pay - 1}% a year instead of ${A.pay}%, compounding to the horizon` });
+  items.push({ k: "fund", label: "Funding per pupil one point higher", unit: "%", v: swing(me, { ...A, fund: A.fund + 1 }).balHold - base.balHold, how: `${A.fund + 1}% a year instead of ${A.fund}%` });
+  if (st && st.ptr && T) items.push({ k: "ptr", label: "One more pupil per teacher", unit: "PTR", v: swing(me, A, { dTeachers: -(T - L.pupils / (st.ptr + 1)) }).balPlan - base.balHold, how: `${(st.ptr + 1).toFixed(1)} pupils per teacher instead of ${st.ptr.toFixed(1)} on today's roll: ${(T - L.pupils / (st.ptr + 1)).toFixed(1)} fewer teachers` });
+  items.push({ k: "pupils", label: "Ten more pupils on roll", unit: "pupils", v: swing(clone({ pupils: L.pupils + 10, inc: Math.round(L.inc * (L.pupils + 10) / L.pupils) })).balHold - base.balHold, how: "ten pupils at today's income per pupil, with staffing held" });
+  if (L.lines.energy) items.push({ k: "energy", label: "Energy down a tenth", unit: "%", v: swing(clone({ lines: { energy: L.lines.energy * 0.9 } })).balHold - base.balHold, how: "a 10% saving on gas and electricity, held to the horizon" });
+  if (L.lines.supply) items.push({ k: "supply", label: "Supply down a third", unit: "%", v: swing(clone({ lines: { supply: L.lines.supply * (2 / 3) } })).balHold - base.balHold, how: "a third less on supply and agency cover" });
+  if (peers && peers.bench.prem && peers.bench.prem.med != null && L.linesPP.prem > peers.bench.prem.med) items.push({ k: "prem", label: "Premises at the comparators' median", unit: "£", v: swing(clone({ lines: { prem: (peers.bench.prem.med * L.pupils) / 1000 } })).balHold - base.balHold, how: `from ${Math.round(L.linesPP.prem)} to ${Math.round(peers.bench.prem.med)} a pupil` });
+  if (peers && peers.bench.cater && peers.bench.cater.med != null && L.linesPP.cater > peers.bench.cater.med) items.push({ k: "cater", label: "Catering at the comparators' median", unit: "£", v: swing(clone({ lines: { cater: (peers.bench.cater.med * L.pupils) / 1000 } })).balHold - base.balHold, how: `from ${Math.round(L.linesPP.cater)} to ${Math.round(peers.bench.cater.med)} a pupil` });
+  return { base: base.balHold, year: base.y, items: items.map((i) => ({ ...i, v: Math.round(i.v) })).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)) };
 }
 
 /* ── an estate or the system: many ledgers at once ───────────────────── */

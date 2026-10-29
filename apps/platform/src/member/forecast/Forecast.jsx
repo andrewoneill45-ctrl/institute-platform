@@ -12,7 +12,7 @@ import { getDataset, getPlaces, getFinance } from "../../lib/dataset.js";
 import { PZ_CSS, attachTipCard } from "../prizm/render.js";
 import { HZ_CSS } from "../horizon/Horizon.jsx";
 import { estateSchools } from "../home/compute.js";
-import { ledgerOf, peersOf, savings, project, estateLedger, DEFAULTS, ASSUMPTIONS, YL } from "./models.js";
+import { ledgerOf, peersOf, savings, project, estateLedger, staffing, tornado, DEFAULTS, ASSUMPTIONS, PLAN0, YL } from "./models.js";
 import { schoolHtml, estateHtml, forecastDoc } from "./views.js";
 
 const INK = "#221233", MUTED = "#6F6580", PURPLE = "#6A0CA0", GOLD = "#C6A035", HAIR = "rgba(34,18,51,.14)";
@@ -28,6 +28,8 @@ export default function Forecast() {
   const [data, setData] = useState(null);
   const [A, setA] = useState({ ...DEFAULTS });
   const [controls, setControls] = useState(false);
+  const [tab, setTab] = useState("assumptions");
+  const [plan, setPlan] = useState({ ...PLAN0 });
   const canvasRef = useRef(null);
   const system = user?.accountType === "system" || user?.accountType === "aepa";
   const estate = ["trust", "la", "diocese"].includes(user?.accountType || "");
@@ -65,8 +67,10 @@ export default function Forecast() {
         if (!me) return { html: "", empty: true, title: scope.s.name };
         const peers = peersOf(F, all, scope.s.urn, me.last.y);
         const saves = savings(me, peers);
-        const P = project(me, places, A);
-        return { html: schoolHtml({ me, peers, saves, P, A, core: scope.s }), title: me.name || scope.s.name, sub: `${scope.s.la || ""} · ${me.rows.length} years of returns, ${YL(me.first.y)} to ${YL(me.last.y)} · ${me.last.src === "A" ? "academy" : "maintained"}`, me, P };
+        const st = staffing(me, scope.s, peers);
+        const P = project(me, places, A, plan, st);
+        const torn = tornado(me, places, A, st, peers);
+        return { html: schoolHtml({ me, peers, saves, P, A, core: scope.s, st, torn, plan }), st, title: me.name || scope.s.name, sub: `${scope.s.la || ""} · ${me.rows.length} years of returns, ${YL(me.first.y)} to ${YL(me.last.y)} · ${me.last.src === "A" ? "academy" : "maintained"}`, me, P };
       }
       if (scope.kind === "estate" || scope.kind === "system") {
         const label = scope.kind === "system" ? "England" : user.orgName;
@@ -75,7 +79,7 @@ export default function Forecast() {
       }
       return { html: "", empty: true, title: "Your school" };
     } catch (e) { console.error(e); return { html: "", error: String(e && e.message || e), title: "Forecast" }; }
-  }, [data, scope, A, user]);
+  }, [data, scope, A, plan, user]);
 
   /* every table sorts on its headings */
   useEffect(() => {
@@ -119,17 +123,44 @@ export default function Forecast() {
               {[["school", user?.school || "Your school"], ["system", "England"]].map(([v, l]) => <button key={v} onClick={() => setView(v)} style={{ fontFamily: "inherit", border: "none", borderRadius: 999, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", background: view === v ? INK : "transparent", color: view === v ? "#fff" : MUTED }}>{l}</button>)}
             </div>
           )}
-          <button onClick={() => setControls((v) => !v)} style={{ ...barBtn(false), background: controls ? "rgba(106,12,160,.08)" : "#fff" }}>Assumptions</button>
+          {run && run.st && <button onClick={() => { setTab("staffing"); setControls(true); }} style={{ ...barBtn(false), background: controls && tab === "staffing" ? "rgba(106,12,160,.08)" : "#fff", borderColor: plan.dTeachers || plan.dSupport || plan.ptrTarget ? "#2F7A39" : HAIR }}>Staffing{plan.dTeachers || plan.dSupport || plan.ptrTarget ? " · plan on" : ""}</button>}
+          <button onClick={() => { setTab("assumptions"); setControls(true); }} style={{ ...barBtn(false), background: controls && tab === "assumptions" ? "rgba(106,12,160,.08)" : "#fff" }}>Assumptions</button>
           <button onClick={download} disabled={!run || !run.html} style={barBtn(true)}>Download</button>
         </div>
       </div>
 
       {controls && (
         <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 360, zIndex: 400, background: "#fff", boxShadow: "-6px 0 40px rgba(34,18,51,.14)", display: "grid", gridTemplateRows: "auto 1fr" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px 10px", borderBottom: `1px solid ${HAIR}` }}>
-            <b style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: INK }}>Assumptions</b>
-            <button onClick={() => setControls(false)} style={{ border: "none", background: "transparent", fontSize: 18, color: MUTED, cursor: "pointer" }}>×</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px 0", borderBottom: `1px solid ${HAIR}` }}>
+            {[["staffing", "Staffing"], ["assumptions", "Assumptions"]].filter(([k]) => k !== "staffing" || (run && run.st)).map(([k, l]) => (
+              <button key={k} onClick={() => setTab(k)} style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: tab === k ? INK : MUTED, background: "transparent", border: "none", borderBottom: tab === k ? `2px solid ${PURPLE}` : "2px solid transparent", padding: "4px 0 10px", cursor: "pointer" }}>{l}</button>
+            ))}
+            <button onClick={() => setControls(false)} style={{ marginLeft: "auto", border: "none", background: "transparent", fontSize: 18, color: MUTED, cursor: "pointer", paddingBottom: 10 }}>×</button>
           </div>
+          {tab === "staffing" && run && run.st && (
+            <div style={{ overflow: "auto", padding: "14px 18px 24px", display: "grid", gap: 14, alignContent: "start" }}>
+              <p style={{ margin: 0, fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>Your plan: the staffing you would run. It lands after the lead time and draws as a third line on the years ahead; everything else is as held.</p>
+              <div style={{ fontSize: 12.5, color: INK, background: "#F4EEFA", borderRadius: 10, padding: "10px 12px", lineHeight: 1.5 }}>
+                Today: <b>{run.st.teachers != null ? run.st.teachers.toFixed(1) : "–"}</b> teachers{run.st.support != null ? <>, <b>{run.st.support.toFixed(1)}</b> support staff</> : null}, <b>{run.st.ptr != null ? run.st.ptr.toFixed(1) : "–"}</b> pupils per teacher{run.st.peers && run.st.peers.ptr ? <> (schools like yours: {run.st.peers.ptr.toFixed(1)})</> : null}.
+              </div>
+              <label style={lab}>Teachers, against today (FTE)
+                <input style={fld} type="number" step="0.5" value={plan.dTeachers} onChange={(e) => setPlan({ ...plan, dTeachers: +e.target.value || 0, ptrTarget: null })} />
+                <span style={{ fontSize: 11, color: MUTED, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>negative to run with fewer; the teaching line moves in proportion</span>
+              </label>
+              <label style={lab}>Support staff, against today (FTE)
+                <input style={fld} type="number" step="0.5" value={plan.dSupport} onChange={(e) => setPlan({ ...plan, dSupport: +e.target.value || 0 })} />
+              </label>
+              <label style={lab}>Or hold a pupil-teacher ratio
+                <input style={fld} type="number" step="0.1" min="8" max="30" placeholder={run.st.peers && run.st.peers.ptr ? `e.g. ${run.st.peers.ptr.toFixed(1)}, the comparators'` : "e.g. 16"} value={plan.ptrTarget ?? ""} onChange={(e) => setPlan({ ...plan, ptrTarget: e.target.value === "" ? null : +e.target.value, dTeachers: 0 })} />
+                <span style={{ fontSize: 11, color: MUTED, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>teachers then follow the roll at this ratio, year by year</span>
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {run.st.peers && run.st.peers.ptr && <button onClick={() => setPlan({ dTeachers: 0, dSupport: 0, ptrTarget: Math.round(run.st.peers.ptr * 10) / 10 })} style={{ ...barBtn(false), padding: "6px 12px", fontSize: 12 }}>At the comparators' ratio</button>}
+                <button onClick={() => setPlan({ ...PLAN0 })} style={{ ...barBtn(false), padding: "6px 12px", fontSize: 12 }}>No plan</button>
+              </div>
+            </div>
+          )}
+          {tab === "assumptions" && (
           <div style={{ overflow: "auto", padding: "14px 18px 24px", display: "grid", gap: 14, alignContent: "start" }}>
             <p style={{ margin: 0, fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>What the years ahead assume. Move any of them and every figure recomputes; the defaults are reasonable, not authoritative.</p>
             <label style={lab}>Pupils follow
@@ -153,6 +184,7 @@ export default function Forecast() {
             ))}
             <button onClick={() => setA({ ...DEFAULTS })} style={{ ...barBtn(false), justifySelf: "start", padding: "6px 14px", fontSize: 12 }}>Back to the defaults</button>
           </div>
+          )}
         </div>
       )}
 

@@ -53,7 +53,7 @@ export function linesSvg(series, { years, unit = "£k", zero = false, labelLast 
 }
 
 /* ── one school ─────────────────────────────────────────────────────── */
-export function schoolHtml({ me, peers, saves, P, A, core }) {
+export function schoolHtml({ me, peers, saves, P, A, core, st, torn, plan }) {
   const L = me.last, out = [];
   const yrs = me.rows.map((r) => shortYL(r.y));
   const resShare = L.inc ? Math.round((100 * L.res) / L.inc) : null;
@@ -73,6 +73,28 @@ export function schoolHtml({ me, peers, saves, P, A, core }) {
     linesSvg([{ label: "Income", v: me.rows.map((r) => r.inc), color: "var(--purple)" }, { label: "Spending", v: me.rows.map((r) => r.exp), color: "var(--red)", dash: "5 4" }], { years: yrs }) +
     note("The reserve at each year end: what the school has to fall back on.") +
     linesSvg([{ label: "Reserve", v: me.rows.map((r) => r.res), color: "var(--gold)", width: 2.8 }], { years: yrs, zero: true })));
+
+  /* staff, the driver */
+  if (st && st.teachers) {
+    const W = st.peers || {};
+    const sc = st.scissors.filter((r) => r.staffPP != null && r.incPP != null);
+    const over = st.teachersOverPeers;
+    const head = W.ptr && over != null
+      ? `${f1(st.ptr)} pupils per teacher against ${f1(W.ptr)} in the schools most like it: at their ratio ${esc(me.name)} would run with ${f1(st.atPeersPtr)} teachers, ${over > 0 ? `${f1(over)} fewer` : `${f1(-over)} more`} than its ${f1(st.teachers)}.`
+      : `${f1(st.teachers)} teachers and ${st.support != null ? f1(st.support) : "–"} support staff for ${n0(L.pupils)} pupils; staff take ${st.staffShare}% of spending.`;
+    out.push(sec("Staff, the driver", head,
+      `The school workforce census (November 2025) joined to the finance return: teachers and support staff as full-time equivalents, pupils per teacher, and the loaded cost of a teacher (the teaching line divided by the teachers it pays for). The comparators are the same ${peers ? peers.n : ""} schools as below. Pupils per teacher is the single ratio that decides most of a school's budget: a point on it is worth more than any other line.`,
+      tiles([
+        { n: f1(st.ptr), p: "pupils per teacher.", c: W.ptr ? `schools like yours: ${f1(W.ptr)}` : null },
+        { n: money(st.costPerTeacher), p: "the loaded cost of a teacher, pay and on-costs.", c: W.costPerTeacher ? `schools like yours: ${money(W.costPerTeacher)}` : null },
+        { n: st.supportPer100 != null ? f1(st.supportPer100) : "–", p: "support staff for every hundred pupils.", c: W.supportPer100 ? `schools like yours: ${f1(W.supportPer100)}` : null },
+        { n: st.staffShare != null ? st.staffShare + "<small>%</small>" : "–", p: "of spending goes on staff.", c: W.staffShare ? `schools like yours: ${Math.round(W.staffShare)}%` : null },
+        st.leadership != null ? { n: f1(st.leadership) + "<small>%</small>", p: "of teachers on the leadership scale.", c: W.leadership ? `schools like yours: ${f1(W.leadership)}%` : null } : null,
+        st.turnover != null ? { n: f1(st.turnover) + "<small>%</small>", p: "of teachers left last year.", c: st.vacancies != null ? `vacancy rate ${f1(st.vacancies)}%` : null } : null,
+      ]) +
+      (sc.length >= 3 ? note("The scissors: staff cost and income, £ for each pupil, every year on the books.") + linesSvg([{ label: "Income a pupil", v: sc.map((r) => r.incPP), color: "var(--purple)" }, { label: "Staff a pupil", v: sc.map((r) => r.staffPP), color: "var(--red)", width: 2.8 }], { years: sc.map((r) => shortYL(r.y)), unit: "£", fmt: (v) => money(v) }) : "") +
+      (sc.filter((r) => r.ptr != null).length >= 3 ? note("Pupils per teacher, year by year, from the finance returns' own teacher counts.") + linesSvg([{ label: "Pupils per teacher", v: sc.map((r) => r.ptr), color: "var(--gold)", width: 2.8 }], { years: sc.map((r) => shortYL(r.y)), unit: "", fmt: (v) => v.toFixed(1) }) : "")));
+  }
 
   /* against the schools most like it */
   if (peers && peers.n >= 10) {
@@ -98,10 +120,11 @@ export function schoolHtml({ me, peers, saves, P, A, core }) {
   /* the years ahead */
   const Y = P.yrs, ys = Y.map((r) => shortYL(r.y) + (r.t ? "*" : ""));
   const end = P.end, lost = P.base.pupils - end.pupils;
-  const head = P.cliffHold
+  const planNote = P.hasPlan ? ` Your plan: ${P.cliffPlan ? `the reserve still runs out in ${YL(P.cliffPlan)}` : `the reserve holds, ${k(end.resPlan)} by ${YL(end.y)}`}.` : "";
+  const head = (P.cliffHold
     ? `If staffing is held as it is, the reserve is gone in ${YL(P.cliffHold)}${P.cliffFollow ? `; even following the roll, it runs out in ${YL(P.cliffFollow)}` : "; staffing that follows the roll keeps the school in balance"}.`
     : end.balHold < 0 ? `By ${YL(end.y)} the school spends ${k(-end.balHold)} a year more than it receives if nothing moves; the reserve covers it, for now.`
-    : `On these assumptions the school stays in surplus to ${YL(end.y)}, with ${k(end.resHold)} in reserve.`;
+    : `On these assumptions the school stays in surplus to ${YL(end.y)}, with ${k(end.resHold)} in reserve.`) + planNote;
   out.push(sec(`The years ahead, to ${YL(end.y)}`, head,
     `Pupils follow ${esc(P.roll.source)}${P.roll.area ? ` (${esc(P.roll.area)})` : ""}: ${lost > 0 ? `${n0(lost)} fewer by ${YL(end.y)}` : lost < 0 ? `${n0(-lost)} more by ${YL(end.y)}` : "no change"}. Income moves with the roll and with funding per pupil (${sg(A.fund, 1)}% a year). "Held" keeps today's staffing and lets pay (${sg(A.pay, 1)}% a year) and prices (${sg(A.infl, 1)}% a year) run. "Following the roll" moves the variable part of each line with pupil numbers, after the ${A.leadTime} year${A.leadTime === 1 ? "" : "s"} a staffing decision takes to land. The reserve carries forward either way.`,
     tiles([
@@ -110,10 +133,21 @@ export function schoolHtml({ me, peers, saves, P, A, core }) {
       { n: P.cliffHold ? YL(P.cliffHold) : "beyond " + YL(end.y), p: "the year the reserve runs out with staffing held.", c: P.cliffFollow ? `following the roll: ${YL(P.cliffFollow)}` : "following the roll: it holds" },
       { n: k(end.resFollow), p: `in reserve by ${YL(end.y)} if staffing follows the roll.`, c: `held: ${k(end.resHold)}` },
     ]) +
-    note("Income against spending, held and following the roll. Years marked * are projected.") +
-    linesSvg([{ label: "Income", v: Y.map((r) => r.inc), color: "var(--purple)" }, { label: "Spending, held", v: Y.map((r) => r.hold), color: "var(--red)", dash: "5 4" }, { label: "Following the roll", v: Y.map((r) => r.follow), color: "var(--gold)" }], { years: ys }) +
+    note(P.hasPlan ? "Income against spending: held, following the roll, and your plan. Years marked * are projected." : "Income against spending, held and following the roll. Years marked * are projected.") +
+    linesSvg([{ label: "Income", v: Y.map((r) => r.inc), color: "var(--purple)" }, { label: "Spending, held", v: Y.map((r) => r.hold), color: "var(--red)", dash: "5 4" }, { label: "Following the roll", v: Y.map((r) => r.follow), color: "var(--gold)" }, ...(P.hasPlan ? [{ label: "Your plan", v: Y.map((r) => r.plan), color: "#2F7A39", width: 2.8 }] : [])], { years: ys }) +
     note("The reserve, year by year: below the line is a deficit.") +
-    linesSvg([{ label: "Held", v: Y.map((r) => r.resHold), color: "var(--red)", dash: "5 4" }, { label: "Following the roll", v: Y.map((r) => r.resFollow), color: "var(--gold)", width: 2.8 }], { years: ys, zero: true })));
+    linesSvg([{ label: "Held", v: Y.map((r) => r.resHold), color: "var(--red)", dash: "5 4" }, { label: "Following the roll", v: Y.map((r) => r.resFollow), color: "var(--gold)", width: 2.8 }, ...(P.hasPlan ? [{ label: "Your plan", v: Y.map((r) => r.resPlan), color: "#2F7A39", width: 2.8 }] : [])], { years: ys, zero: true }) +
+    (P.hasPlan ? note(`Your plan: ${plan.ptrTarget ? `teachers follow the roll at ${plan.ptrTarget} pupils per teacher` : `${plan.dTeachers ? `${plan.dTeachers > 0 ? "+" : ""}${plan.dTeachers} teachers` : ""}${plan.dTeachers && plan.dSupport ? ", " : ""}${plan.dSupport ? `${plan.dSupport > 0 ? "+" : ""}${plan.dSupport} support staff` : ""}`}, landing after the lead time; everything else as held. ${P.cliffPlan ? `The reserve still runs out in ${YL(P.cliffPlan)}.` : `The reserve holds to ${YL(end.y)}: ${k(end.resPlan)}.`}`) : "")));
+
+  /* relative impact */
+  if (torn && torn.items.length) {
+    const rows = torn.items.map((i) => ({ label: i.label, v: i.v, tip: [i.label, `${i.v >= 0 ? "+" : ""}${k(i.v)} a year on the ${YL(torn.year)} balance`, i.how] }));
+    const top = torn.items[0];
+    out.push(sec("Relative impact: one scale for every lever",
+      `${top.label.toLowerCase().replace(/^./, (c) => c.toUpperCase())} moves the ${YL(torn.year)} balance by ${k(Math.abs(top.v))} a year; ${torn.items.slice(1, 3).map((i) => `${i.label.toLowerCase()} by ${k(Math.abs(i.v))}`).join(", ")}.`,
+      `Each lever is applied on its own to the "held" future and the change in the ${YL(torn.year)} balance is read off, £ a year. Staffing levers land after the lead time; pay and funding compound; the benchmark levers hold the saving to the horizon. It is the relative size that matters: it says where a leader's attention buys most.`,
+      note(`Change in the ${YL(torn.year)} balance, £ a year, lever by lever.`) + divergeSvg(rows, { dp: 0, unit: "k", zero: "no change" })));
+  }
 
   /* decisions by year */
   if (P.decisions.length) {
