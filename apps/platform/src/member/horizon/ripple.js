@@ -97,9 +97,9 @@ export function ripple(spec, run, D, A) {
     dials.push(dial("pupils", "Pupils", B.pupils, B.pupils, { note: "EHC plans change who needs what, not how many pupils there are" }));
     dials.push(dial("places", "Specialist places short", 0, newSpecialPlaces, { lower: true, note: `by 2031 against ${T.places.toLocaleString("en-GB")} special school places` }));
     dials.push(dial("money", "High-needs cost, a year by 2031", 0, costSpecial + costTopUp, { ...money(), lower: true, note: `${newSpecialPlaces.toLocaleString("en-GB")} special places at £${A.costSpecial.toLocaleString("en-GB")} + ${mainstreamNewAll.toLocaleString("en-GB")} mainstream plans at £${A.topUp.toLocaleString("en-GB")}` }));
-    dials.push(dial("outcomes", B.measure, B.outcome, dOut != null ? r1(B.outcome + dOut) : null, { dp: 1, unit: B.unit, note: `EHC share in mainstream ${shareNow}% to ${shareAfter}%; the observed association is ${B.ehc.slope} per point across ${B.ehc.n.toLocaleString("en-GB")} schools, carried at ${A.ehcCarry}%` }));
-    dials.push(dial("inclusion", "EHC plans in mainstream", shareNow, shareAfter, { dp: 1, unit: "%", higherIsGood: true, note: "share of pupils in the scope's mainstream schools with a plan" }));
-    dials.push(dial("workforce", "Support staff needed", 0, tas, { unit: " FTE", note: `${A.taPerEhcp} FTE for each of the ${mainstreamNew.toLocaleString("en-GB")} extra plans in this phase's mainstream (assumption)` }));
+    dials.push(dial("outcomes", B.measure, B.outcome, dOut != null ? r1(B.outcome + dOut) : null, { dp: 1, unit: B.unit, note: `EHC plans in mainstream rise from ${shareNow}% to ${shareAfter}% of pupils; across ${B.ehc.n.toLocaleString("en-GB")} schools each extra point goes with ${B.ehc.slope} on results, and ${A.ehcCarry}% of that is treated as cause` }));
+    dials.push(dial("inclusion", "EHC plans in mainstream", shareNow, shareAfter, { dp: 1, unit: "%", higherIsGood: true, note: "share of pupils in the area's mainstream schools who have a plan" }));
+    dials.push(dial("workforce", "Support staff needed", 0, tas, { unit: " FTE", note: `${mainstreamNew.toLocaleString("en-GB")} extra plans in this phase's mainstream schools, at ${A.taPerEhcp} FTE each (assumption)` }));
     chain.push({ from: "EHC plans", to: `+${growth.toLocaleString("en-GB")} by 2031`, how: F.growthAssumption === "trend" ? "each authority's five-year trend" : `growth ${F.growthAssumption}` });
     chain.push({ from: "Plans", to: `${mainstreamNewAll.toLocaleString("en-GB")} more in mainstream, ${specialistGrowth.toLocaleString("en-GB")} more in special`, how: `${F.pctNewSpecialistDemandMetInMainstream}% of new specialist demand kept in mainstream` });
     chain.push({ from: "Special", to: `${newSpecialPlaces.toLocaleString("en-GB")} places short`, how: "against today's special school capacity" });
@@ -126,12 +126,12 @@ export function ripple(spec, run, D, A) {
     }
     const teachersNow = B.teachers, teachersAfter = B.ptr ? Math.round(B.teachers + dP / B.ptr) : null;
     const scopeOut = dOutMoved != null && B.pupils ? r1(B.outcome + (dOutMoved * movedP) / B.pupils) : B.outcome;
-    dials.push(dial("pupils", "Pupils", T.roll, T.proj, { note: `on the planning areas' forecasts to ${F.year}` }));
-    dials.push(dial("places", "Places spare", r1((100 * (T.cap - T.roll)) / T.cap), C ? C.sparePctAfter : T.sparePct, { dp: 1, unit: "%", lower: true, note: C ? `after closing ${C.closed}` : "capacity held at today's" }));
+    dials.push(dial("pupils", "Pupils", T.roll, T.proj, { note: `following the DfE's planning-area forecasts to ${F.year}` }));
+    dials.push(dial("places", "Places spare", r1((100 * (T.cap - T.roll)) / T.cap), C ? C.sparePctAfter : T.sparePct, { dp: 1, unit: "%", lower: true, note: C ? `after closing ${C.closed}` : "with places held at today's level" }));
     dials.push(dial("money", "Income, a year", 0, lostIncome + saved, { ...money(), note: `${dP.toLocaleString("en-GB")} pupils at £${Math.round(incomeOf(null)).toLocaleString("en-GB")} each${saved ? `, ${A.fixedShare}% of closed schools' costs saved` : ""}` }));
     dials.push(dial("outcomes", B.measure, B.outcome, scopeOut, { dp: 1, unit: B.unit, note: dOutMoved != null ? `moved pupils land in schools averaging ${dOutMoved >= 0 ? "+" : ""}${dOutMoved} against the ones that closed` : "no pupils move, so nothing changes here" }));
     dials.push(dial("inclusion", "EHC plans in mainstream", B.ehcShare, B.ehcShare, { dp: 1, unit: "%", note: "not moved by this lever" }));
-    dials.push(dial("workforce", "Teachers (FTE)", teachersNow, teachersAfter, { note: `pupils ÷ the scope's pupil-teacher ratio of ${r1(B.ptr)}` }));
+    dials.push(dial("workforce", "Teachers (FTE)", teachersNow, teachersAfter, { note: `pupils divided by the area's pupil-teacher ratio of ${r1(B.ptr)}` }));
     chain.push({ from: "Rolls", to: `${dP >= 0 ? "+" : ""}${dP.toLocaleString("en-GB")} pupils by ${F.year}`, how: "the planning areas' forecasts" });
     chain.push({ from: "Pupils", to: `${gbp(lostIncome)} a year`, how: `income follows pupils at £${Math.round(incomeOf(null)).toLocaleString("en-GB")} each` });
     chain.push({ from: "Pupils", to: `${teachersAfter != null ? (teachersAfter - teachersNow).toLocaleString("en-GB") : "–"} teacher posts`, how: "at today's pupil-teacher ratio" });
@@ -146,7 +146,7 @@ export function ripple(spec, run, D, A) {
     dials.push(none("pupils", "Pupils", B.pupils));
     dials.push(none("places", "Places spare", null));
     dials.push(dial("money", F.area ? `${F.scope}, a year` : "England, a year", 0, net, { ...money(), note: `${F.budgetNeutral ? "budget-neutral: the pot is top-sliced from every school" : "new money"}; £${pp.toLocaleString("en-GB")} a pupil on average` }));
-    dials.push(dial("outcomes", B.measure, B.outcome, r1(B.outcome + dOut), { dp: 1, unit: B.unit, note: `${A.elasticity} points per £1,000 a pupil sustained (assumption); the disadvantage gap narrows ${dGap} as the most disadvantaged fifth gain £${q[4].perPupil} to the least's £${q[0].perPupil}` }));
+    dials.push(dial("outcomes", B.measure, B.outcome, r1(B.outcome + dOut), { dp: 1, unit: B.unit, note: `assuming ${A.elasticity} points for every £1,000 a pupil, sustained; the most disadvantaged fifth of schools gain £${q[4].perPupil} a pupil and the least £${q[0].perPupil}, so the gap narrows by ${dGap}` }));
     dials.push(dial("inclusion", "EHC plans in mainstream", B.ehcShare, B.ehcShare, { dp: 1, unit: "%", note: "not moved by this lever" }));
     dials.push(dial("workforce", "Teachers affordable", 0, teachers, { note: `at £${A.teacherCost.toLocaleString("en-GB")} a teacher (assumption)` }));
     chain.push({ from: "The pot", to: `£${pp.toLocaleString("en-GB")} a pupil`, how: F.budgetNeutral ? "top-sliced and reshared by the weights" : "shared by the weights" });
@@ -158,8 +158,8 @@ export function ripple(spec, run, D, A) {
     dials.push(none("pupils", "Pupils", B.pupils));
     dials.push(none("places", "Places spare", null));
     dials.push(dial("money", "Intervention, a year", 0, named * A.floorCost, { ...money(), lower: true, note: `${named} schools newly below the floor at £${A.floorCost.toLocaleString("en-GB")} each (assumption)` }));
-    dials.push(dial("outcomes", B.measure, B.outcome, B.outcome, { dp: 1, unit: B.unit, note: "a measure changes who is judged, not what pupils achieve; Horizon claims no effect" }));
-    dials.push(dial("inclusion", "Schools newly below the floor", 0, named, { lower: true, note: `${F.leavingBottomTenth || 0} leave it; rank correlation ${F.rankCorrelation} with today's` }));
+    dials.push(dial("outcomes", B.measure, B.outcome, B.outcome, { dp: 1, unit: B.unit, note: "a new measure changes which schools are judged well, not what pupils achieve; Horizon claims no effect" }));
+    dials.push(dial("inclusion", "Schools newly below the floor", 0, named, { lower: true, note: `${F.leavingBottomTenth || 0} schools leave it; the new ranking matches today's ${F.rankCorrelation} out of 1` }));
     dials.push(none("workforce", "Teachers (FTE)", B.teachers));
     chain.push({ from: "The measure", to: `${named} newly in the bottom tenth`, how: "re-ranked by the weights" });
     chain.push({ from: "Floor", to: `${gbp(named * A.floorCost)} a year`, how: "intervention per school (assumption)" });
@@ -168,12 +168,12 @@ export function ripple(spec, run, D, A) {
     const now = F.rolls.now, h = F.rolls.horizon;
     const dP = h ? h.roll - now.roll : 0;
     const res = F.results && typeof F.results === "object" ? F.results : null;
-    dials.push(dial("pupils", "Pupils", now.roll, h ? h.roll : null, { note: "on the planning areas' forecasts" }));
-    dials.push(dial("places", "Places spare", r1((100 * F.rolls.spareNow) / now.cap), h ? r1((100 * F.rolls.spareAtHorizon) / h.cap) : null, { dp: 1, unit: "%", lower: true, note: "capacity held at today's" }));
+    dials.push(dial("pupils", "Pupils", now.roll, h ? h.roll : null, { note: "following the DfE's planning-area forecasts" }));
+    dials.push(dial("places", "Places spare", r1((100 * F.rolls.spareNow) / now.cap), h ? r1((100 * F.rolls.spareAtHorizon) / h.cap) : null, { dp: 1, unit: "%", lower: true, note: "with places held at today's level" }));
     dials.push(dial("money", "Income, a year", 0, dP * incomeOf(null), { ...money(), note: `${dP.toLocaleString("en-GB")} pupils at £${Math.round(incomeOf(null)).toLocaleString("en-GB")} each` }));
-    dials.push(dial("outcomes", res ? res.measure : B.measure, res ? res.meanNow : B.outcome, res ? res.meanNext : null, { dp: 1, unit: B.unit, note: res ? `one year on, holding ${Math.round(res.persistence * 100)}% of each school's distance from its twins` : "still computing" }));
+    dials.push(dial("outcomes", res ? res.measure : B.measure, res ? res.meanNow : B.outcome, res ? res.meanNext : null, { dp: 1, unit: B.unit, note: res ? `next year, if each school keeps ${Math.round(res.persistence * 100)}% of its lead or lag over its statistical twins` : "still computing" }));
     dials.push(dial("inclusion", "EHC plans in mainstream", B.ehcShare, B.ehcShare, { dp: 1, unit: "%", note: "see the SEND lever for where this goes" }));
-    dials.push(dial("workforce", "Teachers (FTE)", B.teachers, B.ptr ? Math.round(B.teachers + dP / B.ptr) : null, { note: `at the scope's pupil-teacher ratio of ${r1(B.ptr)}` }));
+    dials.push(dial("workforce", "Teachers (FTE)", B.teachers, B.ptr ? Math.round(B.teachers + dP / B.ptr) : null, { note: `at the area's pupil-teacher ratio of ${r1(B.ptr)}` }));
     chain.push({ from: "Rolls", to: `${dP >= 0 ? "+" : ""}${dP.toLocaleString("en-GB")} pupils`, how: "the planning areas' forecasts" });
     chain.push({ from: "Pupils", to: `${gbp(dP * incomeOf(null))} a year`, how: "income follows pupils" });
     chain.push({ from: "Pupils", to: `${B.ptr ? Math.round(dP / B.ptr).toLocaleString("en-GB") : "–"} teacher posts`, how: "at today's pupil-teacher ratio" });

@@ -74,6 +74,7 @@ export default function Horizon() {
   const undoRef = useRef(null);
   const boxRef = useRef(null);
   const pendingRef = useRef(null);
+  const [loadingNote, setLoadingNote] = useState(null);
 
   useEffect(() => {
     if (!ok) return;
@@ -94,7 +95,7 @@ export default function Horizon() {
   /* a hand-off from Prizm or a saved scenario opens once the data is here */
   useEffect(() => {
     if (!all || !pendingRef.current) return;
-    const p = pendingRef.current; pendingRef.current = null;
+    const p = pendingRef.current; pendingRef.current = null; setLoadingNote(null);
     if (p.spec) { openSpec(normalise(p.spec)); if (p.from) setNote(`Carried over from ${p.from}: the scope you were reading, now where it is heading.`); }
     else if (p.ask) { setQ(p.ask); setTimeout(() => ask(p.ask), 50); }
   }, [all]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -177,6 +178,7 @@ export default function Horizon() {
   async function ask(given) {
     const text = (given ?? q).trim();
     if (!text || thinking) return;
+    if (!all) { pendingRef.current = { ask: text }; setLoadingNote("Opening as soon as the national dataset has arrived…"); return; }
     setQ(""); setThinking(true); setNote(null); setChoices(null);
     setStage("Reading the idea…");
     const local = readLocally(text, cur ? cur.spec : null, names);
@@ -185,7 +187,7 @@ export default function Horizon() {
     const context = `Regions: ${REGIONS.join("; ")}\nLocal authorities: ${names.las.join("; ")}\n${trusts.length ? "Trusts matching the words: " + trusts.join("; ") + "\n" : ""}${run && run.closable ? "Schools in scope, emptiest first: " + run.closable.slice(0, 30).map((r) => `${r.name} (${r.fill}% full)`).join("; ") : ""}`;
     let spec = null, reply = null, clarify = null;
     try {
-      const r = await fetch("/.netlify/functions/horizon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brief: text, current: cur ? cur.spec : null, context }) });
+      const r = await fetch("/.netlify/functions/horizon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brief: text, current: cur ? cur.spec : null, context }), signal: AbortSignal.timeout(22000) });
       const data = await r.json();
       if (r.ok && !data.error) { spec = data.scenario; reply = data.reply; clarify = data.clarify; }
       else throw new Error(data.error || "no answer");
@@ -217,7 +219,7 @@ export default function Horizon() {
     setCaseBusy(true);
     const findings = { title: cur.spec.title, ...run.findings, headlineFigures: run.summary, inTheRound: round ? round.dials.map((d) => ({ dial: d.label, today: d.now, scenario: d.after, change: d.delta, how: d.note })) : undefined, assumptions: assum };
     try {
-      const r = await fetch("/.netlify/functions/horizon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "case", findings }) });
+      const r = await fetch("/.netlify/functions/horizon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "case", findings }), signal: AbortSignal.timeout(40000) });
       const data = await r.json();
       if (!r.ok || data.error || !data.text) throw new Error(data.error || "no text");
       const safe = verifyCommentary(data.text, findings);
@@ -282,16 +284,18 @@ export default function Horizon() {
           <p style={{ color: MUTED, fontSize: 14.5, margin: "0 auto 24px", maxWidth: 600, lineHeight: 1.5 }}>A premium, a closure, a new measure, a growth rate. Horizon turns the idea into a scenario and runs it on the DfE&rsquo;s published data; every figure is &ldquo;if this held&rdquo;, never a prediction.</p>
           <input ref={boxRef} autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onBoxKey}
             placeholder="What if an Inclusion Premium of £500m weighted EHC plans four to one?"
-            style={{ width: "100%", boxSizing: "border-box", padding: "16px 18px", borderRadius: 14, border: `1.5px solid ${HAIR}`, fontSize: 16, background: "#fff", boxShadow: "0 10px 36px rgba(34,18,51,.08)" }} />
-          {thinking
-            ? <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Thinking size={24} label={stage || "Thinking…"} /></div>
-            : <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8 }}>{all ? "Enter runs it · five levers: forecasts, falling rolls, funding, accountability, SEND" : "The national dataset is arriving…"}</div>}
+            style={{ width: "100%", boxSizing: "border-box", padding: "16px 18px", borderRadius: 14, border: `1.5px solid ${HAIR}`, fontSize: 16, background: "#fff", boxShadow: "0 10px 36px rgba(34,18,51,.08)", fontFamily: "inherit", color: INK, WebkitAppearance: "none", appearance: "none" }} />
+          {thinking || (!all && loadingNote)
+            ? <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}><Thinking size={24} label={thinking ? stage || "Thinking…" : loadingNote} /></div>
+            : all
+              ? <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8 }}>Enter runs it · five levers: forecasts, falling rolls, funding, accountability, SEND</div>
+              : <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 10, fontSize: 11.5, color: MUTED }}><Thinking size={16} label="Loading the national dataset (a few seconds)…" /></div>}
           {choicesBand}
           {!thinking && note && <div style={{ marginTop: 10, fontSize: 12.5, color: "#4B0875", background: "rgba(106,12,160,.06)", border: "1px solid rgba(106,12,160,.16)", borderRadius: 10, padding: "8px 12px", textAlign: "left" }}>{note}</div>}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 10, marginTop: 34, textAlign: "left" }}>
             {EXAMPLES.map((ex) => (
-              <button key={ex.t} onClick={() => { if (!all) return; openSpec({ ...ex.spec, title: ex.t }, true); }} className="asi-lift" disabled={!all}
-                style={{ fontFamily: "inherit", textAlign: "left", background: "#fff", border: `1px solid ${HAIR}`, borderRadius: 14, padding: "15px 18px", cursor: all ? "pointer" : "wait", opacity: all ? 1 : 0.7 }}>
+              <button key={ex.t} onClick={() => { if (!all) { pendingRef.current = { spec: { ...ex.spec, title: ex.t } }; setLoadingNote(`Opening "${ex.t}" as soon as the national dataset has arrived…`); return; } openSpec({ ...ex.spec, title: ex.t }, true); }} className="asi-lift"
+                style={{ fontFamily: "inherit", textAlign: "left", background: "#fff", border: `1px solid ${HAIR}`, borderRadius: 14, padding: "15px 18px", cursor: all ? "pointer" : "progress", opacity: all ? 1 : 0.8 }}>
                 <span style={{ display: "block", fontFamily: "Fraunces, serif", fontSize: 16.5, fontWeight: 500, color: INK, lineHeight: 1.3 }}>{ex.t}</span>
                 <span style={{ display: "block", fontSize: 11.5, color: MUTED, marginTop: 5 }}>{ex.sub}</span>
               </button>
@@ -303,7 +307,7 @@ export default function Horizon() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
                 {saved.slice(0, 8).map((r) => (
                   <div key={r.id} style={{ display: "flex", alignItems: "flex-start", background: "#fff", border: `1px solid ${HAIR}`, borderRadius: 12, overflow: "hidden" }}>
-                    <button onClick={() => all && openSpec({ ...r.spec, title: r.title }, true)} style={{ flex: 1, minWidth: 0, fontFamily: "inherit", textAlign: "left", border: "none", background: "transparent", padding: "12px 4px 12px 15px", cursor: "pointer" }}>
+                    <button onClick={() => { if (!all) { pendingRef.current = { spec: { ...r.spec, title: r.title } }; setLoadingNote(`Opening "${r.title}" as soon as the national dataset has arrived…`); return; } openSpec({ ...r.spec, title: r.title }, true); }} style={{ flex: 1, minWidth: 0, fontFamily: "inherit", textAlign: "left", border: "none", background: "transparent", padding: "12px 4px 12px 15px", cursor: "pointer" }}>
                       <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: INK, lineHeight: 1.3 }}>{r.title}</span>
                       <span style={{ display: "block", fontSize: 10.5, color: MUTED, marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · recomputes on today&apos;s data</span>
                     </button>
@@ -337,7 +341,7 @@ export default function Horizon() {
             <div style={{ flex: "1 1 300px", minWidth: 240 }}>
               <input ref={boxRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onBoxKey}
                 placeholder={thinking ? stage || "Thinking…" : "Change it, ask what if, or try another idea…"}
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", borderRadius: 10, border: `1px solid ${HAIR}`, fontSize: 13.5, background: "#fff" }} />
+                style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", borderRadius: 10, border: `1px solid ${HAIR}`, fontSize: 13.5, background: "#fff", fontFamily: "inherit", color: INK, WebkitAppearance: "none", appearance: "none" }} />
             </div>
             <button onClick={() => ask()} disabled={thinking || q.trim().length < 2} style={{ ...barBtn(true), background: INK, opacity: thinking ? 0.55 : 1 }}>{thinking ? "Reading…" : "Try it"}</button>
             <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>

@@ -499,12 +499,24 @@ const BANDC = { "-2": "#B4475A", "-1": "#D98C9A", 0: "#B18FD0", 1: "#8F5BB8", 2:
 function dualTrendSvg(points, { min, max, unit = "", dp = 1, a = "Scope", b = "England" }) {
   const pts = points.filter((p) => p.v != null || p.nat != null);
   if (pts.length < 2) return "";
-  const W = 660, H = 210, pl = 46, pr = 86, pt = 22, pb = 34;
+  const F = (v) => (dp === 0 ? Math.round(v).toLocaleString("en-GB") : Number(v.toFixed(dp)).toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp }));
+  /* value labels: every point on a short series; on a long one only the
+     first, the last, the peak and the trough, the rest on hover */
+  const vi = points.map((p, i) => (p.v != null ? i : -1)).filter((i) => i >= 0);
+  const labelled = new Set();
+  if (vi.length <= 8) vi.forEach((i) => labelled.add(i));
+  else {
+    labelled.add(vi[0]); labelled.add(vi[vi.length - 1]);
+    const hi = vi.reduce((b, i) => (points[i].v > points[b].v ? i : b), vi[0]), lo = vi.reduce((b, i) => (points[i].v < points[b].v ? i : b), vi[0]);
+    labelled.add(hi); labelled.add(lo);
+  }
+  const every = points.length > 12 ? Math.ceil(points.length / 9) : 1;
+  const W = 660, H = 210, pr = 86, pt = 22, pb = 34;
+  const pl = 14 + 6.6 * Math.max(...niceTicks(min, max, 4).map((t) => (F(t) + unit).length), 3);
   const x = (i) => pl + (i / (points.length - 1)) * (W - pl - pr);
   const y = (v) => pt + (H - pt - pb) * (1 - (v - min) / (max - min));
-  const F = (v) => (dp === 0 ? String(Math.round(v)) : v.toFixed(dp));
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:660px;height:auto" role="img">`;
-  niceTicks(min, max, 4).forEach((t) => { s += `<line class="gridl" x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}"/><text class="tick" x="${pl - 6}" y="${y(t) + 3.5}" text-anchor="end">${t}${unit}</text>`; });
+  niceTicks(min, max, 4).forEach((t) => { s += `<line class="gridl" x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}"/><text class="tick" x="${pl - 6}" y="${y(t) + 3.5}" text-anchor="end">${F(t)}${unit}</text>`; });
   const line = (k, col, dash) => {
     const seg = points.map((p, i) => (p[k] == null ? null : `${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`)).filter(Boolean);
     if (seg.length < 2) return "";
@@ -513,8 +525,15 @@ function dualTrendSvg(points, { min, max, unit = "", dp = 1, a = "Scope", b = "E
   s += line("nat", "var(--nat)", true) + line("v", "var(--purple)", false);
   points.forEach((p, i) => {
     if (p.nat != null) s += `<circle cx="${x(i)}" cy="${y(p.nat)}" r="3" fill="var(--nat)"/>`;
-    if (p.v != null) s += `<g${hit([p.t, `${a}: ${F(p.v)}${unit}`, ...(p.nat != null ? [`${b}: ${F(p.nat)}${unit}`] : [])])}><circle cx="${x(i)}" cy="${y(p.v)}" r="4.6" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.6"/><circle cx="${x(i)}" cy="${y(p.v)}" r="12" fill="transparent"/></g><text class="val" x="${x(i)}" y="${y(p.v) - 9}" text-anchor="middle" style="font-size:11px;fill:var(--ink)">${F(p.v)}${unit}</text>`;
-    s += `<text class="tick" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(p.t)}</text>`;
+    if (p.v != null) {
+      s += `<g${hit([p.t, `${a}: ${F(p.v)}${unit}`, ...(p.nat != null ? [`${b}: ${F(p.nat)}${unit}`] : [])])}><circle cx="${x(i)}" cy="${y(p.v)}" r="${labelled.has(i) ? 4.6 : 3.4}" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.6"/><circle cx="${x(i)}" cy="${y(p.v)}" r="12" fill="transparent"/></g>`;
+      if (labelled.has(i)) {
+        const below = p.nat != null && y(p.nat) < y(p.v) && y(p.v) - y(p.nat) < 18;
+        const anchor = i === 0 ? "start" : i === points.length - 1 ? "end" : "middle";
+        s += `<text class="val" x="${x(i)}" y="${below ? y(p.v) + 17 : y(p.v) - 9}" text-anchor="${anchor}" style="font-size:11px;font-weight:600;fill:var(--ink);paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round">${F(p.v)}${unit}</text>`;
+      }
+    }
+    if (i === points.length - 1 || (i % every === 0 && points.length - 1 - i > every / 2)) s += `<text class="tick" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(p.t)}</text>`;
   });
   const last = [...points].reverse().find((p) => p.v != null), lastN = [...points].reverse().find((p) => p.nat != null);
   if (last) s += `<text class="reftxt" x="${W - pr + 8}" y="${y(last.v) + 4}" style="fill:var(--purple);font-weight:600">${esc(a)}</text>`;
