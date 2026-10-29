@@ -7,7 +7,7 @@ import Positions from "./site/Positions.jsx";
 import System from "./site/System.jsx";
 import Summit from "./site/Summit.jsx";
 import MemberLayout from "./member/MemberLayout.jsx";
-import MemberHome from "./member/Home.jsx";
+import MemberHome from "./member/home/Home.jsx";
 import Atlas from "./member/Atlas.jsx";
 import Lens from "./member/Lens.jsx";
 import Orbit from "./member/Orbit.jsx";

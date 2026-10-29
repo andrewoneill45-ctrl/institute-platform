@@ -44,7 +44,14 @@ export function RoomIcon({ room, size = 18 }) {
 
 /* Horizon is by invitation: added to the rooms only for those who hold it */
 export const HORIZON_ROOM = { key: "horizon", to: "/members/horizon", label: "Horizon", verb: "The policy studio", kw: "forecast simulate policy funding accountability send rolls closures model horizon" };
-export const roomsFor = (user) => (user && (user.isAdmin || user.horizonAccess) ? [...ROOMS, HORIZON_ROOM] : ROOMS);
+/* the rooms this member may open: every room unless switched off in Accounts
+   (tools[key] === false), with Horizon added for those who hold it */
+export const roomsFor = (user) => {
+  const off = (user && user.tools) || {};
+  const base = ROOMS.filter((r) => r.key === "home" || off[r.key] !== false);
+  return user && (user.isAdmin || user.horizonAccess) ? [...base, HORIZON_ROOM] : base;
+};
+export const TOOL_KEYS = ["atlas", "prizm", "lens", "orbit", "constellation"];
 
 export const ROOMS = [
   { key: "home", to: "/members", label: "Home", verb: "Your school at a glance", kw: "home dashboard start overview" },

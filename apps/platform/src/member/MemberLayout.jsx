@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { syncDown, startSync } from "../lib/sync.js";
-import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
+import { Outlet, NavLink, Link, useLocation, Navigate } from "react-router-dom";
 import { Wordmark } from "@asi/design-system";
 import { useAuth } from "../lib/auth.jsx";
 import CommandPalette from "./CommandPalette.jsx";
-import { RoomIcon, ROOMS, roomsFor } from "./RoomIcons.jsx";
+import { RoomIcon, roomsFor } from "./RoomIcons.jsx";
 
 /* The members' shell: one bar for every room. Wordmark, the six rooms, the
    command palette (⌘K anywhere), and the member's own menu. On a phone the
@@ -45,6 +45,10 @@ export default function MemberLayout() {
   /* a palette jump remounts the room so its link is read afresh; ordinary
      navigation inside a room keeps it exactly as it was */
   const outletKey = (loc.state && loc.state.palette) || "room";
+  /* a room switched off in Accounts is not reachable by its address either */
+  const roomKey = (p.match(/\/members\/([a-z]+)/) || [])[1];
+  const offLimits = roomKey && ["atlas", "prizm", "lens", "orbit", "constellation", "horizon"].includes(roomKey) && !roomsFor(user).some((r) => r.key === roomKey);
+  if (offLimits) return <Navigate to="/members" replace />;
 
   return (
     <div className="shell">
@@ -89,7 +93,7 @@ export default function MemberLayout() {
       </main>
 
       <nav className="shell-tabbar" aria-label="Rooms">
-        {ROOMS.map((r) => (
+        {roomsFor(user).filter((r) => r.key !== "horizon").map((r) => (
           <NavLink key={r.key} to={r.key === "home" ? "." : r.key} end={r.key === "home"} className={({ isActive }) => (isActive ? "on" : "")}>
             <RoomIcon room={r.key} size={21} />
             <span>{r.label}</span>
