@@ -15,7 +15,7 @@ export default function MemberLayout() {
 
   const loc = useLocation();
   const p = loc.pathname;
-  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens") || p.includes("/constellation") || p.includes("/prizm") || p.includes("/horizon");
+  const fullBleed = p.includes("/orbit") || p.includes("/atlas") || p.includes("/lens") || p.includes("/constellation") || p.includes("/prizm") || p.includes("/horizon") || p.includes("/forecast");
   const [palette, setPalette] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef(null);
@@ -47,7 +47,7 @@ export default function MemberLayout() {
   const outletKey = (loc.state && loc.state.palette) || "room";
   /* a room switched off in Accounts is not reachable by its address either */
   const roomKey = (p.match(/\/members\/([a-z]+)/) || [])[1];
-  const offLimits = roomKey && ["atlas", "prizm", "lens", "orbit", "constellation", "horizon"].includes(roomKey) && !roomsFor(user).some((r) => r.key === roomKey);
+  const offLimits = roomKey && ["atlas", "prizm", "lens", "orbit", "constellation", "forecast", "horizon"].includes(roomKey) && !roomsFor(user).some((r) => r.key === roomKey);
   if (offLimits) return <Navigate to="/members" replace />;
 
   return (

@@ -26,7 +26,7 @@
       "lastVersion": null,
       "lastPulled": null,
       "output": "apps/platform/public/data/pulse.json",
-      "notes": "National, regional and LA-level only — NOT school-level — so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
+      "notes": "National, regional and LA-level only \u2014 NOT school-level \u2014 so it feeds the pulse file (the national weather), never schools.json. apiDataSetId is resolved at run time from the catalogue entry by pull-attendance.mjs."
     },
     {
       "key": "gias",
@@ -64,7 +64,7 @@
       "lastVersion": "2024-25 financial year (CFR Full Data Workbook + AAR download)",
       "lastPulled": "2026-10-22",
       "output": "apps/platform/public/data/schools.json (fin_* fields)",
-      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to £1,000s at source."
+      "notes": "Two per-school workbooks behind the DfE benchmarking tool: consistent financial reporting for LA-maintained schools, academies' accounting returns for trusts. Only full-year (12-month) returns are merged; part-year returns from mid-year trust moves are set aside so per-pupil figures stay honest. AAR figures are rounded to \u00a31,000s at source."
     },
     {
       "key": "send",
@@ -202,6 +202,19 @@
       "lastPulled": "2026-10-28",
       "output": "apps/platform/public/data/send.json",
       "notes": "Horizon's SEND lever. Built by data/pipeline/horizon-build.py."
+    },
+    {
+      "key": "finance-ledger",
+      "name": "School finance ledger: every CFR and AAR return since 2016/17",
+      "publisher": "Department for Education",
+      "route": "manual",
+      "catalogueUrl": "https://financial-benchmarking-and-insights-tool.education.gov.uk/data-sources",
+      "apiDataSetId": null,
+      "cadence": "Annual; CFR each summer, AAR the following spring",
+      "lastVersion": "CFR 2017/18, 2020/21 to 2025/26; AAR 2016/17 to 2020/21, 2023/24, 2024/25 (2014/15, 2015/16, CFR 2018/19, 2019/20, 2016/17, AAR 2021/22, 2022/23 still to add)",
+      "lastPulled": "2026-10-29",
+      "output": "apps/platform/public/data/finance.json",
+      "notes": "Built by data/pipeline/finance-build.py from the FBIT workbooks (CFR Full Data Workbook, AAR download), one file per year in a raw folder. Headers are matched by name across the years they drift; only full-year returns are kept; figures stored in \u00a3 thousands. Feeds the Forecast room."
     }
   ]
 }

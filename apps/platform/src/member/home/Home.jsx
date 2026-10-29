@@ -398,7 +398,7 @@ function ToolsModal({ user, onClose }) {
   );
 }
 
-const SHORT = { atlas: "The map", prizm: "The report studio", lens: "Inspection room", orbit: "Strategy in motion", constellation: "Every child in view", horizon: "The policy studio" };
+const SHORT = { atlas: "The map", prizm: "The report studio", lens: "Inspection room", orbit: "Strategy in motion", constellation: "Every child in view", forecast: "The years ahead", horizon: "The policy studio" };
 
 const HOME_CSS = `
 .hm-root{height:100%;overflow-y:auto;background:#FBFAF7;background-image:radial-gradient(900px 420px at 50% -80px,rgba(106,12,160,.08),transparent 70%),radial-gradient(600px 300px at 100% 10%,rgba(198,160,53,.07),transparent 70%)}
@@ -414,7 +414,7 @@ const HOME_CSS = `
 .hm-seg button.on{background:${PURPLE};color:#fff}
 .hm-tools-btn{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-size:12.5px;font-weight:700;color:${DEEP};background:#fff;border:1px solid rgba(106,12,160,.28);border-radius:999px;padding:9px 16px;cursor:pointer;box-shadow:0 1px 2px rgba(34,18,51,.04),0 10px 30px rgba(34,18,51,.07)}
 .hm-tools-btn:hover{background:rgba(106,12,160,.06)}
-.hm-rooms{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:22px}
+.hm-rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:22px}
 .hm-room{display:flex;align-items:center;gap:9px;min-width:0;background:#fff;border:1px solid ${HAIR};border-radius:14px;padding:9px 12px 9px 10px;text-decoration:none;color:${INK};box-shadow:0 1px 2px rgba(34,18,51,.04),0 8px 24px rgba(34,18,51,.06)}
 .hm-room-i{display:inline-flex;flex:none;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(106,12,160,.08);color:${PURPLE}}
 .hm-room>span:last-child{min-width:0}

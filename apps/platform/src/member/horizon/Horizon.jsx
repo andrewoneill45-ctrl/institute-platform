@@ -575,7 +575,7 @@ function Assumptions({ value, onChange }) {
   );
 }
 
-const HZ_CSS = `
+export const HZ_CSS = `
 .hz-strip button{font-family:inherit}
 .hz-out .pz-block{margin-top:0}.hz-out .pz-block+.pz-block{margin-top:38px}
 .hz-out svg[style*="max-width"]{max-width:none!important}

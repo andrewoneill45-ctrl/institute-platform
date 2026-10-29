@@ -14,6 +14,7 @@ import Orbit from "./member/Orbit.jsx";
 import Constellation from "./member/constellation/Constellation.jsx";
 import Prizm from "./member/prizm/Prizm.jsx";
 import Horizon from "./member/horizon/Horizon.jsx";
+import Forecast from "./member/forecast/Forecast.jsx";
 import Profile from "./member/Profile.jsx";
 import Admin from "./member/Admin.jsx";
 import { RequireMember } from "./lib/auth.jsx";
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="constellation" element={<Constellation />} />
         <Route path="prizm" element={<Prizm />} />
         <Route path="horizon" element={<Horizon />} />
+        <Route path="forecast" element={<Forecast />} />
         <Route path="profile" element={<Profile />} />
         <Route path="admin" element={<Admin />} />
       </Route>

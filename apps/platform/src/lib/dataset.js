@@ -139,3 +139,11 @@ export function getDataset() {
   }
   return fullPromise;
 }
+
+/* the ledger: every school's finance return since 2016/17 (CFR and AAR),
+   in £ thousands. Fetched only when Forecast opens. */
+let financePromise = null;
+export function getFinance() {
+  if (!financePromise) financePromise = fetch("/data/finance.json" + V()).then((r) => r.json()).catch(() => { financePromise = null; return null; });
+  return financePromise;
+}

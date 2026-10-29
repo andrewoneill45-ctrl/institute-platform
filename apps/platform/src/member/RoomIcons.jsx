@@ -19,6 +19,8 @@ export function RoomIcon({ room, size = 18 }) {
       return <svg {...p}><path {...S} d="M5 16.5 10 9l5 4.5 4.5-7" opacity=".55" /><circle cx="5" cy="16.5" r="1.7" fill="currentColor" /><circle cx="10" cy="9" r="1.7" fill="currentColor" /><circle cx="15" cy="13.5" r="1.7" fill="currentColor" /><circle cx="19.5" cy="6.5" r="1.7" fill="currentColor" /></svg>;
     case "horizon": /* the sun on the line of the horizon */
       return <svg {...p}><path {...S} d="M3 17.5h18" /><path {...S} d="M7 17.5a5 5 0 0 1 10 0" /><path {...S} d="M12 6.5v2.2M5.6 9.6l1.5 1.5M18.4 9.6l-1.5 1.5M3.5 13.2h1.8M18.7 13.2h1.8" /><path {...S} d="M8 20.5h8" opacity=".5" /></svg>;
+    case "forecast": /* the ledger line that bends: years ahead */
+      return <svg {...p}><path {...S} d="M3.5 19.5h17" /><path {...S} d="M4.5 15.5 9 11l4 2.5 6.5-7" /><path {...S} d="M15.5 6.5h4v4" /><path {...S} d="M4.5 6v2.5M4.5 10.5v1" opacity=".5" /></svg>;
     case "search":
       return <svg {...p}><circle {...S} cx="10.5" cy="10.5" r="6" /><path {...S} d="m15 15 5 5" /></svg>;
     case "ask": /* a spark: the question handed to Prizm */
@@ -51,7 +53,7 @@ export const roomsFor = (user) => {
   const base = ROOMS.filter((r) => r.key === "home" || off[r.key] !== false);
   return user && (user.isAdmin || user.horizonAccess) ? [...base, HORIZON_ROOM] : base;
 };
-export const TOOL_KEYS = ["atlas", "prizm", "lens", "orbit", "constellation"];
+export const TOOL_KEYS = ["atlas", "prizm", "lens", "orbit", "constellation", "forecast"];
 
 export const ROOMS = [
   { key: "home", to: "/members", label: "Home", verb: "Your school at a glance", kw: "home dashboard start overview" },
@@ -60,4 +62,5 @@ export const ROOMS = [
   { key: "lens", to: "/members/lens", label: "Lens", verb: "Your inspection room", kw: "ofsted sef evidence inspection section 48" },
   { key: "orbit", to: "/members/orbit", label: "Orbit", verb: "Strategy in motion", kw: "plan strategy objectives priorities improvement" },
   { key: "constellation", to: "/members/constellation", label: "Constellation", verb: "Every child in view", kw: "pupils children cohort uploads roll tracker" },
+  { key: "forecast", to: "/members/forecast", label: "Forecast", verb: "The ledger and the years ahead", kw: "finance money budget deficit reserve spending benchmark falling rolls savings forecast" },
 ];
