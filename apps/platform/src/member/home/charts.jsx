@@ -14,47 +14,60 @@ function useArrived() {
 
 /* The rose: one arm per measure, the radius the share of England the school
    is ahead of. A full rose is a school ahead of everyone on everything. */
-export function Rose({ data, size = 300 }) {
+export function Rose({ data, size = 420 }) {
   const on = useArrived();
   if (!data || data.length < 3) return <p style={{ color: MUTED, fontSize: 12.5 }}>Not enough published measures yet to draw the rose.</p>;
-  const cx = size / 2, cy = size / 2, R = size / 2 - 62;
+  const cx = size / 2, cy = size / 2 + 6, R = size / 2 - 92;
   const n = data.length;
   const ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
   const pt = (i, r) => [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))];
+  const ring = (g) => data.map((_, i) => pt(i, (R * g) / 100).join(",")).join(" ");
   const poly = data.map((d, i) => pt(i, (R * (on ? d.v : 0)) / 100).join(",")).join(" ");
-  const mid = data.reduce((a, d) => a + d.v, 0) / n;
+  const mid = Math.round(data.reduce((a, d) => a + d.v, 0) / n);
+  const ahead = data.filter((d) => d.v >= 50).length;
+  const T = RM ? "none" : "all 1400ms cubic-bezier(.22,.9,.28,1)";
   return (
-    <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: "100%", maxWidth: 360, height: "auto", overflow: "visible" }} role="img" aria-label="Standing in England by measure">
+    <div style={{ marginTop: 4 }}>
+      <svg viewBox={`-26 0 ${size + 52} ${size + 10}`} style={{ width: "100%", maxWidth: 480, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Standing in England by measure">
         <defs>
           <radialGradient id="hmRose" cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor={GOLD} stopOpacity=".55" />
-            <stop offset="100%" stopColor={PURPLE} stopOpacity=".35" />
+            <stop offset="0%" stopColor={GOLD} stopOpacity=".5" />
+            <stop offset="100%" stopColor={PURPLE} stopOpacity=".32" />
           </radialGradient>
         </defs>
-        {[25, 50, 75, 100].map((g) => (
-          <polygon key={g} points={data.map((_, i) => pt(i, (R * g) / 100).join(",")).join(" ")} fill={g === 50 ? "rgba(106,12,160,.03)" : "none"} stroke={g === 50 ? "rgba(34,18,51,.28)" : "rgba(34,18,51,.1)"} strokeWidth={g === 50 ? 1.2 : 1} strokeDasharray={g === 50 ? "4 3" : undefined} />
-        ))}
-        {data.map((_, i) => { const [x, y] = pt(i, R); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(34,18,51,.1)" strokeWidth="1" />; })}
-        <polygon points={poly} fill="url(#hmRose)" stroke={PURPLE} strokeWidth="2.2" strokeLinejoin="round" style={{ transition: RM ? "none" : "all 1400ms cubic-bezier(.22,.9,.28,1)" }} />
+        {/* the field: faint rings at a quarter, three quarters and the edge; the middle of England dashed and named */}
+        {[25, 75, 100].map((g) => <polygon key={g} points={ring(g)} fill={g === 100 ? "rgba(106,12,160,.025)" : "none"} stroke="rgba(34,18,51,.09)" strokeWidth="1" />)}
+        {data.map((_, i) => { const [x, y] = pt(i, R); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(34,18,51,.08)" strokeWidth="1" />; })}
+        <polygon points={ring(50)} fill="none" stroke={INK} strokeWidth="1.3" strokeDasharray="5 4" opacity=".55" />
+        {/* the school */}
+        <polygon points={poly} fill="url(#hmRose)" stroke={PURPLE} strokeWidth="2.4" strokeLinejoin="round" style={{ transition: T }} />
         {data.map((d, i) => {
           const [x, y] = pt(i, (R * (on ? d.v : 0)) / 100);
-          return <circle key={d.k} cx={x} cy={y} r="4.2" fill={d.v >= 50 ? PURPLE : RED} stroke="#fff" strokeWidth="1.6" style={{ transition: RM ? "none" : "all 1400ms cubic-bezier(.22,.9,.28,1)" }}><title>{d.label}: ahead of {d.v}% of England</title></circle>;
+          return <circle key={d.k} cx={x} cy={y} r="5" fill={d.v >= 50 ? PURPLE : RED} stroke="#fff" strokeWidth="2" style={{ transition: T }}><title>{d.label}: ahead of {d.v}% of England</title></circle>;
         })}
+        {/* the labels: a pill per arm, the figure first, placed clear of the field */}
         {data.map((d, i) => {
-          const [x, y] = pt(i, R + 20);
-          const c = Math.cos(ang(i));
-          const anchor = Math.abs(c) < 0.2 ? "middle" : c > 0 ? "start" : "end";
+          const good = d.v >= 50;
+          const w = Math.max(74, d.label.length * 6.1 + 36), h = 34;
+          const c = Math.cos(ang(i)), sn = Math.sin(ang(i));
+          let [x, y] = pt(i, R + 46);
+          /* arms near the vertical would stack their pills: slide them sideways instead */
+          if (Math.abs(sn) > 0.8 && Math.abs(c) > 0.05) x += Math.sign(c) * (w / 2 - 6);
           return (
-            <text key={d.k} x={x} y={y} textAnchor={anchor} style={{ fontSize: 10.5, fill: INK, fontWeight: 600, fontFamily: "Inter, system-ui, sans-serif" }}>
-              {d.label}
-              <tspan x={x} dy="12" style={{ fontSize: 10, fontWeight: 700, fill: d.v >= 50 ? PURPLE : RED }}>{d.v}%</tspan>
-            </text>
+            <g key={d.k} transform={`translate(${x - w / 2},${y - h / 2})`}>
+              <rect width={w} height={h} rx="10" fill="#fff" stroke={good ? "rgba(106,12,160,.28)" : "rgba(180,71,90,.32)"} strokeWidth="1" />
+              <text x={w / 2} y="14.5" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 700, fill: good ? PURPLE : RED, fontFamily: "Inter, system-ui, sans-serif" }}>{d.v}%</text>
+              <text x={w / 2} y="27" textAnchor="middle" style={{ fontSize: 9.5, fontWeight: 600, fill: INK, fontFamily: "Inter, system-ui, sans-serif", letterSpacing: ".01em" }}>{d.label}</text>
+            </g>
           );
         })}
-        <text x={cx} y={cy + 4} textAnchor="middle" style={{ fontFamily: "Fraunces, serif", fontSize: 20, fontWeight: 600, fill: INK }}>{Math.round(mid)}%</text>
-        <text x={cx} y={cy + 18} textAnchor="middle" style={{ fontSize: 9.5, fill: MUTED, letterSpacing: ".08em", fontWeight: 700 }}>ON AVERAGE</text>
+        {/* the middle of England, named once on the ring */}
+        {(() => { const k = Math.floor(n / 2); const [x, y] = pt(k, R * 0.5); return <text x={x} y={y + 14} textAnchor="middle" style={{ fontSize: 9.5, fill: MUTED, fontWeight: 700, letterSpacing: ".08em", fontFamily: "Inter, system-ui, sans-serif" }}>MIDDLE OF ENGLAND</text>; })()}
       </svg>
+      <div style={{ display: "flex", gap: 18, alignItems: "baseline", justifyContent: "center", flexWrap: "wrap", marginTop: 2 }}>
+        <span style={{ fontFamily: "Fraunces, serif", fontSize: 22, fontWeight: 600, color: INK }}>{mid}%<small style={{ fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, color: MUTED, fontWeight: 600, marginLeft: 6 }}>ahead of, on average</small></span>
+        <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 600 }}><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: PURPLE, marginRight: 5 }} />ahead of most on {ahead}<i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: RED, margin: "0 5px 0 12px" }} />behind most on {n - ahead}</span>
+      </div>
     </div>
   );
 }

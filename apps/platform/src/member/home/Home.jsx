@@ -128,7 +128,7 @@ export default function Home() {
             {rooms.map((r) => (
               <Link key={r.key} to={r.to} className="hm-room asi-lift">
                 <span className="hm-room-i"><RoomIcon room={r.key} size={17} /></span>
-                <span><b>{r.label}</b><small>{r.verb}</small></span>
+                <span><b>{r.label}</b><small>{SHORT[r.key] || r.verb}</small></span>
               </Link>
             ))}
           </div>
@@ -223,9 +223,9 @@ function SchoolView({ V, user }) {
         {/* the rose: where it stands */}
         <section className="hm-card asi-rise" style={{ "--asi-d": "380ms" }}>
           <div className="hm-kick">Where it stands in England</div>
-          <h3 className="hm-h3">The share of {pri ? "primaries" : "secondaries"} this school is ahead of, measure by measure.</h3>
+          <h3 className="hm-h3">Nine measures, one shape: each arm is the share of England's {pri ? "primaries" : "secondaries"} this school is ahead of.</h3>
           <Rose data={rose} />
-          <p className="hm-note" style={{ marginTop: 6 }}>Attendance, persistent absence, suspensions and retention are read the right way up: further out is better on every arm.</p>
+          <p className="hm-note" style={{ marginTop: 4 }}>The dashed ring is the middle of England. An arm outside it means the school is ahead of most {pri ? "primaries" : "secondaries"} on that measure; inside it, behind most. Attendance, absence, suspensions and retention are turned the right way up, so further out is always better.</p>
         </section>
       </div>
 
@@ -234,8 +234,8 @@ function SchoolView({ V, user }) {
         <Tile delay={480} label="Persistent absence" value={abs.pa != null ? f1(abs.pa) + "%" : "–"} sub={abs.severe != null ? `severe ${f1(abs.severe)}%` : null} />
         <Tile delay={540} label="Teacher retention" value={wf.turnover != null ? f1(100 - wf.turnover) + "%" : "–"} delta={wf.turnover != null && wf.natTurnover != null ? wf.natTurnover - wf.turnover : null} sub="vs England's median" />
         {!pri && <Tile delay={600} label="Sustained destinations" value={dest != null ? f1(dest) + "%" : "–"} delta={dest != null && natDest != null ? dest - natDest : null} sub="vs England's median" />}
-        <Tile delay={660} label="Income a pupil" value={fin.income != null ? money(fin.income) : "–"} delta={fin.income != null && fin.natIncome != null ? fin.income - fin.natIncome : null} sub="vs England's median" />
-        <Tile delay={720} label="Reserves a pupil" value={fin.reserve != null ? money(fin.reserve) : "–"} sub={fin.reserve != null ? (fin.reserve < 0 ? "in deficit" : fin.staff != null ? `staff ${Math.round(fin.staff)}% of spend` : null) : null} good={true} delta={null} />
+        <Tile delay={660} label="Income per pupil" value={fin.income != null ? money(fin.income) : "–"} delta={fin.income != null && fin.natIncome != null ? fin.income - fin.natIncome : null} sub="vs England's median" />
+        <Tile delay={720} label="Reserves per pupil" value={fin.reserve != null ? money(fin.reserve) : "–"} sub={fin.reserve != null ? (fin.reserve < 0 ? "in deficit" : fin.staff != null ? `staff ${Math.round(fin.staff)}% of spend` : null) : null} good={true} delta={null} />
       </div>
 
       <div className="hm-grid hm-grid-rows">
@@ -392,6 +392,8 @@ function ToolsModal({ user, onClose }) {
   );
 }
 
+const SHORT = { atlas: "The map", prizm: "The report studio", lens: "Inspection room", orbit: "Strategy in motion", constellation: "Every child in view", horizon: "The policy studio" };
+
 const HOME_CSS = `
 .hm-root{height:100%;overflow-y:auto;background:#FBFAF7;background-image:radial-gradient(900px 420px at 50% -80px,rgba(106,12,160,.08),transparent 70%),radial-gradient(600px 300px at 100% 10%,rgba(198,160,53,.07),transparent 70%)}
 .hm-in{max-width:1180px;margin:0 auto;padding:5.5vh 28px 70px}
@@ -406,10 +408,11 @@ const HOME_CSS = `
 .hm-seg button.on{background:${PURPLE};color:#fff}
 .hm-tools-btn{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-size:12.5px;font-weight:700;color:${DEEP};background:#fff;border:1px solid rgba(106,12,160,.28);border-radius:999px;padding:9px 16px;cursor:pointer;box-shadow:0 1px 2px rgba(34,18,51,.04),0 10px 30px rgba(34,18,51,.07)}
 .hm-tools-btn:hover{background:rgba(106,12,160,.06)}
-.hm-rooms{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
-.hm-room{display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid ${HAIR};border-radius:14px;padding:9px 14px 9px 10px;text-decoration:none;color:${INK};box-shadow:0 1px 2px rgba(34,18,51,.04),0 8px 24px rgba(34,18,51,.06)}
-.hm-room-i{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(106,12,160,.08);color:${PURPLE}}
-.hm-room b{display:block;font-size:13px;font-weight:700}.hm-room small{display:block;font-size:10.5px;color:${MUTED};margin-top:1px}
+.hm-rooms{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:22px}
+.hm-room{display:flex;align-items:center;gap:9px;min-width:0;background:#fff;border:1px solid ${HAIR};border-radius:14px;padding:9px 12px 9px 10px;text-decoration:none;color:${INK};box-shadow:0 1px 2px rgba(34,18,51,.04),0 8px 24px rgba(34,18,51,.06)}
+.hm-room-i{display:inline-flex;flex:none;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(106,12,160,.08);color:${PURPLE}}
+.hm-room>span:last-child{min-width:0}
+.hm-room b{display:block;font-size:13px;font-weight:700}.hm-room small{display:block;font-size:10.5px;color:${MUTED};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hm-wait{display:flex;justify-content:center;padding:70px 0;color:${MUTED};font-size:13px}
 .hm-card{background:#fff;border-radius:20px;box-shadow:0 1px 2px rgba(34,18,51,.04),0 18px 50px rgba(34,18,51,.09);padding:22px 24px;min-width:0}
 .pz-report.hm-card{border:none;padding:22px 24px;box-shadow:0 1px 2px rgba(34,18,51,.04),0 18px 50px rgba(34,18,51,.09);background:#fff;border-radius:20px}
@@ -418,12 +421,14 @@ const HOME_CSS = `
 .hm-h3{font-family:Fraunces,serif;font-weight:500;font-size:17px;line-height:1.3;color:${INK};margin:0 0 8px;text-wrap:balance}
 .hm-note{font-size:12.5px;color:${MUTED};line-height:1.55;margin:6px 0 0}
 .hm-grid{display:grid;gap:18px;margin-top:18px}
-.hm-grid-top{grid-template-columns:1.25fr 1fr;margin-top:26px}
+.hm-grid-top{grid-template-columns:1.2fr 1fr;margin-top:26px;align-items:start}
 .hm-grid-rows{grid-template-columns:1fr}
 .hm-grid-rows .hm-card{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:10px 34px;align-items:center}
 .hm-grid-rows .hm-svg{margin-top:0}
 .hm-grid-rows .hm-svg svg{max-width:none!important}
-.hm-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.hm-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.hm-grid-2>.hm-card{display:flex;flex-direction:column}
+.hm-grid-2 .hm-facts{flex:1;align-content:center}
 .hm-svg{margin-top:10px}.hm-svg svg{display:block;width:100%;height:auto}
 .hm-hero-n{display:flex;gap:34px;flex-wrap:wrap;margin-top:18px}
 .hm-hero-n b{display:block;font-family:Fraunces,serif;font-weight:600;font-size:40px;letter-spacing:-.02em;color:${INK};line-height:1;font-variant-numeric:tabular-nums}
@@ -466,6 +471,6 @@ const HOME_CSS = `
 .hm-tool-n{font-family:Fraunces,serif;font-weight:600;font-size:21px;color:${INK}}
 .hm-tool p{font-size:13px;color:${MUTED};line-height:1.55;margin:0 0 14px}
 .hm-tool-cta{font-size:12.5px;font-weight:600;color:${DEEP}}
-@media (max-width:980px){.hm-grid-top,.hm-grid-2{grid-template-columns:1fr}.hm-grid-rows .hm-card{grid-template-columns:1fr}}
+@media (max-width:980px){.hm-grid-top,.hm-grid-2{grid-template-columns:1fr}.hm-grid-rows .hm-card{grid-template-columns:1fr}.hm-rooms{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:720px){.hm-in{padding:22px 16px 60px}.hm-rooms{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hm-room{padding:8px 10px}.hm-room small{display:none}.hm-tiles{grid-template-columns:1fr 1fr}.hm-tile-n{font-size:26px}.hm-card,.pz-report.hm-card{padding:18px 16px;border-radius:16px}.hm-hero-n b{font-size:32px}.hm-facts{grid-template-columns:1fr 1fr}}
 `;
