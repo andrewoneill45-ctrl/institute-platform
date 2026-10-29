@@ -1,5 +1,5 @@
 /* Forecast: the ledger and the years ahead. A head sees their school's
-   returns since 2016/17, its unit costs against the schools most like it,
+   returns since 2014/15, its unit costs against the schools most like it,
    where the money could go further, and what the roll forecast does to the
    reserve year by year, with the staffing decisions dated by the year they
    have to be taken. A trust, an authority or a diocese sees its estate the
@@ -189,7 +189,7 @@ export default function Forecast() {
       )}
 
       <div style={{ maxWidth: 1180, margin: "22px auto 0", padding: "0 22px" }}>
-        {!data && <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}><Thinking size={24} label="Reading every school's ledger since 2016/17…" /></div>}
+        {!data && <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}><Thinking size={24} label="Reading every school's ledger since 2014/15…" /></div>}
         {data && !data.F && <div className="pz-report hz-out" style={{ padding: "34px 40px" }}><h2>The ledger is not published on this deployment yet.</h2><p className="pz-note">finance.json is built by data/pipeline/finance-build.py from the DfE's CFR and AAR workbooks.</p></div>}
         {data && data.F && run && (
           <div ref={canvasRef} className="pz-report hz-out fc-out" style={{ padding: "34px 40px 40px" }}>

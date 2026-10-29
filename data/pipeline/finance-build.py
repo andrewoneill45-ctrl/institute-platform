@@ -31,7 +31,7 @@ MATCH = {
     "staff":      (["staff total", "total staff costs"], "last"),
     "prem":       (["premises:", "premises costs", "premises"], "last"),
     "energy":     (["energy"], "first"),
-    "cater":      (["catering exp"], "last"),
+    "cater":      (["catering exp", "total catering"], "last"),
     "edsupplies": (["educational supplies", "total costs of educational supplies"], "last"),
     "prof":       (["brought in professional", "costs of brought in professional"], "last"),
     "bal":        (["in-year balance", "in year balance"], "last"),
@@ -46,7 +46,7 @@ MATCH = {
     "name":       (["school name"], "first"),
     "trust":      (["trust or company name", "company name"], "first"),
 }
-EXCLUDE = {"prem": ["premises staff"], "energy": [], "teach": ["non teaching"], "res": ["share of", "distributed"]}
+EXCLUDE = {"prem": ["premises staff"], "energy": [], "teach": ["non teaching"], "res": ["share of", "distributed"], "inc": ["balance"], "exp": ["balance"]}
 
 def norm(s):
     return re.sub(r"\s+", " ", str(s or "").replace("\n", " ")).strip().lower()
@@ -89,28 +89,30 @@ meta = {}        # urn -> {name, phase, trust?}
 years = set()
 report = []
 
-for f in sorted(glob.glob(os.path.join(RAW, "*.xlsx"))):
-    base = os.path.basename(f)
-    y = year_of(base)
-    src = "A" if base.upper().startswith(("AAR", "SFR")) else "C"
-    if not y:
-        continue
-    wb = openpyxl.load_workbook(f, read_only=True)
-    sheet = next((ws for ws in wb.worksheets if ws.max_row > 1000), None)
-    if sheet is None:
-        report.append(f"{base}: no data sheet"); continue
+def read_sheet(sheet, base, y, src, scale):
+    """one data sheet into the ledger; returns (rows seen, rows kept, missing fields)"""
     rows = sheet.iter_rows(values_only=True)
-    header, hi = None, -1
+    header = None
     for i, r in enumerate(rows):
         if any(norm(c) == "urn" for c in r):
-            header, hi = list(r), i
+            header = list(r)
             break
         if i > 8:
             break
     if header is None:
-        report.append(f"{base}: no header"); continue
+        return None
     cols = find_cols(header)
-    missing = [k for k in FIELDS if k not in cols]
+    # the oldest CFR layouts carry no derived totals: build them from the coded lines
+    codes = {}
+    for i, h in enumerate(header):
+        m = re.match(r"\s*([IE]\d\d[a-z]?)\b", str(h or ""))
+        if m and m.group(1) not in codes:
+            codes[m.group(1)] = i
+    SUMS = {"supply": ["E02", "E10", "E26"], "staff": ["E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08", "E09", "E10", "E11", "E26"],
+            "prem": ["E04", "E12", "E13", "E14"], "cater": ["E06", "E25"], "edsupplies": ["E19", "E20", "E21"], "prof": ["E27", "E28"],
+            "grant": ["I01", "I02", "I03", "I04", "I05", "I06", "I07", "I15", "I16", "I18"], "self": ["I08", "I09", "I10", "I11", "I12", "I13", "I17"]}
+    sums = {k: [codes[c] for c in cs if c in codes] for k, cs in SUMS.items() if k not in cols and sum(c in codes for c in cs) >= len(cs) - 1}
+    missing = [k for k in FIELDS if k not in cols and k not in sums]
     n, kept = 0, 0
     for r in rows:
         urn = r[cols["urn"]] if "urn" in cols else None
@@ -125,13 +127,19 @@ for f in sorted(glob.glob(os.path.join(RAW, "*.xlsx"))):
                 continue
         rec = []
         for k in FIELDS:
-            v = num(r[cols[k]]) if k in cols else None
+            if k in cols:
+                v = num(r[cols[k]])
+            elif k in sums:
+                parts = [num(r[i]) for i in sums[k]]
+                v = sum(x for x in parts if x is not None) if any(x is not None for x in parts) else None
+            else:
+                v = None
             if v is None:
                 rec.append(None)
             elif k in ("pupils", "teachers", "fsm", "p16"):
                 rec.append(round(v, 1))
             else:
-                rec.append(int(round(v / 1000.0)))
+                rec.append(int(round(v / scale)))
         if rec[0] is None and rec[1] is None:
             continue
         if "bal" not in cols and rec[0] is not None and rec[1] is not None:
@@ -146,8 +154,30 @@ for f in sorted(glob.glob(os.path.join(RAW, "*.xlsx"))):
         if "trust" in cols and r[cols["trust"]] and src == "A":
             m["t"] = str(r[cols["trust"]]).strip()
         kept += 1
-    years.add(y)
-    report.append(f"{base}: {y} {src} rows {n} kept {kept} missing {missing}")
+    return n, kept, missing
+
+for f in sorted(glob.glob(os.path.join(RAW, "*.xlsx"))):
+    base = os.path.basename(f)
+    y = year_of(base)
+    src = "A" if base.upper().startswith(("AAR", "SFR")) else "C"
+    if not y:
+        continue
+    wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+    sfr = base.upper().startswith("SFR")            # the 2014/15 and 2015/16 academies tables: already in £000, one raw sheet per trust type
+    scale = 1.0 if sfr else 1000.0
+    if sfr:
+        sheets = [ws for ws in wb.worksheets if ws.title.startswith("Raw Data") and "Totals" not in ws.title and "CS" not in ws.title]
+    else:
+        sheets = [ws for ws in wb.worksheets if ws.max_row > 1000][:1]
+    if not sheets:
+        report.append(f"{base}: no data sheet"); continue
+    for sheet in sheets:
+        got = read_sheet(sheet, base, y, src, scale)
+        if got is None:
+            report.append(f"{base} [{sheet.title}]: no header"); continue
+        n, kept, missing = got
+        years.add(y)
+        report.append(f"{base} [{sheet.title}]: {y} {src} rows {n} kept {kept} missing {missing}")
 
 for line in report:
     print(line)

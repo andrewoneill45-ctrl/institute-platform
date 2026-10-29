@@ -140,7 +140,7 @@ export function getDataset() {
   return fullPromise;
 }
 
-/* the ledger: every school's finance return since 2016/17 (CFR and AAR),
+/* the ledger: every school's finance return since 2014/15 (CFR and AAR),
    in £ thousands. Fetched only when Forecast opens. */
 let financePromise = null;
 export function getFinance() {

@@ -211,10 +211,10 @@
       "catalogueUrl": "https://financial-benchmarking-and-insights-tool.education.gov.uk/data-sources",
       "apiDataSetId": null,
       "cadence": "Annual; CFR each summer, AAR the following spring",
-      "lastVersion": "CFR 2017/18, 2020/21 to 2025/26; AAR 2016/17 to 2020/21, 2023/24, 2024/25 (2014/15, 2015/16, CFR 2018/19, 2019/20, 2016/17, AAR 2021/22, 2022/23 still to add)",
+      "lastVersion": "CFR 2014/15 to 2025/26; AAR 2014/15 to 2024/25 (the 2014/15 and 2015/16 academies figures from the SFR27 and SFR32 main tables)",
       "lastPulled": "2026-10-29",
       "output": "apps/platform/public/data/finance.json",
-      "notes": "Built by data/pipeline/finance-build.py from the FBIT workbooks (CFR Full Data Workbook, AAR download), one file per year in a raw folder. Headers are matched by name across the years they drift; only full-year returns are kept; figures stored in \u00a3 thousands. Feeds the Forecast room."
+      "notes": "Built by data/pipeline/finance-build.py from the FBIT workbooks (CFR Full Data Workbook, AAR download, SFR main tables for the two oldest academy years), one file per year in a raw folder. Headers are matched by name across the years they drift, with coded-line sums for the oldest CFR layouts; only full-year returns are kept; figures stored in \u00a3 thousands. Feeds the Forecast room."
     }
   ]
 }
