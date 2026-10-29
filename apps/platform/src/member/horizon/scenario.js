@@ -58,6 +58,7 @@ export function runScenario(spec, D) {
     out.findings = { lever: "falling rolls and places", scope: label, phase: PRI ? "primary" : "secondary", year: YL(sim.year), smallestViableYearGroup: sim.minPer, demandShift: sim.shift, totals: T, schoolsAtRisk: sim.atRisk, closures: C, atRisk: sim.rows.filter((r) => r.risk).slice(0, 12).map((r) => ({ school: r.name, projected: r.proj, perYearGroup: r.perYear, pctFull: r.fill })) };
     out.html = placesSimHtml({ label, PRI, sim });
     out.closable = sim.rows.map((r) => ({ urn: String(r.urn), name: r.name, fill: r.fill, risk: r.risk }));
+    out.closedUrns = closeUrns;
     return out;
   }
   if (spec.lever === "funding") {

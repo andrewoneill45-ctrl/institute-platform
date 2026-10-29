@@ -513,7 +513,7 @@ function dualTrendSvg(points, { min, max, unit = "", dp = 1, a = "Scope", b = "E
   s += line("nat", "var(--nat)", true) + line("v", "var(--purple)", false);
   points.forEach((p, i) => {
     if (p.nat != null) s += `<circle cx="${x(i)}" cy="${y(p.nat)}" r="3" fill="var(--nat)"/>`;
-    if (p.v != null) s += `<circle cx="${x(i)}" cy="${y(p.v)}" r="4.6" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.6"/><text class="val" x="${x(i)}" y="${y(p.v) - 9}" text-anchor="middle" style="font-size:11px;fill:var(--ink)">${F(p.v)}${unit}</text>`;
+    if (p.v != null) s += `<g${hit([p.t, `${a}: ${F(p.v)}${unit}`, ...(p.nat != null ? [`${b}: ${F(p.nat)}${unit}`] : [])])}><circle cx="${x(i)}" cy="${y(p.v)}" r="4.6" fill="var(--purple)" stroke="var(--paper)" stroke-width="1.6"/><circle cx="${x(i)}" cy="${y(p.v)}" r="12" fill="transparent"/></g><text class="val" x="${x(i)}" y="${y(p.v) - 9}" text-anchor="middle" style="font-size:11px;fill:var(--ink)">${F(p.v)}${unit}</text>`;
     s += `<text class="tick" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(p.t)}</text>`;
   });
   const last = [...points].reverse().find((p) => p.v != null), lastN = [...points].reverse().find((p) => p.nat != null);

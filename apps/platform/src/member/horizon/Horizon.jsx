@@ -14,7 +14,8 @@ import { PZ_CSS, attachTipCard } from "../prizm/render.js";
 import { verifyCommentary } from "../prizm/engine.js";
 import { FUND_PRESETS, ACC_MEASURES } from "./models.js";
 import { LEVERS, defaultParams, runScenario, runHeavy, heavyKey, readLocally, nextSteps, titleFor, scopeLabel } from "./scenario.js";
-import { compareHtml, horizonDoc } from "./views.js";
+import { compareHtml, horizonDoc, rippleHtml } from "./views.js";
+import { ripple, ASSUMPTIONS, defaultAssumptions } from "./ripple.js";
 import { listScenarios, saveScenario, deleteScenario } from "./vault.js";
 
 const INK = "#221233", PURPLE = "#6A0CA0", GOLD = "#C6A035", MUTED = "#6F6580", HAIR = "rgba(34,18,51,.14)";
@@ -26,6 +27,7 @@ let sendPromise = null;
 const getSend = () => (sendPromise = sendPromise || fetch("/data/send.json").then((r) => r.json()).catch(() => { sendPromise = null; return null; }));
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "s" + Math.random().toString(36).slice(2, 9));
 
+const cmpKey = (v) => (v == null ? "" : String(v));
 export function horizonAllowed(user) { return !!(user && (user.isAdmin || user.horizonAccess)); }
 
 /* worked briefs: each resolves at once, no reader */
@@ -59,6 +61,12 @@ export default function Horizon() {
   const [echo, setEcho] = useState(null);
   const [choices, setChoices] = useState(null);
   const [controls, setControls] = useState(false);
+  const [drawerTab, setDrawerTab] = useState("levers");
+  const [assum, setAssum] = useState(defaultAssumptions());
+  const [focus, setFocus] = useState(false);
+  const [thread, setThread] = useState([]);
+  const [showThread, setShowThread] = useState(false);
+  const canvasRef = useRef(null);
   const [caseText, setCaseText] = useState({});
   const [caseBusy, setCaseBusy] = useState(false);
   const [saved, setSaved] = useState([]);
@@ -102,6 +110,27 @@ export default function Horizon() {
      school's twins) runs off the main beat and is cached by scope */
   const runs = useMemo(() => (all ? scenarios.map((s) => { try { return runScenario(s.spec, { ...D, heavy: heavy[heavyKey(s.spec)] }); } catch (e) { return { html: "", summary: [], error: String(e && e.message || e) }; } }) : []), [all, scenarios, D, heavy]);
   const run = runs[active] || null;
+  const round = useMemo(() => { if (!all || !cur || !run || run.waiting || run.error) return null; try { return ripple(cur.spec, run, D, assum); } catch { return null; } }, [all, cur, run, D, assum]);
+  const roundHtml = useMemo(() => (round ? rippleHtml(round, cur.spec.title) : ""), [round, cur]);
+  /* every table in the canvas sorts on its headings */
+  useEffect(() => {
+    const root = canvasRef.current;
+    if (!root) return;
+    const onClick = (e) => {
+      const th = e.target.closest ? e.target.closest("table.pz-table th") : null;
+      if (!th || !root.contains(th)) return;
+      const table = th.closest("table"), idx = [...th.parentNode.children].indexOf(th);
+      const dir = th.getAttribute("data-dir") === "desc" ? "asc" : "desc";
+      [...table.querySelectorAll("th")].forEach((h) => h.removeAttribute("data-dir"));
+      th.setAttribute("data-dir", dir);
+      const body = table.tBodies[0];
+      const val = (tr) => { const t = (tr.children[idx] || {}).textContent || ""; const n = parseFloat(t.replace(/[^0-9.\-−]/g, "").replace("−", "-")); return Number.isFinite(n) && /\d/.test(t) ? n : t.trim().toLowerCase(); };
+      const rows = [...body.rows].sort((a, b) => { const x = val(a), y = val(b); if (typeof x === "number" && typeof y === "number") return dir === "desc" ? y - x : x - y; return dir === "desc" ? String(y).localeCompare(String(x)) : String(x).localeCompare(String(y)); });
+      rows.forEach((r) => body.appendChild(r));
+    };
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, [run, cmpKey(compareWith)]);
   useEffect(() => {
     if (!all || !cur || cur.spec.lever !== "forecast") return;
     const k = heavyKey(cur.spec);
@@ -170,8 +199,10 @@ export default function Horizon() {
     const asNew = !cur || /\b(new scenario|as a new|another scenario|scenario b|keep (a|this) and)\b/i.test(text);
     openSpec(spec, asNew);
     const s = normalise(spec);
-    setEcho({ brief: text, label: `${LEVERS[s.lever].label} · ${scopeLabel(s.scope)}${s.scope.phase === "primary" ? " · primary" : ""}` });
+    const label = `${LEVERS[s.lever].label} · ${scopeLabel(s.scope)}${s.scope.phase === "primary" ? " · primary" : ""}`;
+    setEcho({ brief: text, label });
     setNote(reply);
+    setThread((t) => [...t, { brief: text, label, reply, spec: s, at: Date.now() }]);
     boxRef.current && boxRef.current.blur();
   }
   function chooseName(name) {
@@ -184,7 +215,7 @@ export default function Horizon() {
   async function writeCase() {
     if (!cur || !run || caseBusy) return;
     setCaseBusy(true);
-    const findings = { title: cur.spec.title, ...run.findings, headlineFigures: run.summary };
+    const findings = { title: cur.spec.title, ...run.findings, headlineFigures: run.summary, inTheRound: round ? round.dials.map((d) => ({ dial: d.label, today: d.now, scenario: d.after, change: d.delta, how: d.note })) : undefined, assumptions: assum };
     try {
       const r = await fetch("/.netlify/functions/horizon", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "case", findings }) });
       const data = await r.json();
@@ -206,7 +237,7 @@ export default function Horizon() {
     if (!cur || !run) return;
     const cmp = compareWith != null && runs[compareWith] ? compareHtml({ ...run, title: cur.spec.title }, { ...runs[compareWith], title: scenarios[compareWith].spec.title }, String.fromCharCode(65 + active), String.fromCharCode(65 + compareWith)) : "";
     const prose = caseText[cur.id] ? `<section class="pz-block pz-foreword"><div class="pz-kick"><span>The case</span></div><div class="fw">${caseText[cur.id].split(/\n+/).map((p) => `<p>${p.replace(/</g, "&lt;")}</p>`).join("")}</div><div class="fw-note">Written by Horizon's reader; every figure verified against the computed findings before it reached the page.</div></section>` : "";
-    const doc = horizonDoc(cur.spec.title, `${LEVERS[cur.spec.lever].label} · ${scopeLabel(cur.spec.scope)} · ${cur.spec.scope.phase === "primary" ? "primary" : "secondary"} · ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`, prose + cmp + run.html + (compareWith != null ? runs[compareWith].html : ""), PZ_CSS);
+    const doc = horizonDoc(cur.spec.title, `${LEVERS[cur.spec.lever].label} · ${scopeLabel(cur.spec.scope)} · ${cur.spec.scope.phase === "primary" ? "primary" : "secondary"} · ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`, prose + roundHtml + cmp + run.html + (compareWith != null ? runs[compareWith].html : ""), PZ_CSS + HZ_CSS);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([doc], { type: "text/html" }));
     a.download = `horizon-${cur.spec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60)}.html`;
@@ -292,21 +323,30 @@ export default function Horizon() {
   const waiting = run && run.waiting;
   return (
     <div style={{ background: "#F2EFEA", minHeight: "100%", paddingBottom: 60 }}>
-      <style>{PZ_CSS}{`.hz-strip button{font-family:inherit}.hz-out .pz-block{margin-top:0}.hz-out .pz-block+.pz-block{margin-top:34px}`}</style>
+      <style>{PZ_CSS}{HZ_CSS}</style>
       <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(242,239,234,.92)", backdropFilter: "blur(10px)", borderBottom: `1px solid ${HAIR}` }}>
-        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "10px 22px" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: focus ? "7px 22px" : "10px 22px" }}>
+          {focus ? (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "Fraunces, serif", fontSize: 15, color: INK, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ color: "#8a6d1c", marginRight: 6 }}>{String.fromCharCode(65 + active)}</b>{cur.spec.title}</span>
+              <button onClick={() => { setFocus(false); setTimeout(() => boxRef.current && boxRef.current.focus(), 30); }} style={{ ...barBtn(false), padding: "6px 14px", fontSize: 12 }}>Change it</button>
+              <button onClick={() => setFocus(false)} title="Show the bar" style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>▾</button>
+            </div>
+          ) : (<>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 300px", minWidth: 240 }}>
               <input ref={boxRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onBoxKey}
-                placeholder={thinking ? stage || "Thinking…" : "Change it, or try another idea…"}
+                placeholder={thinking ? stage || "Thinking…" : "Change it, ask what if, or try another idea…"}
                 style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", borderRadius: 10, border: `1px solid ${HAIR}`, fontSize: 13.5, background: "#fff" }} />
             </div>
             <button onClick={() => ask()} disabled={thinking || q.trim().length < 2} style={{ ...barBtn(true), background: INK, opacity: thinking ? 0.55 : 1 }}>{thinking ? "Reading…" : "Try it"}</button>
             <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
-              <button onClick={() => setControls((v) => !v)} style={{ ...barBtn(false), background: controls ? "rgba(106,12,160,.08)" : "#fff" }}>{controls ? "Hide the levers" : "The levers"}</button>
+              {thread.length > 0 && <button onClick={() => setShowThread((v) => !v)} style={{ ...barBtn(false), background: showThread ? "rgba(106,12,160,.08)" : "#fff" }}>Thread · {thread.length}</button>}
+              <button onClick={() => setControls((v) => !v)} style={{ ...barBtn(false), background: controls ? "rgba(106,12,160,.08)" : "#fff" }}>Levers and assumptions</button>
               <button onClick={writeCase} disabled={caseBusy || !run || !run.html} style={{ ...barBtn(false), color: "#4B0875", borderColor: "rgba(106,12,160,.3)", opacity: caseBusy ? 0.6 : 1 }}>{caseBusy ? "Writing…" : caseText[cur.id] ? "Rewrite the case" : "Write the case"}</button>
               <button onClick={keep} disabled={keeping} style={barBtn(false)}>{keeping ? "Keeping…" : "Keep it"}</button>
-              <button onClick={download} disabled={!run || !run.html} style={barBtn(true)}>Download for a paper</button>
+              <button onClick={download} disabled={!run || !run.html} style={barBtn(true)}>Download</button>
+              <button onClick={() => setFocus(true)} title="Hide the bar and read" style={{ border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontSize: 16, padding: "0 2px" }}>▴</button>
             </div>
           </div>
 
@@ -327,7 +367,7 @@ export default function Horizon() {
                 {scenarios.map((s, i) => (i !== active ? <option key={s.id} value={i}>{String.fromCharCode(65 + i)}: {s.spec.title.slice(0, 40)}</option> : null))}
               </select>
             )}
-            <button onClick={() => { setScenarios([]); setActive(0); setCompareWith(null); setNote(null); setEcho(null); }} style={{ border: "none", background: "transparent", color: "#B3261E", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0, marginLeft: 4 }}>start again</button>
+            <button onClick={() => { setScenarios([]); setActive(0); setCompareWith(null); setNote(null); setEcho(null); setThread([]); }} style={{ border: "none", background: "transparent", color: "#B3261E", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0, marginLeft: 4 }}>start again</button>
           </div>
 
           {/* the scenario, taken apart */}
@@ -356,16 +396,47 @@ export default function Horizon() {
           {choicesBand}
           {steps.length > 0 && !thinking && (
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-              <span style={{ fontSize: 10.5, letterSpacing: ".12em", fontWeight: 700, color: GOLD }}>TRY</span>
+              <span style={{ fontSize: 10.5, letterSpacing: ".12em", fontWeight: 700, color: GOLD }}>WHAT IF</span>
               {steps.map((sx) => <button key={sx.t} onClick={() => applyStep(sx)} style={{ border: "1px solid rgba(198,160,53,.45)", background: "#fff", color: INK, borderRadius: 999, padding: "4px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{sx.t}</button>)}
+              <button onClick={() => boxRef.current && boxRef.current.focus()} style={{ border: "none", background: "transparent", color: "#4B0875", cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0, fontFamily: "inherit" }}>or ask in your own words</button>
             </div>
           )}
+          </>)}
         </div>
       </div>
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 22px 0", display: "grid", gridTemplateColumns: controls ? "300px 1fr" : "1fr", gap: 22, alignItems: "start" }}>
-        {controls && <Levers spec={cur.spec} run={run} onPatch={patch} onLever={(l) => { undoRef.current = { scenarios, active }; openSpec({ lever: l, scope: cur.spec.scope, params: {} }); }} onScope={(sc) => { undoRef.current = { scenarios, active }; openSpec({ ...cur.spec, scope: sc, params: cur.spec.lever === "rolls" ? {} : cur.spec.params, title: null }); }} names={names} />}
-        <div style={{ minWidth: 0 }}>
+      {/* the thread: what has been asked, and the way back to any point */}
+      {showThread && thread.length > 0 && (
+        <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: 340, zIndex: 400, background: "#fff", boxShadow: "6px 0 40px rgba(34,18,51,.14)", padding: "18px 18px 24px", overflow: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><b style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: INK }}>The thread</b><button onClick={() => setShowThread(false)} style={{ border: "none", background: "transparent", fontSize: 18, color: MUTED, cursor: "pointer" }}>×</button></div>
+          {thread.map((t, i) => (
+            <div key={t.at} style={{ borderLeft: `2px solid ${GOLD}`, padding: "4px 0 4px 12px", margin: "0 0 14px" }}>
+              <div style={{ fontSize: 13, color: INK, fontStyle: "italic" }}>&ldquo;{t.brief}&rdquo;</div>
+              <div style={{ fontSize: 11.5, color: MUTED, margin: "3px 0" }}>read as <b style={{ color: INK }}>{t.label}</b></div>
+              {t.reply && <div style={{ fontSize: 12, color: "#4B0875" }}>{t.reply}</div>}
+              <button onClick={() => { openSpec(t.spec, true); setShowThread(false); }} style={{ border: "none", background: "transparent", color: PURPLE, cursor: "pointer", fontSize: 11.5, textDecoration: "underline", padding: 0, marginTop: 4, fontFamily: "inherit" }}>reopen as a new scenario</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* the levers and assumptions, in a drawer that leaves the page alone */}
+      {controls && (
+        <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 360, zIndex: 400, background: "#fff", boxShadow: "-6px 0 40px rgba(34,18,51,.14)", display: "grid", gridTemplateRows: "auto 1fr" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "14px 16px 0" }}>
+            {[["levers", "The levers"], ["assumptions", "Assumptions"]].map(([k, l]) => <button key={k} onClick={() => setDrawerTab(k)} style={{ border: "none", background: "transparent", cursor: "pointer", padding: "6px 10px", fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", color: drawerTab === k ? INK : MUTED, borderBottom: `2.5px solid ${drawerTab === k ? GOLD : "transparent"}` }}>{l}</button>)}
+            <button onClick={() => setControls(false)} style={{ marginLeft: "auto", border: "none", background: "transparent", fontSize: 18, color: MUTED, cursor: "pointer" }}>×</button>
+          </div>
+          <div style={{ overflow: "auto", padding: "12px 16px 24px" }}>
+            {drawerTab === "levers"
+              ? <Levers spec={cur.spec} run={run} onPatch={patch} onLever={(l) => { undoRef.current = { scenarios, active }; openSpec({ lever: l, scope: cur.spec.scope, params: {} }); }} onScope={(sc) => { undoRef.current = { scenarios, active }; openSpec({ ...cur.spec, scope: sc, params: cur.spec.lever === "rolls" ? {} : cur.spec.params, title: null }); }} names={names} />
+              : <Assumptions value={assum} onChange={setAssum} />}
+          </div>
+        </div>
+      )}
+
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 22px 0" }}>
+        <div style={{ minWidth: 0 }} ref={canvasRef}>
           {!all ? <Loading title="Horizon" label="the national dataset is arriving…" />
             : waiting ? <Loading title="Horizon" label={`${waiting} are arriving…`} />
             : run && run.error ? <div style={{ color: "#B3261E", padding: 20 }}>This scenario could not run: {run.error}</div>
@@ -374,6 +445,7 @@ export default function Horizon() {
                 <input value={cur.spec.title} onChange={(e) => setScenarios((c) => c.map((x, i) => (i === active ? { ...x, spec: { ...x.spec, title: e.target.value } } : x)))} aria-label="Scenario title"
                   style={{ width: "100%", boxSizing: "border-box", border: "none", background: "transparent", fontFamily: "Fraunces, serif", fontSize: 22, color: INK, padding: "0 0 10px", outline: "none", borderBottom: `1px dashed ${HAIR}`, marginBottom: 18 }} />
                 {caseText[cur.id] && <section className="pz-block pz-foreword"><div className="pz-kick"><span>The case</span></div><div className="fw">{caseText[cur.id].split(/\n+/).map((p, i) => <p key={i}>{p}</p>)}</div><div className="fw-note">Written by Horizon&rsquo;s reader; every figure verified against the computed findings before it reached the page.</div></section>}
+                {roundHtml && <div dangerouslySetInnerHTML={{ __html: roundHtml }} />}
                 {cmpRun && <div dangerouslySetInnerHTML={{ __html: compareHtml({ ...run, title: cur.spec.title }, { ...cmpRun, title: scenarios[compareWith].spec.title }, String.fromCharCode(65 + active), String.fromCharCode(65 + compareWith)) }} />}
                 <div dangerouslySetInnerHTML={{ __html: run ? run.html : "" }} />
                 {cmpRun && <><div style={{ margin: "34px 0 14px", fontSize: 10.5, letterSpacing: ".14em", fontWeight: 700, color: MUTED }}>{String.fromCharCode(65 + compareWith)} · {scenarios[compareWith].spec.title.toUpperCase()}</div><div dangerouslySetInnerHTML={{ __html: cmpRun.html }} /></>}
@@ -410,7 +482,7 @@ function Levers({ spec, run, onPatch, onLever, onScope, names }) {
   const list = scType === "la" ? names.las : scType === "trust" ? names.trusts : scType === "region" ? REGIONS : [];
   const commit = (type, name) => { if (type === "england") onScope({ type: "england", phase: spec.scope.phase }); else if (name && list.includes(name)) onScope({ type, name, phase: spec.scope.phase }); };
   return (
-    <aside style={{ position: "sticky", top: 150, display: "grid", gap: 13, background: "#fff", borderRadius: 16, padding: "16px 16px 18px", border: `1px solid ${HAIR}` }}>
+    <aside style={{ display: "grid", gap: 13 }}>
       <label style={lab}>Lever
         <select style={fld} value={spec.lever} onChange={(e) => onLever(e.target.value)}>{Object.entries(LEVERS).map(([k, L]) => <option key={k} value={k}>{L.label}: {L.verb}</option>)}</select>
       </label>
@@ -481,3 +553,48 @@ function Levers({ spec, run, onPatch, onLever, onScope, names }) {
     </aside>
   );
 }
+
+/* the assumptions: every mechanism that is not read from the data, movable */
+function Assumptions({ value, onChange }) {
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <p style={{ margin: 0, fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>What the round assumes where the data cannot say. Move any of them and every dial recomputes; the defaults are reasonable, not authoritative.</p>
+      {ASSUMPTIONS.map((a) => (
+        <label key={a.k} style={{ ...lab, letterSpacing: 0, textTransform: "none", fontSize: 12.5, color: INK, fontWeight: 600 }}>
+          <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>{a.label}<b style={{ color: PURPLE, whiteSpace: "nowrap" }}>{a.unit === "£" ? "£" + value[a.k].toLocaleString("en-GB") : a.unit === "%" ? value[a.k] + "%" : `${value[a.k]} ${a.unit}`}</b></span>
+          <input type="range" min={a.min} max={a.max} step={a.step} value={value[a.k]} onChange={(e) => onChange({ ...value, [a.k]: +e.target.value })} style={{ accentColor: PURPLE }} />
+          <span style={{ fontSize: 11, color: MUTED, fontWeight: 400 }}>{a.note}</span>
+        </label>
+      ))}
+      <button onClick={() => onChange(defaultAssumptions())} style={{ ...barBtn(false), justifySelf: "start", padding: "6px 14px", fontSize: 12 }}>Back to the defaults</button>
+    </div>
+  );
+}
+
+const HZ_CSS = `
+.hz-strip button{font-family:inherit}
+.hz-out .pz-block{margin-top:0}.hz-out .pz-block+.pz-block{margin-top:38px}
+.hz-out svg[style*="max-width"]{max-width:none!important}
+.hz-out .pz-note{font-size:12.5px}
+.pz-how{margin:2px 0 14px}.pz-how summary{cursor:pointer;font-size:12px;color:var(--purple);font-weight:600;list-style:none}.pz-how summary::-webkit-details-marker{display:none}.pz-how summary::before{content:"▸  ";font-size:10px}.pz-how[open] summary::before{content:"▾  "}.pz-how p{font-size:12.5px;color:var(--muted);line-height:1.6;margin:6px 0 0;max-width:820px}
+.hz-out table.pz-table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+.hz-out table.pz-table thead th{position:sticky;top:0;background:var(--paper);cursor:pointer;user-select:none;padding:9px 10px;border-bottom:1.5px solid var(--hair);white-space:nowrap}
+.hz-out table.pz-table thead th:hover{color:var(--purple)}
+.hz-out table.pz-table thead th[data-dir="desc"]::after{content:" ▾";color:var(--purple)}.hz-out table.pz-table thead th[data-dir="asc"]::after{content:" ▴";color:var(--purple)}
+.hz-out table.pz-table tbody tr:nth-child(even) td{background:rgba(106,12,160,.025)}
+.hz-out table.pz-table tbody tr:hover td{background:rgba(198,160,53,.1)}
+.hz-out table.pz-table td{padding:8px 10px;border-bottom:1px solid rgba(34,18,51,.06);vertical-align:top}
+.hz-out table.pz-table td.num{font-variant-numeric:tabular-nums;text-align:right}
+.hz-out table.pz-table td.nm{font-weight:600}
+.hz-out details.pz-fold{border:1px solid var(--hair);border-radius:10px;padding:0 14px;margin-top:16px;background:var(--card)}
+.hz-out details.pz-fold summary{padding:12px 0;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.hz-round .hz-dials{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px}
+@media(max-width:980px){.hz-round .hz-dials{grid-template-columns:repeat(3,1fr)}}@media(max-width:560px){.hz-round .hz-dials{grid-template-columns:repeat(2,1fr)}}
+.hz-dial{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 12px;min-width:0;transition:transform .15s,box-shadow .15s}
+.hz-dial.moved{border-color:rgba(198,160,53,.6);box-shadow:0 8px 24px rgba(34,18,51,.07)}
+.hz-dial-h{display:flex;align-items:center;gap:7px;font:700 10.5px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.hz-dial-h svg{color:var(--purple);flex:none}
+.hz-dial-n{font-family:Fraunces,serif;font-size:24px;line-height:1.1;color:var(--ink);margin-top:8px;white-space:nowrap}
+.hz-dial-d{font-size:12.5px;font-weight:700;margin-top:4px}.hz-dial-d small{font-weight:500;color:var(--muted)}
+.hz-dial-note{font-size:11px;color:var(--muted);line-height:1.45;margin-top:6px}
+`;
