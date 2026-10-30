@@ -195,9 +195,9 @@ function SchoolView({ V, user }) {
 
   return (
     <>
-      <div className="hm-grid hm-grid-top">
-        {/* who you are */}
-        <section className="hm-card hm-hero asi-rise" style={{ "--asi-d": "240ms" }}>
+      {/* who you are: one band across the page */}
+      <section className="hm-card hm-hero hm-band asi-rise" style={{ "--asi-d": "240ms" }}>
+        <div className="hm-band-l">
           <div className="hm-kick">Your school</div>
           <h2 className="hm-h2">{s.name}</h2>
           <p className="hm-note">{[s.la, s.type, s.pupils ? `${n0(s.pupils)} pupils` : null, s.religiousCharacter && !/none|does not apply/i.test(s.religiousCharacter) ? s.religiousCharacter : null].filter(Boolean).join(" · ")}</p>
@@ -205,8 +205,13 @@ function SchoolView({ V, user }) {
             <div><b>{main.v != null ? Number(main.v).toFixed(main.dp) + main.unit : "–"}</b><small>{main.label}</small>{main.nat != null && main.v != null && <em style={{ color: main.v >= main.nat ? "#2F7A39" : "#8a6d1c" }}>{sg(main.v - main.nat, main.dp)} against England's {Number(main.nat).toFixed(main.dp)}{main.unit}</em>}</div>
             {tw && tw.e != null && <div><b>{Number(tw.e).toFixed(main.dp)}{main.unit}</b><small>what your twenty twins achieve</small><em style={{ color: tw.gap >= 0 ? "#2F7A39" : RED }}>{tw.gap >= 0 ? "beating the odds by " : "behind by "}{Math.abs(tw.gap).toFixed(main.dp)}{twins.rank ? ` · ${twins.rank}${ord(twins.rank)} of ${twins.of}` : ""}</em></div>}
           </div>
+          <div className="hm-chips">
+            {chips.map(([l, to]) => <Link key={l} to={to} className="hm-chip">{l}</Link>)}
+          </div>
+        </div>
+        <div className="hm-band-r">
           {rc && rc.rc && (
-            <div style={{ marginTop: 16 }}>
+            <div>
               <div className="hm-kick" style={{ marginBottom: 6 }}>Report card · {new Date(rc.rc.d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
               <div className="hm-rc">
                 {RC_AREAS.filter(([k]) => rc.rc[k] != null).map(([k, label]) => (
@@ -215,25 +220,23 @@ function SchoolView({ V, user }) {
               </div>
             </div>
           )}
-          <div className="hm-kick" style={{ marginTop: 18, marginBottom: 6 }}>Who it teaches</div>
-          <div className="hm-intake">
-            {[["Free school meals", s.fsm_pct, "%"], ["EHC plans", s.sen_ehcp_pct, "%"], ["SEN support", s.sen_support_pct, "%"], ["English as an additional language", s.eal_pct, "%"]].filter((x) => x[1] != null).map(([l, v, u]) => (
-              <div key={l}><b>{f1(v)}{u}</b><small>{l}</small></div>
-            ))}
+          <div>
+            <div className="hm-kick" style={{ marginBottom: 6 }}>Who it teaches</div>
+            <div className="hm-intake">
+              {[["Free school meals", s.fsm_pct, "%"], ["EHC plans", s.sen_ehcp_pct, "%"], ["SEN support", s.sen_support_pct, "%"], ["English as an additional language", s.eal_pct, "%"]].filter((x) => x[1] != null).map(([l, v, u]) => (
+                <div key={l}><b>{f1(v)}{u}</b><small>{l}</small></div>
+              ))}
+            </div>
           </div>
-          <div className="hm-chips">
-            {chips.map(([l, to]) => <Link key={l} to={to} className="hm-chip">{l}</Link>)}
-          </div>
-        </section>
+        </div>
+      </section>
 
-        {/* the rose: where it stands */}
-        <section className="hm-card asi-rise" style={{ "--asi-d": "380ms" }}>
-          <div className="hm-kick">Where it stands in England</div>
-          <h3 className="hm-h3">Nine measures, one shape: each arm is the share of England's {pri ? "primaries" : "secondaries"} this school is ahead of.</h3>
-          <div className="hm-rose-wrap"><Rose data={rose} /></div>
-          <p className="hm-note" style={{ marginTop: 4 }}>The dashed ring is the middle of England. An arm outside it means the school is ahead of most {pri ? "primaries" : "secondaries"} on that measure; inside it, behind most. Attendance, absence, suspensions and retention are turned the right way up, so further out is always better.</p>
-        </section>
-      </div>
+      {/* the rose, on its own stage */}
+      <section className="hm-card asi-rise" style={{ "--asi-d": "380ms", marginTop: 18 }}>
+        <div className="hm-kick">Where it stands in England</div>
+        <h3 className="hm-h3" style={{ fontSize: 20, maxWidth: 720 }}>Nine measures, one shape: each arm is the share of England's {pri ? "primaries" : "secondaries"} this school is ahead of.</h3>
+        <Rose data={rose} pri={pri} name={s.name} />
+      </section>
 
       <div className="hm-tiles">
         <Tile delay={420} label="Attendance" value={abs.mine != null ? f1(100 - abs.mine) + "%" : "–"} delta={abs.mine != null && abs.nat != null ? abs.nat - abs.mine : null} sub="vs England's median" />
@@ -401,6 +404,35 @@ function ToolsModal({ user, onClose }) {
 const SHORT = { atlas: "The map", prizm: "The report studio", lens: "Inspection room", orbit: "Strategy in motion", constellation: "Every child in view", forecast: "The years ahead", horizon: "The policy studio" };
 
 const HOME_CSS = `
+.hm-band{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px 40px;margin-top:26px;align-items:start}
+.hm-band-r{display:grid;gap:18px;align-content:start;padding-top:4px}
+.hm-band .hm-hero-n{margin-top:14px}.hm-band .hm-chips{margin-top:16px}
+.hm-stage{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:10px 28px;align-items:center;margin-top:0}
+.hm-stage-rose{min-width:0}
+.hm-stage-card{min-width:0;perspective:1200px}
+.hm-flip{background:#FBFAF7;border:1px solid rgba(34,18,51,.1);border-radius:18px;padding:20px 22px;animation:hmFlip .55s cubic-bezier(.22,.9,.28,1);transform-origin:center left;transition:border-color .25s}
+@keyframes hmFlip{from{opacity:0;transform:rotateY(-70deg)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.hm-flip{animation:none}}
+.hm-big{font-family:Fraunces,serif;font-weight:600;font-size:48px;letter-spacing:-.025em;color:${INK};line-height:1;margin-top:6px}
+.hm-big small{display:block;font-family:Inter,system-ui,sans-serif;font-size:12.5px;font-weight:600;color:${MUTED};letter-spacing:0;margin-top:8px;line-height:1.4}
+.hm-tally{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:${MUTED};font-weight:600;margin-top:14px}.hm-tally i{display:inline-block;width:9px;height:9px;border-radius:5px;margin-right:6px}.hm-tally b{color:${INK}}
+.hm-ranklist{display:grid;gap:4px;margin-top:14px}
+.hm-rank{display:grid;grid-template-columns:150px 1fr 44px;gap:10px;align-items:center;font-family:inherit;font-size:12px;color:${INK};background:transparent;border:none;padding:4px 6px;border-radius:8px;cursor:pointer;text-align:left}
+.hm-rank:hover{background:rgba(106,12,160,.06)}
+.hm-rank i{display:block;height:6px;border-radius:3px;background:rgba(34,18,51,.08);overflow:hidden}.hm-rank i b{display:block;height:100%;border-radius:3px}
+.hm-rank em{font-style:normal;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.hm-pair{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.hm-pair b{display:block;font-family:Fraunces,serif;font-weight:600;font-size:24px;color:${INK};letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.hm-pair small{display:block;font-size:11px;color:${MUTED};margin-top:5px;font-weight:600}
+.hm-strip{margin-top:18px}
+.hm-strip-bar{position:relative;height:14px;border-radius:7px;background:rgba(34,18,51,.07)}
+.hm-strip-iqr{position:absolute;top:0;bottom:0;background:rgba(106,12,160,.16);border-radius:7px}
+.hm-strip-med{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:${INK};opacity:.7}
+.hm-strip-me{position:absolute;top:-5px;width:24px;height:24px;margin-left:-12px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(34,18,51,.25);transition:left .6s cubic-bezier(.22,.9,.28,1)}
+.hm-strip-l{display:flex;justify-content:space-between;font-size:10.5px;color:${MUTED};font-weight:600;margin-top:8px}
+.hm-unpin{font-family:inherit;font-size:10.5px;letter-spacing:0;text-transform:none;font-weight:600;color:#8a6d1c;background:transparent;border:none;cursor:pointer;text-decoration:underline}
+@media (max-width:980px){.hm-band,.hm-stage{grid-template-columns:1fr}}
+
 .hm-root{height:100%;overflow-y:auto;background:#FBFAF7;background-image:radial-gradient(900px 420px at 50% -80px,rgba(106,12,160,.08),transparent 70%),radial-gradient(600px 300px at 100% 10%,rgba(198,160,53,.07),transparent 70%)}
 .hm-in{max-width:1180px;margin:0 auto;padding:5.5vh 28px 70px}
 .hm-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
@@ -430,7 +462,7 @@ const HOME_CSS = `
 .hm-grid-top{grid-template-columns:1.2fr 1fr;margin-top:26px;align-items:stretch}
 .hm-grid-top>.hm-card{display:flex;flex-direction:column}
 .hm-grid-top .hm-hero .hm-chips{margin-top:auto;padding-top:22px}
-.hm-grid-top .hm-rose-wrap{flex:1;display:flex;flex-direction:column;justify-content:center}
+
 .hm-grid-rows{grid-template-columns:1fr}
 .hm-grid-rows .hm-card{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:10px 34px;align-items:center}
 .hm-grid-rows .hm-svg{margin-top:0}

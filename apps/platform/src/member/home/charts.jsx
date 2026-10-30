@@ -14,10 +14,18 @@ function useArrived() {
 
 /* The rose: one arm per measure, the radius the share of England the school
    is ahead of. A full rose is a school ahead of everyone on everything. */
-export function Rose({ data, size = 420 }) {
+/* The rose, on its own stage. One arm per measure, the radius the share of
+   England the school is ahead of. Hover an arm and the card beside it turns
+   to that measure; click to pin it. */
+const fmtV = (v, unit, dp) => (v == null ? "–" : unit === "£" ? (v < 0 ? "−" : "") + "£" + Math.abs(Math.round(v)).toLocaleString("en-GB") : Number(v).toFixed(dp) + unit);
+
+export function Rose({ data, size = 560, pri, name }) {
   const on = useArrived();
+  const [hover, setHover] = useState(null);
+  const [pin, setPin] = useState(null);
   if (!data || data.length < 3) return <p style={{ color: MUTED, fontSize: 12.5 }}>Not enough published measures yet to draw the rose.</p>;
-  const cx = size / 2, cy = size / 2 + 6, R = size / 2 - 92;
+  const cur = data.find((d) => d.k === (hover || pin)) || null;
+  const cx = size / 2, cy = size / 2 + 8, R = size / 2 - 112;
   const n = data.length;
   const ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
   const pt = (i, r) => [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))];
@@ -26,48 +34,98 @@ export function Rose({ data, size = 420 }) {
   const mid = Math.round(data.reduce((a, d) => a + d.v, 0) / n);
   const ahead = data.filter((d) => d.v >= 50).length;
   const T = RM ? "none" : "all 1400ms cubic-bezier(.22,.9,.28,1)";
+  const active = cur ? cur.k : null;
   return (
-    <div style={{ marginTop: 4 }}>
-      <svg viewBox={`-26 0 ${size + 52} ${size + 10}`} style={{ width: "100%", maxWidth: 420, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Standing in England by measure">
-        <defs>
-          <radialGradient id="hmRose" cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor={GOLD} stopOpacity=".5" />
-            <stop offset="100%" stopColor={PURPLE} stopOpacity=".32" />
-          </radialGradient>
-        </defs>
-        {/* the field: faint rings at a quarter, three quarters and the edge; the middle of England dashed and named */}
-        {[25, 75, 100].map((g) => <polygon key={g} points={ring(g)} fill={g === 100 ? "rgba(106,12,160,.025)" : "none"} stroke="rgba(34,18,51,.09)" strokeWidth="1" />)}
-        {data.map((_, i) => { const [x, y] = pt(i, R); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(34,18,51,.08)" strokeWidth="1" />; })}
-        <polygon points={ring(50)} fill="none" stroke={INK} strokeWidth="1.3" strokeDasharray="5 4" opacity=".55" />
-        {/* the school */}
-        <polygon points={poly} fill="url(#hmRose)" stroke={PURPLE} strokeWidth="2.4" strokeLinejoin="round" style={{ transition: T }} />
-        {data.map((d, i) => {
-          const [x, y] = pt(i, (R * (on ? d.v : 0)) / 100);
-          return <circle key={d.k} cx={x} cy={y} r="5" fill={d.v >= 50 ? PURPLE : RED} stroke="#fff" strokeWidth="2" style={{ transition: T }}><title>{d.label}: ahead of {d.v}% of England</title></circle>;
-        })}
-        {/* the labels: a pill per arm, the figure first, placed clear of the field */}
-        {data.map((d, i) => {
-          const good = d.v >= 50;
-          const w = Math.max(74, d.label.length * 6.1 + 36), h = 34;
-          const c = Math.cos(ang(i)), sn = Math.sin(ang(i));
-          let [x, y] = pt(i, R + 46);
-          /* arms near the vertical would stack their pills: slide them sideways instead */
-          if (Math.abs(sn) > 0.8 && Math.abs(c) > 0.05) x += Math.sign(c) * (w / 2 - 6);
-          return (
-            <g key={d.k} transform={`translate(${x - w / 2},${y - h / 2})`}>
-              <rect width={w} height={h} rx="10" fill="#fff" stroke={good ? "rgba(106,12,160,.28)" : "rgba(180,71,90,.32)"} strokeWidth="1" />
-              <text x={w / 2} y="14.5" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 700, fill: good ? PURPLE : RED, fontFamily: "Inter, system-ui, sans-serif" }}>{d.v}%</text>
-              <text x={w / 2} y="27" textAnchor="middle" style={{ fontSize: 9.5, fontWeight: 600, fill: INK, fontFamily: "Inter, system-ui, sans-serif", letterSpacing: ".01em" }}>{d.label}</text>
-            </g>
-          );
-        })}
-        {/* the middle of England, named once on the ring */}
-        {(() => { const k = Math.floor(n / 2); const [x, y] = pt(k, R * 0.5); return <text x={x} y={y + 14} textAnchor="middle" style={{ fontSize: 9.5, fill: MUTED, fontWeight: 700, letterSpacing: ".08em", fontFamily: "Inter, system-ui, sans-serif" }}>MIDDLE OF ENGLAND</text>; })()}
-      </svg>
-      <div style={{ display: "flex", gap: 18, alignItems: "baseline", justifyContent: "center", flexWrap: "wrap", marginTop: 2 }}>
-        <span style={{ fontFamily: "Fraunces, serif", fontSize: 22, fontWeight: 600, color: INK }}>{mid}%<small style={{ fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, color: MUTED, fontWeight: 600, marginLeft: 6 }}>ahead of, on average</small></span>
-        <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 600 }}><i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: PURPLE, marginRight: 5 }} />ahead of most on {ahead}<i style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: RED, margin: "0 5px 0 12px" }} />behind most on {n - ahead}</span>
+    <div className="hm-stage">
+      <div className="hm-stage-rose" onMouseLeave={() => setHover(null)}>
+        <svg viewBox={`-30 0 ${size + 60} ${size + 16}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Standing in England by measure">
+          <defs>
+            <radialGradient id="hmRoseG" cx="50%" cy="50%" r="60%">
+              <stop offset="0%" stopColor={GOLD} stopOpacity=".55" />
+              <stop offset="100%" stopColor={PURPLE} stopOpacity=".3" />
+            </radialGradient>
+            <filter id="hmGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+          </defs>
+          {[25, 75, 100].map((g) => <polygon key={g} points={ring(g)} fill={g === 100 ? "rgba(106,12,160,.03)" : "none"} stroke="rgba(34,18,51,.09)" strokeWidth="1" />)}
+          {data.map((d, i) => { const [x, y] = pt(i, R); const isA = d.k === active; return <line key={d.k} x1={cx} y1={cy} x2={x} y2={y} stroke={isA ? (d.v >= 50 ? PURPLE : RED) : "rgba(34,18,51,.08)"} strokeWidth={isA ? 2 : 1} style={{ transition: "stroke .25s" }} />; })}
+          <polygon points={ring(50)} fill="none" stroke={INK} strokeWidth="1.3" strokeDasharray="5 4" opacity=".55" />
+          <polygon points={poly} fill="url(#hmRoseG)" stroke={PURPLE} strokeWidth="2.6" strokeLinejoin="round" style={{ transition: T }} />
+          {/* a sector highlight for the active arm */}
+          {cur && (() => { const i = data.indexOf(cur); const [x, y] = pt(i, (R * cur.v) / 100); return <circle cx={x} cy={y} r="14" fill={cur.v >= 50 ? PURPLE : RED} opacity=".18" filter="url(#hmGlow)" />; })()}
+          {data.map((d, i) => {
+            const [x, y] = pt(i, (R * (on ? d.v : 0)) / 100);
+            const isA = d.k === active;
+            return <circle key={d.k} cx={x} cy={y} r={isA ? 7.5 : 5.5} fill={d.v >= 50 ? PURPLE : RED} stroke="#fff" strokeWidth="2.2" style={{ transition: T, cursor: "pointer" }} onMouseEnter={() => setHover(d.k)} onClick={() => setPin(pin === d.k ? null : d.k)} />;
+          })}
+          {data.map((d, i) => {
+            const good = d.v >= 50, isA = d.k === active;
+            const w = Math.max(86, d.label.length * 6.6 + 40), h = 40;
+            const c = Math.cos(ang(i)), sn = Math.sin(ang(i));
+            let [x, y] = pt(i, R + 58);
+            if (Math.abs(sn) > 0.8 && Math.abs(c) > 0.05) x += Math.sign(c) * (w / 2 - 4);
+            return (
+              <g key={d.k} transform={`translate(${x - w / 2},${y - h / 2})`} style={{ cursor: "pointer" }} onMouseEnter={() => setHover(d.k)} onClick={() => setPin(pin === d.k ? null : d.k)}>
+                <rect width={w} height={h} rx="12" fill={isA ? (good ? PURPLE : RED) : "#fff"} stroke={good ? "rgba(106,12,160,.3)" : "rgba(180,71,90,.34)"} strokeWidth="1" style={{ transition: "fill .2s" }} />
+                <text x={w / 2} y="17" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: isA ? "#fff" : good ? PURPLE : RED, fontFamily: "Inter, system-ui, sans-serif", transition: "fill .2s" }}>{d.v}%</text>
+                <text x={w / 2} y="31" textAnchor="middle" style={{ fontSize: 10, fontWeight: 600, fill: isA ? "rgba(255,255,255,.9)" : INK, fontFamily: "Inter, system-ui, sans-serif", transition: "fill .2s" }}>{d.label}</text>
+                {pin === d.k && <circle cx={w - 6} cy="6" r="4" fill={GOLD} stroke="#fff" strokeWidth="1.5" />}
+              </g>
+            );
+          })}
+          {(() => { const kk = Math.floor(n / 2); const [x, y] = pt(kk, R * 0.5); return <text x={x} y={y + 16} textAnchor="middle" style={{ fontSize: 10, fill: MUTED, fontWeight: 700, letterSpacing: ".1em", fontFamily: "Inter, system-ui, sans-serif" }}>MIDDLE OF ENGLAND</text>; })()}
+        </svg>
       </div>
+      <div className="hm-stage-card" key={cur ? cur.k : "all"}>
+        {cur ? <ArmCard d={cur} pri={pri} name={name} pinned={pin === cur.k} onUnpin={() => setPin(null)} /> : (
+          <div className="hm-flip">
+            <div className="hm-kick">The shape, read whole</div>
+            <div className="hm-big">{mid}%<small>ahead of England, on average across {n} measures</small></div>
+            <div className="hm-tally"><span><i style={{ background: PURPLE }} />ahead of most {pri ? "primaries" : "secondaries"} on <b>{ahead}</b></span><span><i style={{ background: RED }} />behind most on <b>{n - ahead}</b></span></div>
+            <div className="hm-ranklist">
+              {[...data].sort((a, b) => b.v - a.v).map((d) => (
+                <button key={d.k} onMouseEnter={() => setHover(d.k)} onClick={() => setPin(d.k)} className="hm-rank">
+                  <span>{d.label}</span>
+                  <i><b style={{ width: `${d.v}%`, background: d.v >= 50 ? PURPLE : RED }} /></i>
+                  <em style={{ color: d.v >= 50 ? PURPLE : RED }}>{d.v}%</em>
+                </button>
+              ))}
+            </div>
+            <p className="hm-note" style={{ marginTop: 12 }}>Hover an arm, or a row here, to turn this card to that measure; click to keep it. The dashed ring is the middle of England; outside it the school is ahead of most, inside it behind most. Attendance, absence, suspensions and retention are turned the right way up, so further out is always better.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* one measure, told whole: the school's figure, England's, and where it sits */
+function ArmCard({ d, pri, name, pinned, onUnpin }) {
+  const good = d.v >= 50;
+  const lo = Math.min(d.p10 ?? d.mine, d.mine), hi = Math.max(d.p90 ?? d.mine, d.mine);
+  const span = hi - lo || 1;
+  const xr = (v) => Math.max(0, Math.min(100, ((v - lo) / span) * 100));
+  const x = (v) => (d.invert ? 100 - xr(v) : xr(v));
+  const better = d.invert ? d.mine < d.med : d.mine > d.med;
+  const diff = d.mine != null && d.med != null ? d.mine - d.med : null;
+  const word = pri ? "primaries" : "secondaries";
+  return (
+    <div className="hm-flip" style={{ borderColor: good ? "rgba(106,12,160,.35)" : "rgba(180,71,90,.4)" }}>
+      <div className="hm-kick" style={{ display: "flex", justifyContent: "space-between" }}>{d.label}{pinned && <button onClick={onUnpin} className="hm-unpin">pinned · release</button>}</div>
+      <div className="hm-big" style={{ color: good ? PURPLE : RED }}>{d.v}%<small>of England's {word} are behind this school on {d.label.toLowerCase()}</small></div>
+      <div className="hm-pair">
+        <div><b>{fmtV(d.mine, d.unit, d.dp)}</b><small>{name ? "this school" : "the school"}</small></div>
+        <div><b>{fmtV(d.med, d.unit, d.dp)}</b><small>England's median</small></div>
+        <div><b style={{ color: better ? "#2F7A39" : RED }}>{diff == null ? "–" : (diff > 0 ? "+" : diff < 0 ? "−" : "") + fmtV(Math.abs(diff), d.unit, d.dp)}</b><small>{better ? "the better side" : "the worse side"}</small></div>
+      </div>
+      <div className="hm-strip">
+        <div className="hm-strip-bar">
+          {d.q1 != null && d.q3 != null && <span className="hm-strip-iqr" style={{ left: `${Math.min(x(d.q1), x(d.q3))}%`, width: `${Math.abs(x(d.q3) - x(d.q1))}%` }} />}
+          {d.med != null && <span className="hm-strip-med" style={{ left: `${x(d.med)}%` }} />}
+          {d.mine != null && <span className="hm-strip-me" style={{ left: `${x(d.mine)}%`, background: good ? PURPLE : RED }} />}
+        </div>
+        <div className="hm-strip-l"><span>{fmtV(d.invert ? hi : lo, d.unit, d.dp)}</span><span>middle half of England</span><span>{fmtV(d.invert ? lo : hi, d.unit, d.dp)}</span></div>
+      </div>
+      <p className="hm-note" style={{ marginTop: 10 }}>{d.what.replace(/^./, (c) => c.toUpperCase())}. Among {d.n.toLocaleString("en-GB")} {word} with a published figure, this school stands ahead of {d.v}%{good ? ", outside the middle of England on this arm." : ", inside the middle of England on this arm."}</p>
     </div>
   );
 }

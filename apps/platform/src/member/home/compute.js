@@ -103,11 +103,36 @@ export function schoolView(all, ofsted, urn, extras) {
   const rc = ofsted && ofsted[String(s.urn)] ? ofsted[String(s.urn)] : null;
 
   /* the rose: where the school stands in England, measure by measure */
-  const rose = (pri ? [
-    ["outcome", "Expected standard"], ["high", "Higher standard"], ["disadv", "Disadvantaged"], ["read", "Reading"], ["abs", "Attendance"], ["pa", "Persistent absence"], ["susp", "Suspensions"], ["turnover", "Retention"], ["reserve", "Reserves"],
+  /* the rose: each arm a measure, with the school's own figure, England's
+     median and the quartiles, so the stage can tell the whole story of an arm */
+  const estate = (pri ? primaries(all) : secondaries(all));
+  const ROSE = pri ? [
+    ["outcome", "Expected standard", "ks2_rwm_exp", "%", 0, false, "pupils reaching the expected standard in reading, writing and maths"],
+    ["high", "Higher standard", "ks2_rwm_high", "%", 0, false, "pupils reaching the higher standard in all three"],
+    ["disadv", "Disadvantaged", "ks2_rwm_disadv", "%", 0, false, "disadvantaged pupils reaching the expected standard"],
+    ["read", "Reading", "ks2_read_avg", "", 1, false, "average scaled score in reading"],
+    ["abs", "Attendance", "abs_overall_pct", "%", 1, true, "overall absence; lower is better"],
+    ["pa", "Persistent absence", "abs_persistent_pct", "%", 1, true, "pupils missing a tenth or more of sessions; lower is better"],
+    ["susp", "Suspensions", "susp_rate", "", 1, true, "suspensions for every hundred pupils; lower is better"],
+    ["turnover", "Retention", "wf_turnover_pct", "%", 1, true, "teachers who left in the year; lower is better"],
+    ["reserve", "Reserves", "fin_reserve_pp", "£", 0, false, "revenue reserve for each pupil"],
   ] : [
-    ["outcome", "Attainment 8"], ["basics", "English and maths 5+"], ["disadv", "Disadvantaged"], ["dest", "Destinations"], ["abs", "Attendance"], ["pa", "Persistent absence"], ["susp", "Suspensions"], ["turnover", "Retention"], ["reserve", "Reserves"],
-  ]).map(([k, label]) => ({ k, label, v: standing[k] })).filter((d) => d.v != null);
+    ["outcome", "Attainment 8", "attainment8", "", 1, false, "average Attainment 8 score"],
+    ["basics", "English and maths 5+", "basics_95", "%", 1, false, "pupils with grade 5 or above in both English and maths"],
+    ["disadv", "Disadvantaged", "a8_disadv", "", 1, false, "disadvantaged pupils' Attainment 8"],
+    ["dest", "Destinations", "dest_sustained", "%", 1, false, "leavers in sustained education, employment or training"],
+    ["abs", "Attendance", "abs_overall_pct", "%", 1, true, "overall absence; lower is better"],
+    ["pa", "Persistent absence", "abs_persistent_pct", "%", 1, true, "pupils missing a tenth or more of sessions; lower is better"],
+    ["susp", "Suspensions", "susp_rate", "", 1, true, "suspensions for every hundred pupils; lower is better"],
+    ["turnover", "Retention", "wf_turnover_pct", "%", 1, true, "teachers who left in the year; lower is better"],
+    ["reserve", "Reserves", "fin_reserve_pp", "£", 0, false, "revenue reserve for each pupil"],
+  ];
+  const q = (xs, p) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); if (!v.length) return null; return v[Math.min(v.length - 1, Math.floor(p * v.length))]; };
+  const rose = ROSE.map(([k, label, field, unit, dp, invert, what]) => {
+    if (standing[k] == null) return null;
+    const xs = estate.map((x) => num(x[field])).filter((x) => x != null);
+    return { k, label, v: standing[k], mine: num(s[field]), unit, dp, invert, what, med: q(xs, 0.5), q1: q(xs, 0.25), q3: q(xs, 0.75), p10: q(xs, 0.1), p90: q(xs, 0.9), n: xs.length };
+  }).filter(Boolean);
 
   return { s, pri, N, results, rolls, demand, gap, fin, wf, abs, rc, rose, twins, similar, dest: num(s.dest_sustained), natDest: N.destS };
 }
